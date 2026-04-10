@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "otokichi-app"
+  },
+  "targets": {
+    "otokichi-app": {
+      "hosting": {
+        "lediary": [
+          "lediary"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}
