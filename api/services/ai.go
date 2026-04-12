@@ -27,7 +27,7 @@ func CallGemini(systemPrompt, userMessage string) (string, error) {
 		},
 		"generationConfig": map[string]interface{}{
 			"temperature":     0.7,
-			"maxOutputTokens": 2000,
+			"maxOutputTokens": 4000,
 		},
 	}
 
@@ -84,6 +84,16 @@ func ParseJsonInto(content string, target interface{}) error {
 	match := re.FindString(content)
 	if match == "" {
 		return fmt.Errorf("no JSON object found in LLM response")
+	}
+	return json.Unmarshal([]byte(match), target)
+}
+
+// ParseJsonArrayInto extracts the first JSON array from content and unmarshals it into target.
+func ParseJsonArrayInto(content string, target interface{}) error {
+	re := regexp.MustCompile(`(?s)\[.*\]`)
+	match := re.FindString(content)
+	if match == "" {
+		return fmt.Errorf("no JSON array found in LLM response")
 	}
 	return json.Unmarshal([]byte(match), target)
 }

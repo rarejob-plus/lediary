@@ -9,8 +9,9 @@ import { navigate } from '../../router';
 interface DiaryPost {
   id: string;
   contentJp: string;
-  translationEn: string;
-  createdAt: string;
+  contentEn?: string;
+  date: string;
+  createdAt: number;
 }
 
 export function homeHTML(): string {
@@ -54,9 +55,9 @@ export async function initHome(): Promise<void> {
       .map(
         (post) => `
         <div class="card diary-card" data-id="${post.id}">
-          <div class="diary-card-date">${formatDate(post.createdAt)}</div>
-          <div class="diary-card-jp">${escapeHTML(post.contentJp)}</div>
-          ${post.translationEn ? `<div class="diary-card-en">${escapeHTML(post.translationEn)}</div>` : ''}
+          <div class="diary-card-date">${post.date || ''}</div>
+          <div class="diary-card-jp">${escapeHTML(post.contentJp || '')}</div>
+          ${post.contentEn ? `<div class="diary-card-en">${escapeHTML(post.contentEn)}</div>` : ''}
         </div>
       `
       )
@@ -76,15 +77,6 @@ export async function initHome(): Promise<void> {
       </div>
     `;
   }
-}
-
-function formatDate(dateStr: string): string {
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('ja-JP', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
 }
 
 function escapeHTML(str: string): string {

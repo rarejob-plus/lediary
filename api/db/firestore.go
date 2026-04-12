@@ -94,13 +94,16 @@ func ListPosts(ctx context.Context, userID string) ([]map[string]interface{}, er
 	return posts, nil
 }
 
-// CreatePost adds a new document to lediary-posts and returns the document ID.
-func CreatePost(ctx context.Context, data map[string]interface{}) (string, error) {
-	ref, _, err := GetDB().Collection(postsCollection).Add(ctx, data)
-	if err != nil {
-		return "", err
-	}
-	return ref.ID, nil
+// SetPost creates or overwrites a lediary-posts document with the given ID.
+func SetPost(ctx context.Context, docID string, data map[string]interface{}) error {
+	_, err := GetDB().Collection(postsCollection).Doc(docID).Set(ctx, data)
+	return err
+}
+
+// MergePost merges fields into a lediary-posts document (creates if not exists).
+func MergePost(ctx context.Context, docID string, data map[string]interface{}) error {
+	_, err := GetDB().Collection(postsCollection).Doc(docID).Set(ctx, data, firestore.MergeAll)
+	return err
 }
 
 // UpdatePost updates fields on a lediary-posts document.

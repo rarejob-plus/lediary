@@ -4,7 +4,6 @@
 
 import { homeHTML, initHome } from './pages/home/index';
 import { editorHTML, initEditor } from './pages/editor/index';
-import { lessonHTML, initLesson } from './pages/lesson/index';
 import { onAuth, getCurrentUser } from './auth';
 import { loginHTML, initLogin } from './pages/login';
 
@@ -116,12 +115,6 @@ export function initRouter() {
     const app = document.getElementById('app')!;
     app.innerHTML = editorHTML();
     initEditor();
-  });
-
-  routes.set('/lesson/:id', () => {
-    const app = document.getElementById('app')!;
-    app.innerHTML = lessonHTML();
-    initLesson();
   });
 
   // Listen for popstate (back/forward navigation)
