@@ -1,14 +1,11 @@
 /**
  * API client for Lediary backend.
- * Dev: Vite proxy /api → localhost:8080.
- * Prod: Direct to Cloud Run URL.
+ * Same origin — Firebase Hosting rewrites /api/** to Cloud Functions.
  */
 
 import { getIdToken } from '../auth';
 
-const API_BASE = import.meta.env.DEV
-  ? '/api'
-  : 'https://lediary-api-121737888244.asia-northeast1.run.app/api';
+const API_BASE = '/api';
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = await getIdToken();

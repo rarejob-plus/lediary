@@ -5,7 +5,8 @@ export default defineConfig({
     port: 5174,
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: 'http://localhost:5001/otokichi-app/asia-northeast1/api',
+        rewrite: (path) => path,
         changeOrigin: true,
       },
     },
