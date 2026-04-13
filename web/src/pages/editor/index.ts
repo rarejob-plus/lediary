@@ -74,17 +74,20 @@ export function editorHTML(): string {
 
     <button id="hint-btn" class="btn btn-secondary" style="width:100%;margin-bottom:16px;">英訳ヒントを見る</button>
 
-    <div id="hints-area" class="hints-area" style="display:none;">
-      <h3>英訳ヒント</h3>
-      <div id="hints-list"></div>
+    <div id="writing-area" class="writing-area">
+      <div class="writing-ref" id="writing-ref">
+        <div class="writing-ref-jp" id="writing-ref-jp"></div>
+        <div id="hints-area" class="hints-area" style="display:none;">
+          <h3>英訳ヒント</h3>
+          <div id="hints-list"></div>
+        </div>
+      </div>
+      <div class="writing-input">
+        <label>自分で英訳してみる</label>
+        <textarea id="input-en" rows="8" placeholder="日本語の内容を英語で書いてみましょう"></textarea>
+        <button id="translate-btn" class="btn btn-primary" style="width:100%;margin-top:12px;">添削してもらう</button>
+      </div>
     </div>
-
-    <div class="editor-section">
-      <label>自分で英訳してみる</label>
-      <textarea id="input-en" rows="4" placeholder="日本語の内容を英語で書いてみましょう"></textarea>
-    </div>
-
-    <button id="translate-btn" class="btn btn-primary" style="width:100%;margin-bottom:24px;">添削してもらう</button>
 
     <!-- Step-by-step correction review -->
     <div id="correction-area" class="correction-area" style="display:none;">
@@ -93,14 +96,15 @@ export function editorHTML(): string {
         <span id="attempt-badge" class="attempt-badge"></span>
       </div>
       <div id="correction-card" class="correction-card">
-        <div class="feedback-label">あなたの文</div>
-        <div id="correction-original" class="feedback-original"></div>
         <div class="feedback-label">修正案</div>
         <div id="correction-corrected" class="feedback-corrected"></div>
         <div id="correction-explanation" class="feedback-explanation"></div>
+        <div class="correction-edit-section">
+          <div class="feedback-label">あなたの文を修正してください</div>
+          <textarea id="correction-edit" rows="3" class="correction-edit-textarea"></textarea>
+        </div>
         <div class="correction-actions">
-          <button id="correction-accept" class="btn btn-primary btn-sm">修正を適用</button>
-          <button id="correction-skip" class="btn btn-ghost btn-sm">そのまま</button>
+          <button id="correction-next" class="btn btn-primary btn-sm">次へ</button>
         </div>
       </div>
       <div id="correction-complete" class="correction-complete" style="display:none;">
@@ -149,7 +153,7 @@ export async function initEditor(): Promise<void> {
   if (now.getHours() < 4) {
     now.setDate(now.getDate() - 1);
   }
-  dateInput.value = now.toISOString().slice(0, 10);
+  dateInput.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
   // If editing existing post, load it
   if (postId) {
@@ -163,6 +167,7 @@ export async function initEditor(): Promise<void> {
 
       if (post.hints && post.hints.length > 0) {
         renderHints(post.hints);
+        activateWritingMode(post.contentJp);
       }
 
       if (post.contentEn) {
@@ -192,6 +197,7 @@ export async function initEditor(): Promise<void> {
       const date = dateInput.value;
       const res = await api.post<{ hints: HintItem[] }>('/diary/hints', { contentJp, date });
       renderHints(res.hints);
+      activateWritingMode(jpInput.value);
     } catch (_err) {
       console.error('Hint generation failed:', _err);
       showToast('ヒント生成に失敗しました');
@@ -298,34 +304,45 @@ function startCorrectionReview(post: DiaryPost, enInput: HTMLTextAreaElement): v
 
   renderCurrentCorrection();
 
+  // Enable text selection → Flashcard on correction card
+  enableTextSelectionBookmark(correctionCard);
+
   // Scroll to top to show correction card
   window.scrollTo(0, 0);
 
-  // Accept button
-  const acceptBtn = document.getElementById('correction-accept')!;
-  const skipBtn = document.getElementById('correction-skip')!;
+  // Next button
+  const nextBtn = document.getElementById('correction-next')!;
+  const newNext = nextBtn.cloneNode(true) as HTMLButtonElement;
+  nextBtn.replaceWith(newNext);
 
-  // Remove old listeners by replacing elements
-  const newAccept = acceptBtn.cloneNode(true) as HTMLButtonElement;
-  const newSkip = skipBtn.cloneNode(true) as HTMLButtonElement;
-  acceptBtn.replaceWith(newAccept);
-  skipBtn.replaceWith(newSkip);
-
-  newAccept.addEventListener('click', () => {
-    const fb = currentFeedback[correctionIndex]!;
-    // Apply correction to textarea
-    const current = enInput.value;
-    const updated = current.replace(fb.original, fb.corrected);
-    if (updated !== current) {
-      enInput.value = updated;
-    }
-    accumulatedCorrections.push(fb.corrected);
+  newNext.addEventListener('click', () => {
+    // Apply user's edited text back to the full translation
+    const editArea = document.getElementById('correction-edit') as HTMLTextAreaElement;
+    const editedSnippet = editArea.value;
+    applySnippetToFullText(enInput, correctionIndex, editedSnippet);
+    accumulatedCorrections.push(editedSnippet);
     advanceCorrection(post, enInput);
   });
+}
 
-  newSkip.addEventListener('click', () => {
-    advanceCorrection(post, enInput);
-  });
+/** Extract context sentences (the target sentence + 1 before/after) from full text */
+function getContextSnippet(fullText: string, targetSentence: string): string {
+  const sentences = fullText.split(/(?<=[.!?])\s+/);
+  const idx = sentences.findIndex((s) => s.includes(targetSentence.replace(/[.!?]\s*$/, '').trim()));
+  if (idx === -1) return targetSentence;
+  const start = Math.max(0, idx - 1);
+  const end = Math.min(sentences.length, idx + 2);
+  return sentences.slice(start, end).join(' ');
+}
+
+/** Apply edited snippet back into the full text */
+function applySnippetToFullText(enInput: HTMLTextAreaElement, _fbIndex: number, editedSnippet: string): void {
+  const fb = currentFeedback[_fbIndex]!;
+  const fullText = enInput.value;
+  const originalSnippet = getContextSnippet(fullText, fb.original);
+  if (fullText.includes(originalSnippet)) {
+    enInput.value = fullText.replace(originalSnippet, editedSnippet);
+  }
 }
 
 function renderCurrentCorrection(): void {
@@ -333,9 +350,14 @@ function renderCurrentCorrection(): void {
   const counter = document.getElementById('correction-counter')!;
   counter.textContent = `(${correctionIndex + 1}/${currentFeedback.length})`;
 
-  document.getElementById('correction-original')!.textContent = fb.original;
   document.getElementById('correction-corrected')!.textContent = fb.corrected;
   document.getElementById('correction-explanation')!.textContent = fb.explanation;
+
+  // Show context snippet in editable textarea
+  const enInput = document.getElementById('input-en') as HTMLTextAreaElement;
+  const snippet = getContextSnippet(enInput.value, fb.original);
+  const editArea = document.getElementById('correction-edit') as HTMLTextAreaElement;
+  editArea.value = snippet;
 }
 
 function advanceCorrection(post: DiaryPost, enInput: HTMLTextAreaElement): void {
@@ -375,6 +397,20 @@ function advanceCorrection(post: DiaryPost, enInput: HTMLTextAreaElement): void 
 }
 
 // ─── Rendering helpers ───
+
+/** Activate 2-column writing mode: JP+hints on left (sticky), EN on right */
+function activateWritingMode(jpText: string): void {
+  // Copy JP text to reference panel
+  const refJp = document.getElementById('writing-ref-jp')!;
+  refJp.textContent = jpText;
+
+  // Add 2-column class
+  const writingArea = document.getElementById('writing-area')!;
+  writingArea.classList.add('two-col');
+
+  // Scroll to writing area
+  writingArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 
 function renderHints(hints: HintItem[]): void {
   const hintsArea = document.getElementById('hints-area')!;

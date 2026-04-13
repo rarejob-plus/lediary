@@ -38,7 +38,7 @@ body {
 
 /* ============ App Shell ============ */
 #app {
-  max-width: 640px;
+  max-width: 960px;
   margin: 0 auto;
   padding: 0 16px 300px;
   min-height: 100dvh;
@@ -255,10 +255,16 @@ textarea::placeholder {
   transition: all 0.15s ease;
 }
 
+.diary-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
 .diary-card-date {
   font-size: 12px;
   color: var(--text-muted);
-  margin-bottom: 4px;
 }
 
 .diary-card-jp {
@@ -269,6 +275,20 @@ textarea::placeholder {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.delete-btn {
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.delete-btn:hover {
+  color: #c0392b;
 }
 
 .diary-card-en {
@@ -669,6 +689,28 @@ textarea::placeholder {
   border-left: 4px solid var(--primary);
 }
 
+.correction-edit-section {
+  margin-top: 12px;
+}
+
+.correction-edit-textarea {
+  width: 100%;
+  padding: 10px;
+  border: 2px solid var(--primary);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-family: inherit;
+  line-height: 1.6;
+  resize: vertical;
+  background: #fafffe;
+}
+
+.correction-edit-textarea:focus {
+  outline: none;
+  border-color: var(--primary-dark);
+  box-shadow: 0 0 0 3px rgba(58, 128, 104, 0.15);
+}
+
 .correction-actions {
   display: flex;
   gap: 8px;
@@ -690,6 +732,58 @@ textarea::placeholder {
   color: var(--text);
   font-size: 14px;
   margin-bottom: 12px;
+}
+
+/* ============ Writing Area (2-col) ============ */
+.writing-area {
+  margin-bottom: 24px;
+}
+
+.writing-area.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.writing-ref {
+  display: none;
+}
+
+.writing-area.two-col .writing-ref {
+  display: block;
+  position: sticky;
+  top: 8px;
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+}
+
+.writing-ref-jp {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 12px;
+  font-size: 14px;
+  line-height: 1.8;
+  margin-bottom: 12px;
+  white-space: pre-wrap;
+}
+
+.writing-ref-jp:empty {
+  display: none;
+}
+
+.writing-input textarea {
+  min-height: 200px;
+}
+
+@media (max-width: 700px) {
+  .writing-area.two-col {
+    grid-template-columns: 1fr;
+  }
+  .writing-area.two-col .writing-ref {
+    position: static;
+    max-height: none;
+  }
 }
 
 /* ============ Hints ============ */
