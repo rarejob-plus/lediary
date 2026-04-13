@@ -96,6 +96,8 @@ export function editorHTML(): string {
         <span id="attempt-badge" class="attempt-badge"></span>
       </div>
       <div id="correction-card" class="correction-card">
+        <div class="feedback-label">あなたの文</div>
+        <div id="correction-original" class="feedback-original"></div>
         <div class="feedback-label">修正案</div>
         <div id="correction-corrected" class="feedback-corrected"></div>
         <div id="correction-explanation" class="feedback-explanation"></div>
@@ -350,6 +352,7 @@ function renderCurrentCorrection(): void {
   const counter = document.getElementById('correction-counter')!;
   counter.textContent = `(${correctionIndex + 1}/${currentFeedback.length})`;
 
+  document.getElementById('correction-original')!.textContent = fb.original;
   document.getElementById('correction-corrected')!.textContent = fb.corrected;
   document.getElementById('correction-explanation')!.textContent = fb.explanation;
 
