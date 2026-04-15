@@ -347,7 +347,7 @@ function renderCurrentCorrection(): void {
   editArea.value = fb.original;
 }
 
-function advanceCorrection(post: DiaryPost, enInput: HTMLTextAreaElement): void {
+function advanceCorrection(_post: DiaryPost, enInput: HTMLTextAreaElement): void {
   correctionIndex++;
   if (correctionIndex < currentFeedback.length) {
     renderCurrentCorrection();
@@ -355,30 +355,28 @@ function advanceCorrection(post: DiaryPost, enInput: HTMLTextAreaElement): void 
     // All corrections reviewed
     const correctionCard = document.getElementById('correction-card')!;
     const correctionComplete = document.getElementById('correction-complete')!;
-    const resultsArea = document.getElementById('results-area')!;
 
     correctionCard.style.display = 'none';
     correctionComplete.style.display = 'block';
 
     const completeText = document.getElementById('correction-complete-text')!;
-    completeText.textContent = `${currentFeedback.length}件の添削を確認しました。英訳を修正した場合は再添削できます。`;
+    completeText.textContent = `${currentFeedback.length}件の添削を確認しました。`;
 
-    // Re-show all sections
-    const appEl = document.getElementById('app')!;
-    for (let i = 0; i < appEl.children.length; i++) {
-      const child = appEl.children[i] as HTMLElement;
-      child.style.display = '';
-    }
+    // Show only the writing input (with corrected text) + resubmit button
+    const writingArea = document.getElementById('writing-area')!;
+    writingArea.classList.remove('two-col');
+    writingArea.style.display = 'block';
+
+    // Hide reference panel (JP text + hints), show only the EN textarea
+    const writingRef = document.getElementById('writing-ref')!;
+    writingRef.style.display = 'none';
+
     const translateBtn = document.getElementById('translate-btn')!;
     translateBtn.textContent = 'もう一度添削する';
 
-    // Show results (model translation, vocab, questions)
-    renderResultsOnly(post);
-    resultsArea.classList.add('visible');
-
-    // Scroll to see the updated textarea
+    // Scroll to the corrected text
     setTimeout(() => {
-      enInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      enInput.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 100);
   }
 }
