@@ -20,8 +20,6 @@ interface DiaryPost {
   expectedQuestions?: QuestionItem[];
   hints?: HintItem[];
   accumulatedCorrections?: string[];
-  attemptCount?: number;
-  createdAt: number;
 }
 
 interface FeedbackItem {
@@ -47,7 +45,7 @@ interface HintItem {
   note: string;
 }
 
-const RJPLUS_API = 'https://rarejob-plus-api-121737888244.asia-northeast1.run.app/api';
+import { RJPLUS_API } from '../../constants';
 
 // Module-level state for correction review
 let currentFeedback: FeedbackItem[] = [];
@@ -165,7 +163,6 @@ export async function initEditor(): Promise<void> {
       if (post.userTranslation) enInput.value = post.userTranslation;
       if (post.date) dateInput.value = post.date;
       if (post.accumulatedCorrections) accumulatedCorrections = post.accumulatedCorrections;
-      if (post.attemptCount) attemptCount = post.attemptCount;
 
       if (post.hints && post.hints.length > 0) {
         renderHints(post.hints);
@@ -327,23 +324,12 @@ function startCorrectionReview(post: DiaryPost, enInput: HTMLTextAreaElement): v
   });
 }
 
-/** Extract context sentences (the target sentence + 1 before/after) from full text */
-function getContextSnippet(fullText: string, targetSentence: string): string {
-  const sentences = fullText.split(/(?<=[.!?])\s+/);
-  const idx = sentences.findIndex((s) => s.includes(targetSentence.replace(/[.!?]\s*$/, '').trim()));
-  if (idx === -1) return targetSentence;
-  const start = Math.max(0, idx - 1);
-  const end = Math.min(sentences.length, idx + 2);
-  return sentences.slice(start, end).join(' ');
-}
-
-/** Apply edited snippet back into the full text */
+/** Apply edited sentence back into the full text */
 function applySnippetToFullText(enInput: HTMLTextAreaElement, _fbIndex: number, editedSnippet: string): void {
   const fb = currentFeedback[_fbIndex]!;
   const fullText = enInput.value;
-  const originalSnippet = getContextSnippet(fullText, fb.original);
-  if (fullText.includes(originalSnippet)) {
-    enInput.value = fullText.replace(originalSnippet, editedSnippet);
+  if (fullText.includes(fb.original)) {
+    enInput.value = fullText.replace(fb.original, editedSnippet);
   }
 }
 
@@ -356,11 +342,9 @@ function renderCurrentCorrection(): void {
   document.getElementById('correction-corrected')!.textContent = fb.corrected;
   document.getElementById('correction-explanation')!.textContent = fb.explanation;
 
-  // Show context snippet in editable textarea
-  const enInput = document.getElementById('input-en') as HTMLTextAreaElement;
-  const snippet = getContextSnippet(enInput.value, fb.original);
+  // Show target sentence in editable textarea
   const editArea = document.getElementById('correction-edit') as HTMLTextAreaElement;
-  editArea.value = snippet;
+  editArea.value = fb.original;
 }
 
 function advanceCorrection(post: DiaryPost, enInput: HTMLTextAreaElement): void {
@@ -431,10 +415,14 @@ function renderHints(hints: HintItem[]): void {
         <div class="hint-jp">${escapeHTML(h.japanese)}</div>
         <div class="hint-en">${escapeHTML(h.english)}</div>
         <div class="hint-note">${escapeHTML(h.note)}</div>
+        <button class="btn btn-sm btn-secondary bookmark-btn" data-en="${escapeAttr(h.english)}" data-jp="${escapeAttr(h.japanese)}">Flashcard</button>
       </div>
     `
     )
     .join('');
+
+  const jpInput = document.getElementById('jp-input') as HTMLTextAreaElement | null;
+  attachBookmarkListeners(hintsList, jpInput?.value || '');
 
   hintsArea.style.display = 'block';
 }

@@ -12,7 +12,6 @@ interface DiaryPost {
   contentJp: string;
   contentEn?: string;
   date: string;
-  createdAt: number;
 }
 
 export function homeHTML(): string {

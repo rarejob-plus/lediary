@@ -173,19 +173,6 @@ export const api = onRequest(
     const path = req.path;
     const method = req.method;
 
-    // Health check
-    if (path === "/api/health") {
-      res.json({ status: "ok" });
-      return;
-    }
-
-    // Auth status
-    if (path === "/api/auth/status") {
-      const userId = await verifyToken(req);
-      res.json({ isLoggedIn: !!userId, userId: userId || undefined });
-      return;
-    }
-
     // All diary endpoints require auth
     const userId = await verifyToken(req);
     if (!userId) {

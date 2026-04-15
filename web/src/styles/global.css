@@ -803,6 +803,20 @@ textarea::placeholder {
 .hint-item {
   padding: 10px 0;
   border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.hint-item .hint-jp,
+.hint-item .hint-en,
+.hint-item .hint-note {
+  width: 100%;
+}
+
+.hint-item .bookmark-btn {
+  margin-top: 2px;
 }
 
 .hint-item:last-child {
