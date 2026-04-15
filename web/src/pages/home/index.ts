@@ -19,7 +19,7 @@ export function homeHTML(): string {
     <div class="app-header">
       <h1>Lediary</h1>
       <div class="header-actions">
-        <button id="logout-btn" class="btn btn-ghost" title="ログアウト">ログアウト</button>
+        <button id="logout-btn" class="btn btn-ghost" title="Logout">Logout</button>
       </div>
     </div>
     <div id="diary-list">
