@@ -72,10 +72,9 @@ export async function initHome(): Promise<void> {
         <div class="card diary-card" data-id="${post.id}">
           <div class="diary-card-header">
             <div class="diary-card-date">${post.date || ''}</div>
-            <button class="delete-btn" data-id="${post.id}" title="削除">&times;</button>
+            <button class="delete-btn" data-id="${post.id}" title="削除"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
           </div>
-          <div class="diary-card-jp">${escapeHTML(post.contentJp || '')}</div>
-          ${post.contentEn ? `<div class="diary-card-en">${escapeHTML(post.contentEn)}</div>` : ''}
+          <div class="diary-card-en">${escapeHTML(post.contentEn || post.contentJp || '')}</div>
         </div>
       `
       )

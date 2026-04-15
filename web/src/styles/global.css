@@ -280,11 +280,12 @@ textarea::placeholder {
 .delete-btn {
   background: none;
   border: none;
-  font-size: 20px;
   color: var(--text-muted);
   cursor: pointer;
-  padding: 0 4px;
+  padding: 4px;
   line-height: 1;
+  display: flex;
+  align-items: center;
 }
 
 .delete-btn:hover {
