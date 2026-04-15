@@ -148,8 +148,8 @@ button {
   background: var(--surface);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  padding: 16px;
-  margin-bottom: 12px;
+  padding: 12px;
+  margin-bottom: 8px;
 }
 
 .card:hover {
@@ -259,7 +259,7 @@ textarea::placeholder {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .diary-card-date {
@@ -294,11 +294,12 @@ textarea::placeholder {
 
 .diary-card-en {
   font-size: 13px;
-  color: var(--text-muted);
+  color: var(--text);
   display: -webkit-box;
-  -webkit-line-clamp: 1;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  line-height: 1.5;
 }
 
 /* ============ Empty State ============ */
