@@ -16,7 +16,7 @@ interface DiaryPost {
   date?: string;
   feedback?: FeedbackItem[];
   vocabulary?: VocabItem[];
-  expectedQuestions?: QuestionItem[];
+  expansionQuestions?: ExpansionQuestion[];
   hints?: HintItem[];
   accumulatedCorrections?: string[];
 }
@@ -33,9 +33,10 @@ interface VocabItem {
   example: string;
 }
 
-interface QuestionItem {
+interface ExpansionQuestion {
   question: string;
   hintJa: string;
+  afterSentence: string;
 }
 
 interface HintItem {
@@ -114,6 +115,12 @@ export function editorHTML(): string {
 
     <!-- Vocabulary shown after correction complete -->
     <div id="completed-vocab" style="display:none;"></div>
+
+    <!-- Expansion questions -->
+    <div id="expansion-section" style="display:none;">
+      <h3 class="expansion-title">日記を膨らまそう</h3>
+      <div id="expansion-questions"></div>
+    </div>
   `;
 }
 
@@ -430,12 +437,107 @@ function showCompletedView(post: DiaryPost, enInput: HTMLTextAreaElement): void 
     enableTextSelectionBookmark(vocabContainer);
   }
 
+  // Show expansion questions
+  renderExpansionQuestions(post, enInput);
+
   // Re-show editor header (back button)
   const editorHeader = document.querySelector('.editor-header') as HTMLElement;
   if (editorHeader) editorHeader.style.display = '';
 
   // Scroll to top
   window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function renderExpansionQuestions(post: DiaryPost, enInput: HTMLTextAreaElement): void {
+  const section = document.getElementById('expansion-section')!;
+  const container = document.getElementById('expansion-questions')!;
+  const questions = post.expansionQuestions;
+  if (!questions || questions.length === 0) {
+    section.style.display = 'none';
+    return;
+  }
+
+  container.innerHTML = questions.map((q, i) => `
+    <div class="expansion-card" data-index="${i}" data-after="${escapeAttr(q.afterSentence)}">
+      <div class="expansion-question">${escapeHTML(q.question)}</div>
+      <div class="expansion-hint">${escapeHTML(q.hintJa)}</div>
+      <div class="expansion-answer-area">
+        <textarea class="expansion-input" rows="2" placeholder="英語で答えてみましょう"></textarea>
+        <button class="btn btn-sm btn-primary expansion-submit">添削</button>
+      </div>
+      <div class="expansion-result" style="display:none;"></div>
+    </div>
+  `).join('');
+
+  section.style.display = 'block';
+
+  // Attach handlers
+  container.querySelectorAll('.expansion-card').forEach((card) => {
+    const submitBtn = card.querySelector('.expansion-submit') as HTMLButtonElement;
+    const input = card.querySelector('.expansion-input') as HTMLTextAreaElement;
+    const resultDiv = card.querySelector('.expansion-result') as HTMLElement;
+    const afterSentence = (card as HTMLElement).dataset.after || '';
+
+    submitBtn.addEventListener('click', async () => {
+      const answer = input.value.trim();
+      if (!answer) return;
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = '添削中...';
+
+      try {
+        const res = await api.post<{ corrected: string; explanation: string }>('/diary/correct-answer', {
+          question: card.querySelector('.expansion-question')?.textContent,
+          answer,
+          diaryContext: enInput.value,
+        });
+
+        const corrected = res.corrected || answer;
+        const explanation = res.explanation || '';
+
+        resultDiv.innerHTML = `
+          <div class="expansion-corrected">${escapeHTML(corrected)}</div>
+          ${explanation ? `<div class="expansion-explanation">${escapeHTML(explanation)}</div>` : ''}
+          <button class="btn btn-sm btn-primary expansion-reflect">日記に反映する</button>
+        `;
+        resultDiv.style.display = 'block';
+        input.style.display = 'none';
+        submitBtn.style.display = 'none';
+
+        // Attach reflect handler
+        resultDiv.querySelector('.expansion-reflect')!.addEventListener('click', () => {
+          // Insert after the matching sentence
+          const diary = enInput.value;
+          const insertPos = diary.indexOf(afterSentence);
+          if (insertPos >= 0) {
+            const endPos = insertPos + afterSentence.length;
+            enInput.value = diary.slice(0, endPos) + ' ' + corrected + diary.slice(endPos);
+          } else {
+            // Fallback: append to end
+            enInput.value = diary.trimEnd() + ' ' + corrected;
+          }
+          enInput.readOnly = false;
+          enInput.classList.remove('readonly');
+
+          // Mark as reflected
+          resultDiv.innerHTML = `<div class="expansion-reflected">✅ 反映しました</div>`;
+
+          // Update readonly display
+          setTimeout(() => {
+            enInput.readOnly = true;
+            enInput.classList.add('readonly');
+          }, 0);
+
+          showToast('日記に反映しました');
+        });
+      } catch (_err) {
+        showToast('添削に失敗しました');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = '添削';
+      }
+    });
+  });
 }
 
 // ─── Rendering helpers ───
