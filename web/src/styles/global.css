@@ -497,11 +497,12 @@ input[type="date"]:focus {
 }
 
 .vocab-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   padding: 8px 0;
   border-bottom: 1px solid var(--bg);
+}
+
+.vocab-item .bookmark-btn {
+  margin-top: 4px;
 }
 
 .vocab-item:last-child {
