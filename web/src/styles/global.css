@@ -286,8 +286,14 @@ textarea.readonly:focus {
   margin-bottom: 8px;
 }
 
-.expansion-reflect {
-  width: 100%;
+.expansion-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.expansion-actions .btn {
+  flex: 1;
 }
 
 .expansion-reflected {

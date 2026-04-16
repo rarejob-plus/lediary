@@ -506,53 +506,63 @@ function renderExpansionQuestions(post: DiaryPost, enInput: HTMLTextAreaElement)
           diaryContext: enInput.value,
         });
 
-        const corrected = res.corrected || answer;
+        let currentCorrected = res.corrected || answer;
         const explanation = res.explanation || '';
 
-        resultDiv.innerHTML = `
-          <div class="expansion-corrected">${escapeHTML(corrected)}</div>
-          ${explanation ? `<div class="expansion-explanation">${escapeHTML(explanation)}</div>` : ''}
-          <button class="btn btn-sm btn-primary expansion-reflect">日記に反映する</button>
-        `;
-        resultDiv.style.display = 'block';
-        input.style.display = 'none';
-        submitBtn.style.display = 'none';
+        function showCorrectionResult(correctedText: string, explanationText: string) {
+          resultDiv.innerHTML = `
+            <div class="expansion-corrected">${escapeHTML(correctedText)}</div>
+            ${explanationText ? `<div class="expansion-explanation">${escapeHTML(explanationText)}</div>` : ''}
+            <div class="expansion-actions">
+              <button class="btn btn-sm btn-secondary expansion-edit">書き直す</button>
+              <button class="btn btn-sm btn-primary expansion-reflect">日記に追記</button>
+            </div>
+          `;
+          resultDiv.style.display = 'block';
+          input.style.display = 'none';
+          submitBtn.style.display = 'none';
 
-        // Attach reflect handler
-        resultDiv.querySelector('.expansion-reflect')!.addEventListener('click', () => {
-          // Insert after the matching sentence
-          const diary = enInput.value;
-          const insertPos = diary.indexOf(afterSentence);
-          if (insertPos >= 0) {
-            const endPos = insertPos + afterSentence.length;
-            enInput.value = diary.slice(0, endPos) + ' ' + corrected + diary.slice(endPos);
-          } else {
-            // Fallback: append to end
-            enInput.value = diary.trimEnd() + ' ' + corrected;
-          }
-          enInput.readOnly = false;
-          enInput.classList.remove('readonly');
+          // Edit: go back to input with corrected text
+          resultDiv.querySelector('.expansion-edit')!.addEventListener('click', () => {
+            input.value = correctedText;
+            input.style.display = '';
+            submitBtn.style.display = '';
+            resultDiv.style.display = 'none';
+          });
 
-          // Mark as reflected
-          resultDiv.innerHTML = `<div class="expansion-reflected">✅ 反映しました</div>`;
+          // Reflect: insert into diary
+          resultDiv.querySelector('.expansion-reflect')!.addEventListener('click', () => {
+            const diary = enInput.value;
+            const insertPos = diary.indexOf(afterSentence);
+            if (insertPos >= 0) {
+              const endPos = insertPos + afterSentence.length;
+              enInput.value = diary.slice(0, endPos) + ' ' + correctedText + diary.slice(endPos);
+            } else {
+              enInput.value = diary.trimEnd() + ' ' + correctedText;
+            }
+            enInput.readOnly = false;
+            enInput.classList.remove('readonly');
 
-          // Update readonly display
-          setTimeout(() => {
-            enInput.readOnly = true;
-            enInput.classList.add('readonly');
-          }, 0);
+            resultDiv.innerHTML = `<div class="expansion-reflected">✅ 追記しました</div>`;
 
-          // Save updated text to Firestore
-          const dateInput = document.getElementById('input-date') as HTMLInputElement;
-          api.post('/diary/posts', {
-            contentJp: (document.getElementById('input-jp') as HTMLTextAreaElement).value,
-            userTranslation: enInput.value,
-            date: dateInput.value,
-            previousCorrections: accumulatedCorrections,
-          }).catch(() => {});
+            setTimeout(() => {
+              enInput.readOnly = true;
+              enInput.classList.add('readonly');
+            }, 0);
 
-          showToast('日記に反映しました');
-        });
+            const dateInput = document.getElementById('input-date') as HTMLInputElement;
+            api.post('/diary/posts', {
+              contentJp: (document.getElementById('input-jp') as HTMLTextAreaElement).value,
+              userTranslation: enInput.value,
+              date: dateInput.value,
+              previousCorrections: accumulatedCorrections,
+            }).catch(() => {});
+
+            showToast('日記に追記しました');
+          });
+        }
+
+        showCorrectionResult(currentCorrected, explanation);
       } catch (_err) {
         showToast('添削に失敗しました');
       } finally {
