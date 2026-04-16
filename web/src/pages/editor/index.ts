@@ -164,15 +164,22 @@ export async function initEditor(): Promise<void> {
       if (post.date) dateInput.value = post.date;
       if (post.accumulatedCorrections) accumulatedCorrections = post.accumulatedCorrections;
 
-      if (post.hints && post.hints.length > 0) {
+      if (post.contentEn) {
+        // Already corrected — show only EN textarea + resubmit
+        const writingArea = document.getElementById('writing-area')!;
+        writingArea.style.display = 'block';
+        const writingRef = document.getElementById('writing-ref')!;
+        writingRef.style.display = 'none';
+        translateBtn.textContent = 'もう一度添削する';
+
+        // Hide sections above writing area
+        const editorSections = document.querySelectorAll('.editor-section');
+        editorSections.forEach((s) => (s as HTMLElement).style.display = 'none');
+        const hintBtn = document.getElementById('hint-btn')!;
+        hintBtn.style.display = 'none';
+      } else if (post.hints && post.hints.length > 0) {
         renderHints(post.hints);
         activateWritingMode(post.contentJp);
-      }
-
-      if (post.contentEn) {
-        renderResultsOnly(post);
-        resultsArea.classList.add('visible');
-        translateBtn.textContent = 'もう一度添削する';
       }
     } catch (_err) {
       console.error('Failed to load post:', _err);
