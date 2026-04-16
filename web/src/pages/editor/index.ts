@@ -392,6 +392,18 @@ function advanceCorrection(post: DiaryPost, enInput: HTMLTextAreaElement): void 
 }
 
 function showCompletedView(post: DiaryPost, enInput: HTMLTextAreaElement): void {
+  // Save corrected text if changed
+  const correctedText = enInput.value.trim();
+  if (correctedText && correctedText !== (post.userTranslation || '')) {
+    const dateInput = document.getElementById('input-date') as HTMLInputElement;
+    api.post('/diary/posts', {
+      contentJp: (document.getElementById('input-jp') as HTMLTextAreaElement).value,
+      userTranslation: correctedText,
+      date: dateInput.value,
+      previousCorrections: accumulatedCorrections,
+    }).catch(() => {});
+  }
+
   // Hide correction UI
   const correctionCard = document.getElementById('correction-card')!;
   const correctionArea = document.getElementById('correction-area')!;
@@ -529,6 +541,15 @@ function renderExpansionQuestions(post: DiaryPost, enInput: HTMLTextAreaElement)
             enInput.readOnly = true;
             enInput.classList.add('readonly');
           }, 0);
+
+          // Save updated text to Firestore
+          const dateInput = document.getElementById('input-date') as HTMLInputElement;
+          api.post('/diary/posts', {
+            contentJp: (document.getElementById('input-jp') as HTMLTextAreaElement).value,
+            userTranslation: enInput.value,
+            date: dateInput.value,
+            previousCorrections: accumulatedCorrections,
+          }).catch(() => {});
 
           showToast('日記に反映しました');
         });
