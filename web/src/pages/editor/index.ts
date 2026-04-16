@@ -113,23 +113,6 @@ export function editorHTML(): string {
       </div>
     </div>
 
-    <!-- Results (shown after correction review) -->
-    <div id="results-area" class="results-area">
-      <div id="result-english" class="result-section">
-        <h3>AI模範英訳</h3>
-        <div id="result-english-text" class="result-english"></div>
-      </div>
-
-      <div id="result-vocab" class="result-section" style="display:none;">
-        <h3>語彙</h3>
-        <div id="result-vocab-list"></div>
-      </div>
-
-      <div id="result-questions" class="result-section" style="display:none;">
-        <h3>予想される質問</h3>
-        <div id="result-questions-list"></div>
-      </div>
-    </div>
   `;
 }
 
@@ -145,7 +128,6 @@ export async function initEditor(): Promise<void> {
   const jpInput = document.getElementById('input-jp') as HTMLTextAreaElement;
   const enInput = document.getElementById('input-en') as HTMLTextAreaElement;
   const translateBtn = document.getElementById('translate-btn') as HTMLButtonElement;
-  const resultsArea = document.getElementById('results-area')!;
   const correctionArea = document.getElementById('correction-area')!;
 
   // If opening an existing post, hide the new-entry form immediately (before API call)
@@ -231,17 +213,6 @@ export async function initEditor(): Promise<void> {
 
   // Submit for correction
   async function submitForCorrection() {
-    // If readonly, restore editable state before submitting
-    if (enInput.readOnly) {
-      enInput.readOnly = false;
-      enInput.classList.remove('readonly');
-      const enLabel = enInput.previousElementSibling;
-      if (enLabel?.tagName === 'LABEL') {
-        (enLabel as HTMLElement).textContent = '自分で英訳してみる';
-        (enLabel as HTMLElement).classList.remove('completion-label');
-      }
-    }
-
     const contentJp = jpInput.value.trim();
     if (!contentJp) {
       showToast('日本語を入力してください');
@@ -257,7 +228,6 @@ export async function initEditor(): Promise<void> {
     translateBtn.disabled = true;
     translateBtn.innerHTML = '<span class="loading-spinner"></span> 添削中...';
     correctionArea.style.display = 'none';
-    resultsArea.classList.remove('visible');
 
     try {
       const date = dateInput.value;
@@ -271,16 +241,25 @@ export async function initEditor(): Promise<void> {
       const post = await api.post<DiaryPost>('/diary/posts', body);
       attemptCount++;
 
+      // Clear readonly state if re-correcting
+      if (enInput.readOnly) {
+        enInput.readOnly = false;
+        enInput.classList.remove('readonly');
+        const enLabel = enInput.previousElementSibling;
+        if (enLabel?.tagName === 'LABEL') {
+          (enLabel as HTMLElement).textContent = '自分で英訳してみる';
+          (enLabel as HTMLElement).classList.remove('completion-label');
+        }
+      }
+
       if (post.feedback && post.feedback.length > 0) {
         // Start step-by-step correction review
         currentFeedback = post.feedback;
         correctionIndex = 0;
         startCorrectionReview(post, enInput);
       } else {
-        // No corrections needed — show results directly
+        // No corrections needed
         showToast('修正点はありません！');
-        renderResultsOnly(post);
-        resultsArea.classList.add('visible');
       }
 
       translateBtn.textContent = 'もう一度添削する';
@@ -314,23 +293,18 @@ function startCorrectionReview(post: DiaryPost, enInput: HTMLTextAreaElement): v
   const correctionArea = document.getElementById('correction-area')!;
   const correctionComplete = document.getElementById('correction-complete')!;
   const correctionCard = document.getElementById('correction-card')!;
-  const resultsArea = document.getElementById('results-area')!;
 
-  // Store post for later use in results
-  correctionArea.dataset.postJson = JSON.stringify(post);
-
-  // Hide ALL content above correction area by wrapping in a container check
+  // Hide ALL content above correction area
   const appEl = document.getElementById('app')!;
   for (let i = 0; i < appEl.children.length; i++) {
     const child = appEl.children[i] as HTMLElement;
-    if (child.id === 'correction-area' || child.id === 'results-area') continue;
+    if (child.id === 'correction-area') continue;
     child.style.display = 'none';
   }
 
   correctionArea.style.display = 'block';
   correctionComplete.style.display = 'none';
   correctionCard.style.display = 'block';
-  resultsArea.classList.remove('visible');
 
   const attemptBadge = document.getElementById('attempt-badge')!;
   attemptBadge.textContent = attemptCount > 1 ? `${attemptCount}回目` : '';
@@ -457,70 +431,6 @@ function renderHints(hints: HintItem[]): void {
   attachBookmarkListeners(hintsList, jpInput?.value || '');
 
   hintsArea.style.display = 'block';
-}
-
-/** Render results without feedback (vocab, questions, model translation). */
-function renderResultsOnly(post: DiaryPost): void {
-  // English model translation
-  const enText = document.getElementById('result-english-text')!;
-  enText.textContent = post.contentEn;
-
-  // Vocabulary
-  const vocabSection = document.getElementById('result-vocab')!;
-  const vocabList = document.getElementById('result-vocab-list')!;
-  if (post.vocabulary && post.vocabulary.length > 0) {
-    vocabSection.style.display = 'block';
-    vocabList.innerHTML = post.vocabulary
-      .map(
-        (v) => `
-        <div class="vocab-item">
-          <div class="vocab-text">
-            <div class="vocab-en">${escapeHTML(v.word)}</div>
-            <div class="vocab-jp">${escapeHTML(v.definition)}</div>
-            <div class="vocab-example">${escapeHTML(v.example)}</div>
-          </div>
-          <button class="btn btn-sm btn-secondary bookmark-btn" data-en="${escapeAttr(v.word)}" data-jp="${escapeAttr(v.definition)}">Flashcard</button>
-        </div>
-      `
-      )
-      .join('');
-    attachBookmarkListeners(vocabList, post.contentEn);
-  } else {
-    vocabSection.style.display = 'none';
-  }
-
-  // Questions
-  const questionsSection = document.getElementById('result-questions')!;
-  const questionsList = document.getElementById('result-questions-list')!;
-  if (post.expectedQuestions && post.expectedQuestions.length > 0) {
-    questionsSection.style.display = 'block';
-    questionsList.innerHTML = post.expectedQuestions
-      .map(
-        (q) => `
-        <div class="question-item">
-          <div class="question-en">${escapeHTML(q.question)}</div>
-          <div class="question-hint">
-            ヒントを見る → <span class="question-hint-text">${escapeHTML(q.hintJa)}</span>
-          </div>
-        </div>
-      `
-      )
-      .join('');
-
-    questionsList.querySelectorAll('.question-hint').forEach((el) => {
-      el.addEventListener('click', () => {
-        el.querySelector('.question-hint-text')?.classList.toggle('visible');
-      });
-    });
-  } else {
-    questionsSection.style.display = 'none';
-  }
-
-  // Enable text selection → Flashcard
-  const resultsArea = document.getElementById('results-area');
-  if (resultsArea) {
-    enableTextSelectionBookmark(resultsArea);
-  }
 }
 
 function attachBookmarkListeners(container: HTMLElement, context: string): void {
