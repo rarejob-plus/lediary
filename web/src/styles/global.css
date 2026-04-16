@@ -182,18 +182,30 @@ textarea::placeholder {
 }
 
 textarea.readonly {
-  background: var(--bg);
-  border: none;
+  background: var(--primary-light);
+  border: 2px solid var(--primary);
+  border-radius: var(--radius);
   resize: none;
   cursor: default;
   font-size: 16px;
-  line-height: 1.7;
-  padding: 0;
+  line-height: 1.8;
+  padding: 16px;
+  color: var(--text);
 }
 
 textarea.readonly:focus {
   box-shadow: none;
-  border-color: transparent;
+  border-color: var(--primary);
+}
+
+.completion-label {
+  margin-bottom: 12px !important;
+}
+
+.completion-badge {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--primary-dark);
 }
 
 input[type="date"] {

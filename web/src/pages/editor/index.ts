@@ -174,9 +174,12 @@ export async function initEditor(): Promise<void> {
         enInput.classList.add('readonly');
         translateBtn.textContent = 'もう一度添削する';
 
-        // Hide label above textarea
+        // Replace label with completion badge
         const enLabel = enInput.previousElementSibling;
-        if (enLabel?.tagName === 'LABEL') (enLabel as HTMLElement).style.display = 'none';
+        if (enLabel?.tagName === 'LABEL') {
+          (enLabel as HTMLElement).innerHTML = `<span class="completion-badge">✅ ${post.date || 'Today'}'s Diary</span>`;
+          (enLabel as HTMLElement).classList.add('completion-label');
+        }
 
         // Hide sections above writing area
         const editorSections = document.querySelectorAll('.editor-section');
@@ -227,7 +230,10 @@ export async function initEditor(): Promise<void> {
       enInput.classList.remove('readonly');
       translateBtn.textContent = '添削してもらう';
       const enLabel = enInput.previousElementSibling;
-      if (enLabel?.tagName === 'LABEL') (enLabel as HTMLElement).style.display = '';
+      if (enLabel?.tagName === 'LABEL') {
+        (enLabel as HTMLElement).textContent = '自分で英訳してみる';
+        (enLabel as HTMLElement).classList.remove('completion-label');
+      }
       enInput.focus();
       return;
     }
