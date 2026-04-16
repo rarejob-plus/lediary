@@ -36,6 +36,7 @@ interface VocabItem {
 interface ExpansionQuestion {
   question: string;
   hintJa: string;
+  hintPhrases?: string[];
   afterSentence: string;
 }
 
@@ -461,6 +462,7 @@ function renderExpansionQuestions(post: DiaryPost, enInput: HTMLTextAreaElement)
     <div class="expansion-card" data-index="${i}" data-after="${escapeAttr(q.afterSentence)}">
       <div class="expansion-question">${escapeHTML(q.question)}</div>
       <div class="expansion-hint">${escapeHTML(q.hintJa)}</div>
+      ${q.hintPhrases && q.hintPhrases.length > 0 ? `<div class="expansion-phrases">${q.hintPhrases.map((p) => `<span class="expansion-phrase">${escapeHTML(p)}</span>`).join('')}</div>` : ''}
       <div class="expansion-answer-area">
         <textarea class="expansion-input" rows="2" placeholder="英語で答えてみましょう"></textarea>
         <button class="btn btn-sm btn-primary expansion-submit">添削</button>

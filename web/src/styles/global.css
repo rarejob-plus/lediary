@@ -242,6 +242,22 @@ textarea.readonly:focus {
   margin-bottom: 8px;
 }
 
+.expansion-phrases {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.expansion-phrase {
+  font-size: 12px;
+  background: var(--primary-light);
+  color: var(--primary-dark);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-style: italic;
+}
+
 .expansion-answer-area {
   display: flex;
   gap: 8px;
