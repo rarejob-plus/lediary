@@ -148,6 +148,13 @@ export async function initEditor(): Promise<void> {
   const resultsArea = document.getElementById('results-area')!;
   const correctionArea = document.getElementById('correction-area')!;
 
+  // If opening an existing post, hide the new-entry form immediately (before API call)
+  if (postId) {
+    document.querySelectorAll('.editor-section').forEach((s) => (s as HTMLElement).style.display = 'none');
+    document.getElementById('hint-btn')!.style.display = 'none';
+    document.getElementById('writing-area')!.style.display = 'none';
+  }
+
   // Default date: today, but before 4:00 AM → yesterday
   const now = new Date();
   if (now.getHours() < 4) {
