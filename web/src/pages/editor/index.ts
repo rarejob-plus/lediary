@@ -13,7 +13,6 @@ interface DiaryPost {
   id: string;
   contentJp: string;
   userTranslation?: string;
-  contentEn: string;
   date?: string;
   feedback?: FeedbackItem[];
   vocabulary?: VocabItem[];
@@ -158,7 +157,7 @@ export async function initEditor(): Promise<void> {
       if (post.date) dateInput.value = post.date;
       if (post.accumulatedCorrections) accumulatedCorrections = post.accumulatedCorrections;
 
-      if (post.contentEn) {
+      if (post.userTranslation) {
         // Already corrected — show read-only EN text + resubmit
         const writingArea = document.getElementById('writing-area')!;
         writingArea.style.display = 'block';
@@ -198,7 +197,7 @@ export async function initEditor(): Promise<void> {
             `).join('')}
           `;
           vocabContainer.style.display = 'block';
-          attachBookmarkListeners(vocabContainer, post.contentEn || '');
+          attachBookmarkListeners(vocabContainer, post.userTranslation || '');
         }
       } else if (post.hints && post.hints.length > 0) {
         renderHints(post.hints);
@@ -427,7 +426,7 @@ function showCompletedView(post: DiaryPost, enInput: HTMLTextAreaElement): void 
       `).join('')}
     `;
     vocabContainer.style.display = 'block';
-    attachBookmarkListeners(vocabContainer, post.contentEn || enInput.value);
+    attachBookmarkListeners(vocabContainer, post.userTranslation || enInput.value);
     enableTextSelectionBookmark(vocabContainer);
   }
 

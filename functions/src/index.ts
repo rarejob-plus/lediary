@@ -74,7 +74,6 @@ interface QuestionItem { question: string; hintJa: string }
 interface HintItem { japanese: string; english: string; note: string }
 
 interface DiaryAnalysis {
-  contentEn: string;
   feedback: FeedbackItem[];
   vocabulary: VocabItem[];
   expectedQuestions: QuestionItem[];
@@ -86,7 +85,6 @@ Your task is to analyze a short Japanese diary entry (typically 3 lines) and the
 
 Return a JSON object with exactly these fields:
 {
-  "contentEn": "A polished, natural C1-level English translation of the Japanese diary. Use casual spoken English — the kind you'd hear in everyday conversation, not in a textbook.",
   "feedback": [
     {
       "original": "the user's full sentence containing the issue",
@@ -110,9 +108,8 @@ Return a JSON object with exactly these fields:
 }
 
 Rules:
-- contentEn: Write natural, casual spoken English at C1 level. Avoid overly formal or literary language.
-- feedback: Compare the user's translation with your refined version sentence by sentence. For each correction: "original" must be the user's FULL sentence, "corrected" must be the corrected FULL sentence, and "explanation" must explain in Japanese WHY the corrected version is better — specifically describe the nuance difference between the two expressions (e.g., when each would be used, what impression each gives, what subtle meaning differs). ALL alternatives MUST sound natural in casual spoken English — never use formal/written words like "therefore", "furthermore", "nevertheless". If the user's translation is empty, return an empty array [].
-- vocabulary: Extract 3-5 useful vocabulary items from your refined translation. Focus on practical conversational words/phrases.
+- feedback: Compare the user's translation sentence by sentence and suggest corrections. For each correction: "original" must be the user's FULL sentence, "corrected" must be the corrected FULL sentence, and "explanation" must explain in Japanese WHY the corrected version is better — specifically describe the nuance difference between the two expressions (e.g., when each would be used, what impression each gives, what subtle meaning differs). ALL alternatives MUST sound natural in casual spoken English — never use formal/written words like "therefore", "furthermore", "nevertheless". If the user's translation is empty, return an empty array [].
+- vocabulary: Extract 3-5 useful vocabulary items relevant to the diary topic. Focus on practical conversational words/phrases.
 - expectedQuestions: Generate exactly 3 follow-up questions a RareJob tutor might ask about the diary content. Include Japanese hints for answering.
 
 Return ONLY the JSON object, no markdown fences or extra text.`;
@@ -196,7 +193,6 @@ export const api = onRequest(
         userId,
         contentJp,
         userTranslation: userTranslation || "",
-        contentEn: analysis.contentEn,
         feedback: analysis.feedback,
         vocabulary: analysis.vocabulary,
         expectedQuestions: analysis.expectedQuestions,
