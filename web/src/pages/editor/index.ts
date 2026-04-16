@@ -165,12 +165,18 @@ export async function initEditor(): Promise<void> {
       if (post.accumulatedCorrections) accumulatedCorrections = post.accumulatedCorrections;
 
       if (post.contentEn) {
-        // Already corrected — show only EN textarea + resubmit
+        // Already corrected — show read-only EN text + resubmit
         const writingArea = document.getElementById('writing-area')!;
         writingArea.style.display = 'block';
         const writingRef = document.getElementById('writing-ref')!;
         writingRef.style.display = 'none';
+        enInput.readOnly = true;
+        enInput.classList.add('readonly');
         translateBtn.textContent = 'もう一度添削する';
+
+        // Hide label above textarea
+        const enLabel = enInput.previousElementSibling;
+        if (enLabel?.tagName === 'LABEL') (enLabel as HTMLElement).style.display = 'none';
 
         // Hide sections above writing area
         const editorSections = document.querySelectorAll('.editor-section');
@@ -215,6 +221,17 @@ export async function initEditor(): Promise<void> {
 
   // Submit for correction
   async function submitForCorrection() {
+    // If readonly, switch to editable mode first
+    if (enInput.readOnly) {
+      enInput.readOnly = false;
+      enInput.classList.remove('readonly');
+      translateBtn.textContent = '添削してもらう';
+      const enLabel = enInput.previousElementSibling;
+      if (enLabel?.tagName === 'LABEL') (enLabel as HTMLElement).style.display = '';
+      enInput.focus();
+      return;
+    }
+
     const contentJp = jpInput.value.trim();
     if (!contentJp) {
       showToast('日本語を入力してください');
