@@ -224,18 +224,15 @@ export async function initEditor(): Promise<void> {
 
   // Submit for correction
   async function submitForCorrection() {
-    // If readonly, switch to editable mode first
+    // If readonly, restore editable state before submitting
     if (enInput.readOnly) {
       enInput.readOnly = false;
       enInput.classList.remove('readonly');
-      translateBtn.textContent = '添削してもらう';
       const enLabel = enInput.previousElementSibling;
       if (enLabel?.tagName === 'LABEL') {
         (enLabel as HTMLElement).textContent = '自分で英訳してみる';
         (enLabel as HTMLElement).classList.remove('completion-label');
       }
-      enInput.focus();
-      return;
     }
 
     const contentJp = jpInput.value.trim();
