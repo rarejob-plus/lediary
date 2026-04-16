@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Open book -->
+  <path d="M4 7 C4 7 9 5 16 7 C23 5 28 7 28 7 L28 24 C28 24 23 22 16 24 C9 22 4 24 4 24 Z" fill="#e8f5ef" stroke="#3a8068" stroke-width="1.5" stroke-linejoin="round"/>
+  <!-- Book spine -->
+  <line x1="16" y1="7" x2="16" y2="24" stroke="#3a8068" stroke-width="1" opacity="0.5"/>
+  <!-- Pen -->
+  <g transform="translate(20, 4) rotate(35)">
+    <rect x="-1.2" y="0" width="2.4" height="14" rx="1" fill="#3a8068"/>
+    <polygon points="-1.2,14 1.2,14 0,17.5" fill="#2d6652"/>
+    <rect x="-1.2" y="0" width="2.4" height="2.5" rx="0.5" fill="#2d6652"/>
+  </g>
+</svg>
