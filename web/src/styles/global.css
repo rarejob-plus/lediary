@@ -198,6 +198,17 @@ textarea.readonly:focus {
   border-color: var(--primary);
 }
 
+.completed-section-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+#completed-vocab {
+  margin-top: 16px;
+}
+
 .completion-label {
   margin-bottom: 12px !important;
 }

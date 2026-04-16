@@ -90,6 +90,7 @@ export function editorHTML(): string {
     <!-- Step-by-step correction review -->
     <div id="correction-area" class="correction-area" style="display:none;">
       <div class="correction-header">
+        <button class="back-btn" id="correction-back-btn">&larr;</button>
         <h3>添削 <span id="correction-counter"></span></h3>
         <span id="attempt-badge" class="attempt-badge"></span>
       </div>
@@ -109,10 +110,11 @@ export function editorHTML(): string {
       </div>
       <div id="correction-complete" class="correction-complete" style="display:none;">
         <p id="correction-complete-text"></p>
-        <button id="resubmit-btn" class="btn btn-primary" style="width:100%;">修正版を再添削する</button>
       </div>
     </div>
 
+    <!-- Vocabulary shown after correction complete -->
+    <div id="completed-vocab" style="display:none;"></div>
   `;
 }
 
@@ -121,6 +123,9 @@ export async function initEditor(): Promise<void> {
   const postId = params.id;
 
   document.getElementById('back-btn')?.addEventListener('click', () => {
+    navigate('/');
+  });
+  document.getElementById('correction-back-btn')?.addEventListener('click', () => {
     navigate('/');
   });
 
@@ -175,6 +180,26 @@ export async function initEditor(): Promise<void> {
         editorSections.forEach((s) => (s as HTMLElement).style.display = 'none');
         const hintBtn = document.getElementById('hint-btn')!;
         hintBtn.style.display = 'none';
+
+        // Show vocabulary with Flashcard buttons
+        const vocabContainer = document.getElementById('completed-vocab');
+        if (vocabContainer && post.vocabulary && post.vocabulary.length > 0) {
+          vocabContainer.innerHTML = `
+            <h3 class="completed-section-title">覚えたいフレーズ</h3>
+            ${post.vocabulary.map((v) => `
+              <div class="vocab-item">
+                <div class="vocab-text">
+                  <div class="vocab-en">${escapeHTML(v.word)}</div>
+                  <div class="vocab-jp">${escapeHTML(v.definition)}</div>
+                  <div class="vocab-example">${escapeHTML(v.example)}</div>
+                </div>
+                <button class="btn btn-sm btn-secondary bookmark-btn" data-en="${escapeAttr(v.word)}" data-jp="${escapeAttr(v.definition)}">Flashcard</button>
+              </div>
+            `).join('')}
+          `;
+          vocabContainer.style.display = 'block';
+          attachBookmarkListeners(vocabContainer, post.contentEn || '');
+        }
       } else if (post.hints && post.hints.length > 0) {
         renderHints(post.hints);
         activateWritingMode(post.contentJp);
@@ -258,8 +283,9 @@ export async function initEditor(): Promise<void> {
         correctionIndex = 0;
         startCorrectionReview(post, enInput);
       } else {
-        // No corrections needed
+        // No corrections needed — show completed view directly
         showToast('修正点はありません！');
+        showCompletedView(post, enInput);
       }
 
       translateBtn.textContent = 'もう一度添削する';
@@ -279,12 +305,6 @@ export async function initEditor(): Promise<void> {
   }
 
   translateBtn.addEventListener('click', submitForCorrection);
-
-  // Resubmit button
-  document.getElementById('resubmit-btn')?.addEventListener('click', () => {
-    correctionArea.style.display = 'none';
-    submitForCorrection();
-  });
 }
 
 // ─── Step-by-step correction review ───
@@ -355,38 +375,68 @@ function renderCurrentCorrection(): void {
   editArea.value = fb.original;
 }
 
-function advanceCorrection(_post: DiaryPost, enInput: HTMLTextAreaElement): void {
+function advanceCorrection(post: DiaryPost, enInput: HTMLTextAreaElement): void {
   correctionIndex++;
   if (correctionIndex < currentFeedback.length) {
     renderCurrentCorrection();
   } else {
-    // All corrections reviewed
-    const correctionCard = document.getElementById('correction-card')!;
-    const correctionComplete = document.getElementById('correction-complete')!;
-
-    correctionCard.style.display = 'none';
-    correctionComplete.style.display = 'block';
-
-    const completeText = document.getElementById('correction-complete-text')!;
-    completeText.textContent = `${currentFeedback.length}件の添削を確認しました。`;
-
-    // Show only the writing input (with corrected text) + resubmit button
-    const writingArea = document.getElementById('writing-area')!;
-    writingArea.classList.remove('two-col');
-    writingArea.style.display = 'block';
-
-    // Hide reference panel (JP text + hints), show only the EN textarea
-    const writingRef = document.getElementById('writing-ref')!;
-    writingRef.style.display = 'none';
-
-    const translateBtn = document.getElementById('translate-btn')!;
-    translateBtn.textContent = 'もう一度添削する';
-
-    // Scroll to the corrected text
-    setTimeout(() => {
-      enInput.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 100);
+    showCompletedView(post, enInput);
   }
+}
+
+function showCompletedView(post: DiaryPost, enInput: HTMLTextAreaElement): void {
+  // Hide correction UI
+  const correctionCard = document.getElementById('correction-card')!;
+  const correctionArea = document.getElementById('correction-area')!;
+  correctionCard.style.display = 'none';
+  correctionArea.style.display = 'none';
+
+  // Show writing area with readonly English
+  const writingArea = document.getElementById('writing-area')!;
+  writingArea.classList.remove('two-col');
+  writingArea.style.display = 'block';
+  const writingRef = document.getElementById('writing-ref')!;
+  writingRef.style.display = 'none';
+
+  enInput.readOnly = true;
+  enInput.classList.add('readonly');
+
+  const enLabel = enInput.previousElementSibling;
+  if (enLabel?.tagName === 'LABEL') {
+    (enLabel as HTMLElement).innerHTML = `<span class="completion-badge">✅ ${post.date || "Today"}'s Diary</span>`;
+    (enLabel as HTMLElement).classList.add('completion-label');
+  }
+
+  const translateBtn = document.getElementById('translate-btn')!;
+  translateBtn.textContent = 'もう一度添削する';
+
+  // Show vocabulary with Flashcard buttons
+  const vocabContainer = document.getElementById('completed-vocab');
+  if (vocabContainer && post.vocabulary && post.vocabulary.length > 0) {
+    vocabContainer.innerHTML = `
+      <h3 class="completed-section-title">覚えたいフレーズ</h3>
+      ${post.vocabulary.map((v) => `
+        <div class="vocab-item">
+          <div class="vocab-text">
+            <div class="vocab-en">${escapeHTML(v.word)}</div>
+            <div class="vocab-jp">${escapeHTML(v.definition)}</div>
+            <div class="vocab-example">${escapeHTML(v.example)}</div>
+          </div>
+          <button class="btn btn-sm btn-secondary bookmark-btn" data-en="${escapeAttr(v.word)}" data-jp="${escapeAttr(v.definition)}">Flashcard</button>
+        </div>
+      `).join('')}
+    `;
+    vocabContainer.style.display = 'block';
+    attachBookmarkListeners(vocabContainer, post.contentEn || enInput.value);
+    enableTextSelectionBookmark(vocabContainer);
+  }
+
+  // Re-show editor header (back button)
+  const editorHeader = document.querySelector('.editor-header') as HTMLElement;
+  if (editorHeader) editorHeader.style.display = '';
+
+  // Scroll to top
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 // ─── Rendering helpers ───
