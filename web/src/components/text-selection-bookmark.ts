@@ -50,7 +50,25 @@ function removeFloatingBtn(): void {
   activeBtn = null;
 }
 
+function findSentenceContaining(fullText: string, selectedText: string): string {
+  // Split by sentence-ending punctuation, keeping the delimiter
+  const sentences = fullText.split(/(?<=[.!?])\s+/);
+  for (const sentence of sentences) {
+    if (sentence.includes(selectedText)) return sentence.trim();
+  }
+  return selectedText;
+}
+
 function getSelectionContext(selection: Selection): string {
+  const selectedText = selection.toString().trim();
+
+  // Use diary text — find the sentence containing the selection
+  const diaryEl = document.querySelector('.diary-text-selectable');
+  if (diaryEl?.textContent) return findSentenceContaining(diaryEl.textContent, selectedText);
+
+  const enInput = document.getElementById('input-en') as HTMLTextAreaElement | null;
+  if (enInput?.value) return findSentenceContaining(enInput.value, selectedText);
+
   const range = selection.getRangeAt(0);
   let container: Node = range.commonAncestorContainer;
   if (container.nodeType === Node.TEXT_NODE) {

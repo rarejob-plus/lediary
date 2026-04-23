@@ -1,7 +1,9 @@
 import { onRequest } from "firebase-functions/v2/https";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
+import { getMessaging } from "firebase-admin/messaging";
 import { defineSecret } from "firebase-functions/params";
 
 initializeApp();
@@ -57,13 +59,30 @@ async function callGemini(systemPrompt: string, userMessage: string): Promise<st
 function parseJsonObject<T>(content: string): T {
   const match = content.match(/\{[\s\S]*\}/);
   if (!match) throw new Error("No JSON object found in LLM response");
-  return JSON.parse(match[0]);
+  try {
+    return JSON.parse(match[0]);
+  } catch {
+    // Try to fix common JSON issues: trailing commas, unescaped quotes
+    const fixed = match[0]
+      .replace(/,\s*([}\]])/g, "$1")  // trailing commas
+      .replace(/[\u201c\u201d]/g, '"')  // smart quotes
+      .replace(/[\u2018\u2019]/g, "'"); // smart single quotes
+    return JSON.parse(fixed);
+  }
 }
 
 function parseJsonArray<T>(content: string): T {
   const match = content.match(/\[[\s\S]*\]/);
   if (!match) throw new Error("No JSON array found in LLM response");
-  return JSON.parse(match[0]);
+  try {
+    return JSON.parse(match[0]);
+  } catch {
+    const fixed = match[0]
+      .replace(/,\s*([}\]])/g, "$1")
+      .replace(/[\u201c\u201d]/g, '"')
+      .replace(/[\u2018\u2019]/g, "'");
+    return JSON.parse(fixed);
+  }
 }
 
 // ─── Diary analysis ───
@@ -79,9 +98,22 @@ interface DiaryAnalysis {
   expansionQuestions: ExpansionQuestion[];
 }
 
-async function analyzeDiary(contentJp: string, userTranslation: string, previousCorrections: string[]): Promise<DiaryAnalysis> {
+async function analyzeDiary(contentJp: string, userTranslation: string, previousFeedback: FeedbackItem[], attemptCount: number): Promise<DiaryAnalysis> {
+  // Progressive correction levels
+  let levelInstruction: string;
+  if (attemptCount <= 1) {
+    levelInstruction = `CORRECTION LEVEL: Basic — Focus on clear grammatical errors, wrong tenses, missing articles, incorrect prepositions, and obviously unnatural phrasing. Do NOT nitpick style or suggest minor improvements.
+Also check for abrupt topic transitions. When the diary jumps between unrelated topics without a connecting phrase, suggest adding a natural transition such as: "Anyway, on a different note,", "As for my day,", "Moving on,", "On the other hand,", "In contrast,". Choose the appropriate transition based on context — use contrast phrases ("In contrast," "On the other hand,") when the topics have an inherent contrast, and topic-shift phrases ("Anyway,", "On a different note,") when they are simply unrelated.`;
+  } else if (attemptCount === 2) {
+    levelInstruction = `CORRECTION LEVEL: Intermediate — The user has already fixed basic errors. Now focus on more natural phrasing, better word choices, and idiomatic expressions. Suggest ways to sound less textbook and more conversational.`;
+  } else {
+    levelInstruction = `CORRECTION LEVEL: Advanced — The user has already improved grammar and naturalness. Now focus on native-level refinement: varied sentence rhythm, precise vocabulary, expressive phrasing, and stylistic polish.`;
+  }
+
   const systemPrompt = `You are an expert English writing coach for Japanese learners preparing for RareJob online English lessons.
 Your task is to analyze a short Japanese diary entry (typically 3 lines) and the user's attempted English translation.
+
+${levelInstruction}
 
 Return a JSON object with exactly these fields:
 {
@@ -110,8 +142,8 @@ Return a JSON object with exactly these fields:
 }
 
 Rules:
-- feedback: Compare the user's translation sentence by sentence and suggest corrections. For each correction: "original" must be the user's FULL sentence, "corrected" must be the corrected FULL sentence, and "explanation" must explain in Japanese WHY the corrected version is better — specifically describe the nuance difference between the two expressions (e.g., when each would be used, what impression each gives, what subtle meaning differs). ALL alternatives MUST sound natural in casual spoken English — never use formal/written words like "therefore", "furthermore", "nevertheless". If the user's translation is empty, return an empty array [].
-- vocabulary: Extract 3-5 useful vocabulary items relevant to the diary topic. Focus on practical conversational words/phrases.
+- feedback: Compare the user's translation sentence by sentence and suggest corrections appropriate to the CORRECTION LEVEL above. For each correction: "original" must be the user's FULL sentence, "corrected" must be the corrected FULL sentence, and "explanation" must explain in Japanese WHY the corrected version is better — specifically describe the nuance difference between the two expressions (e.g., when each would be used, what impression each gives, what subtle meaning differs). ALL alternatives MUST sound natural in casual spoken English — never use formal/written words like "therefore", "furthermore", "nevertheless". If the user's translation is empty, return an empty array [].
+- vocabulary: Extract 3-5 useful vocabulary items ONLY from expressions used in the "corrected" sentences above. These must be words/phrases that actually appear in your corrections. Do NOT include unrelated vocabulary.
 - expansionQuestions: Generate exactly 3 questions that dig deeper into SPECIFIC parts of the diary using 5W1H (Why/How/What/When/Where/Who). Each question should target a sentence that could be expanded with more detail. "afterSentence" must exactly match one of the user's sentences — the answer will be inserted right after it. "hintPhrases" should contain 2-3 useful English phrases/collocations the learner can use to answer the question (e.g. "because I stayed up late", "I couldn't help but..."). Example: if the user wrote "I felt sleepy all day", ask "Why did you feel sleepy even though you went to bed early?" with afterSentence "I felt sleepy all day."
 
 Return ONLY the JSON object, no markdown fences or extra text.`;
@@ -122,10 +154,10 @@ Return ONLY the JSON object, no markdown fences or extra text.`;
   } else {
     userMessage += "\n\n(No translation attempt provided)";
   }
-  if (previousCorrections.length > 0) {
-    userMessage += "\n\nPreviously corrected phrases (DO NOT re-correct these — the user has already applied these fixes):\n";
-    for (const c of previousCorrections) {
-      userMessage += `- ${c}\n`;
+  if (previousFeedback.length > 0) {
+    userMessage += "\n\nPreviously suggested corrections (DO NOT contradict these — the user applied your fixes):\n";
+    for (const fb of previousFeedback) {
+      userMessage += `- "${fb.original}" → "${fb.corrected}"\n`;
     }
   }
 
@@ -148,8 +180,10 @@ Rules:
 - Match the tone and casualness of the original Japanese diary
 - Include a mix of: key vocabulary, useful phrases/collocations, and sentence patterns
 - Focus on expressions the learner might not know or might get wrong
+- Each Japanese concept/phrase should appear only ONCE — do not suggest multiple alternatives for the same idea
 - Do NOT provide a full translation — just building blocks
 - All suggestions must be natural casual spoken English
+- Always show expressions in their base/dictionary form (e.g. "feel under the weather" not "feeling under the weather", "hit up" not "hit up a restaurant")
 - Return 8-12 items
 
 Return a JSON array:
@@ -181,16 +215,49 @@ export const api = onRequest(
 
     // POST /api/diary/posts
     if (path === "/api/diary/posts" && method === "POST") {
-      const { contentJp, userTranslation, date: dateParam, previousCorrections } = req.body;
+      const { contentJp, userTranslation, date: dateParam, previousFeedback, attemptCount, textOnly, mode: modeParam } = req.body;
       if (!contentJp) {
         res.status(400).json({ error: "contentJp is required" });
         return;
       }
 
-      const analysis = await analyzeDiary(contentJp, userTranslation || "", previousCorrections || []);
-
       const date = dateParam || new Date().toISOString().slice(0, 10);
-      const docID = `${userId}_${date}`;
+      const mode = modeParam || "diary";
+      const docID = `${userId}_${date}_${mode}`;
+
+      // textOnly: update translation text without re-running analysis
+      if (textOnly) {
+        const updates: Record<string, unknown> = {
+          userTranslation: userTranslation || "",
+          updatedAt: Date.now(),
+        };
+        if (req.body.expansionQuestions) {
+          updates.expansionQuestions = req.body.expansionQuestions;
+        }
+        if (req.body.dismissedVocab) {
+          updates.dismissedVocab = req.body.dismissedVocab;
+        }
+        await db.collection("lediary-posts").doc(docID).update(updates);
+        res.status(200).json({ id: docID, userTranslation });
+        return;
+      }
+
+      const prevFb: FeedbackItem[] = previousFeedback || [];
+      const attempt: number = attemptCount || 1;
+
+      let analysis: DiaryAnalysis;
+      try {
+        analysis = await analyzeDiary(contentJp, userTranslation || "", prevFb, attempt);
+      } catch (err) {
+        // Retry once on JSON parse failure
+        console.warn("analyzeDiary failed, retrying:", err);
+        analysis = await analyzeDiary(contentJp, userTranslation || "", prevFb, attempt);
+      }
+
+      // Preserve createdAt from existing doc
+      const existingDoc = await db.collection("lediary-posts").doc(docID).get();
+      const createdAt = existingDoc.exists ? existingDoc.data()?.createdAt || Date.now() : Date.now();
+
       const post: Record<string, unknown> = {
         userId,
         contentJp,
@@ -198,8 +265,10 @@ export const api = onRequest(
         feedback: analysis.feedback,
         vocabulary: analysis.vocabulary,
         expansionQuestions: analysis.expansionQuestions,
-        accumulatedCorrections: previousCorrections || [],
+        attemptCount: attempt,
+        mode,
         date,
+        createdAt,
         updatedAt: Date.now(),
       };
 
@@ -213,7 +282,7 @@ export const api = onRequest(
     if (path === "/api/diary/posts" && method === "GET") {
       const snap = await db.collection("lediary-posts")
         .where("userId", "==", userId)
-        .orderBy("date", "desc")
+        .orderBy("createdAt", "desc")
         .get();
       const posts = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       res.json(posts);
@@ -246,7 +315,7 @@ export const api = onRequest(
 
     // POST /api/diary/hints
     if (path === "/api/diary/hints" && method === "POST") {
-      const { contentJp, date: dateParam } = req.body;
+      const { contentJp, date: dateParam, mode: hintMode } = req.body;
       if (!contentJp || !dateParam) {
         res.status(400).json({ error: "contentJp and date are required" });
         return;
@@ -254,16 +323,69 @@ export const api = onRequest(
 
       const hints = await generateHints(contentJp);
 
-      const docID = `${userId}_${dateParam}`;
+      const hm = hintMode || "diary";
+      const docID = `${userId}_${dateParam}_${hm}`;
+      const hintDoc = await db.collection("lediary-posts").doc(docID).get();
+      const hintCreatedAt = hintDoc.exists ? {} : { createdAt: Date.now() };
       await db.collection("lediary-posts").doc(docID).set({
         userId,
         contentJp,
+        mode: hm,
         date: dateParam,
         hints,
         updatedAt: Date.now(),
+        ...hintCreatedAt,
       }, { merge: true });
 
       res.json({ hints });
+      return;
+    }
+
+    // POST /api/diary/expand — generate new expansion questions only
+    if (path === "/api/diary/expand" && method === "POST") {
+      const { contentJp, userTranslation, date: dateParam, mode: expandMode } = req.body;
+      if (!userTranslation) {
+        res.status(400).json({ error: "userTranslation is required" });
+        return;
+      }
+
+      const systemPrompt = `You are an expert English writing coach for Japanese learners.
+Generate 3 follow-up questions to help the user expand their English diary entry with more detail.
+
+Return a JSON object:
+{
+  "expansionQuestions": [
+    {
+      "question": "A 5W1H question to expand a specific part of the diary (Why/How/What/When/Where/Who)",
+      "hintPhrases": ["useful English phrase for answering", "another helpful expression"],
+      "afterSentence": "The user's sentence after which the answer should be inserted (exact match from the translation)"
+    }
+  ]
+}
+
+Rules:
+- Generate exactly 3 questions that dig deeper into SPECIFIC parts of the diary using 5W1H.
+- Each question should target a sentence that could be expanded with more detail.
+- "afterSentence" must exactly match one of the user's sentences.
+- "hintPhrases" should contain 2-3 useful English phrases/collocations the learner can use to answer.
+- Questions should be different from what might have been asked before — look for unexplored angles.
+Return ONLY the JSON object, no markdown fences or extra text.`;
+
+      const userMessage = `Japanese diary:\n${contentJp || ""}\n\nUser's English translation:\n${userTranslation}`;
+      const response = await callGemini(systemPrompt, userMessage);
+      const result = parseJsonObject<{ expansionQuestions: ExpansionQuestion[] }>(response);
+      const questions = result.expansionQuestions || [];
+
+      // Save to Firestore
+      const date = dateParam || new Date().toISOString().slice(0, 10);
+      const em = expandMode || "diary";
+      const docID = `${userId}_${date}_${em}`;
+      await db.collection("lediary-posts").doc(docID).update({
+        expansionQuestions: questions,
+        updatedAt: Date.now(),
+      });
+
+      res.json({ expansionQuestions: questions });
       return;
     }
 
@@ -288,5 +410,62 @@ If the answer is already correct, return it as-is with empty explanation. Return
     }
 
     res.status(404).json({ error: "Not found" });
+  }
+);
+
+// ─── Push notification scheduler ───
+// Runs daily at 7:00 AM JST (22:00 UTC previous day)
+export const sendDailyReminder = onSchedule(
+  { schedule: "0 22 * * *", region: "asia-northeast1", timeZone: "Asia/Tokyo" },
+  async () => {
+    const now = Date.now();
+
+    // Get all push tokens
+    const tokensSnap = await db.collection("push_tokens").get();
+    if (tokensSnap.empty) return;
+
+    // Group tokens by userId
+    const userTokens = new Map<string, string[]>();
+    for (const doc of tokensSnap.docs) {
+      const data = doc.data();
+      const tokens = userTokens.get(data.userId) || [];
+      tokens.push(data.token);
+      userTokens.set(data.userId, tokens);
+    }
+
+    const messaging = getMessaging();
+
+    for (const [userId, tokens] of userTokens) {
+      // Count due flashcards
+      const bookmarksSnap = await db.collection("rjplus_users").doc(userId).collection("bookmarks")
+        .where("mastered", "!=", true)
+        .get();
+      const dueCount = bookmarksSnap.docs.filter(d => {
+        const data = d.data();
+        return !data.nextReviewAt || data.nextReviewAt <= now;
+      }).length;
+
+      if (dueCount === 0) continue;
+
+      // Send notification
+      const response = await messaging.sendEachForMulticast({
+        tokens,
+        notification: {
+          title: "Flashcards",
+          body: `${dueCount}枚のカードが復習待ちです`,
+        },
+        webpush: {
+          fcmOptions: { link: "https://rjplus-flashcards.web.app" },
+        },
+      });
+
+      // Clean up invalid tokens
+      response.responses.forEach((resp, i) => {
+        if (resp.error?.code === "messaging/registration-token-not-registered" ||
+            resp.error?.code === "messaging/invalid-registration-token") {
+          db.collection("push_tokens").doc(tokens[i]!).delete().catch(() => {});
+        }
+      });
+    }
   }
 );

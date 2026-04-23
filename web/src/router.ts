@@ -111,6 +111,12 @@ export function initRouter() {
     initEditor();
   });
 
+  routes.set('/new/:mode', () => {
+    const app = document.getElementById('app')!;
+    app.innerHTML = editorHTML();
+    initEditor();
+  });
+
   routes.set('/post/:id', () => {
     const app = document.getElementById('app')!;
     app.innerHTML = editorHTML();

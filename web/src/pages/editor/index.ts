@@ -8,18 +8,59 @@ import { getIdToken } from '../../auth';
 import { getRouteParams, navigate } from '../../router';
 import { showToast } from '../../components/toast';
 import { enableTextSelectionBookmark } from '../../components/text-selection-bookmark';
+import { Sunrise, GraduationCap, Moon, CheckCircle, type IconNode } from 'lucide';
+
+const EDITOR_ICONS: Record<string, IconNode> = { Sunrise, GraduationCap, Moon, CheckCircle };
+
+function lucideIcon(name: string, size = 18): string {
+  const parts = EDITOR_ICONS[name];
+  if (!parts) return '';
+  const elements = Array.from(parts as ArrayLike<[string, Record<string, string>]>);
+  const inner = elements.map(([tag, attrs]) => {
+    const attrStr = Object.entries(attrs).map(([k, v]) => `${k}="${v}"`).join(' ');
+    return `<${tag} ${attrStr}/>`;
+  }).join('');
+  return `<svg class="lucide-icon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+}
+
+const MODE_ICON_NAMES: Record<string, string> = { morning: 'Sunrise', lesson: 'GraduationCap', diary: 'Moon' };
+
+type WriteMode = 'diary' | 'morning' | 'lesson';
 
 interface DiaryPost {
   id: string;
   contentJp: string;
   userTranslation?: string;
   date?: string;
+  mode?: WriteMode;
   feedback?: FeedbackItem[];
   vocabulary?: VocabItem[];
   expansionQuestions?: ExpansionQuestion[];
   hints?: HintItem[];
-  accumulatedCorrections?: string[];
+  attemptCount?: number;
+  dismissedVocab?: string[];
 }
+
+const MODE_CONFIG: Record<WriteMode, { title: string; jpLabel: string; jpPlaceholder: string; enPlaceholder: string }> = {
+  morning: {
+    title: '朝の一言',
+    jpLabel: '今日の予定・意気込み',
+    jpPlaceholder: '今日やること、楽しみにしていることを1〜2行で',
+    enPlaceholder: 'Write your morning intention in English',
+  },
+  lesson: {
+    title: 'レッスン振り返り',
+    jpLabel: 'レッスンで話したこと・感想',
+    jpPlaceholder: 'レッスンで話した内容、言えなかったこと、感想を書きましょう',
+    enPlaceholder: 'Write about your lesson in English',
+  },
+  diary: {
+    title: '日記を書く',
+    jpLabel: '日本語で3行日記',
+    jpPlaceholder: '今日あったことを日本語で3行書いてみましょう',
+    enPlaceholder: 'Write in English',
+  },
+};
 
 interface FeedbackItem {
   original: string;
@@ -38,6 +79,8 @@ interface ExpansionQuestion {
   hintJa: string;
   hintPhrases?: string[];
   afterSentence: string;
+  reflected?: boolean;
+  answer?: string;
 }
 
 interface HintItem {
@@ -51,40 +94,40 @@ import { RJPLUS_API } from '../../constants';
 // Module-level state for correction review
 let currentFeedback: FeedbackItem[] = [];
 let correctionIndex = 0;
-let accumulatedCorrections: string[] = [];
+let previousFeedback: FeedbackItem[] = [];
 let attemptCount = 0;
+let currentMode: WriteMode = 'diary';
 
 export function editorHTML(): string {
   return `
     <div class="editor-header">
       <button class="back-btn" id="back-btn">&larr;</button>
-      <h2>日記を書く</h2>
+      <h2></h2>
     </div>
+
+    <input type="hidden" id="input-date" />
 
     <div class="editor-section">
-      <label>日付</label>
-      <input type="date" id="input-date" />
+      <textarea id="input-jp" rows="4" class="editor-textarea-minimal" placeholder="今日あったことを日本語で書く"></textarea>
     </div>
 
-    <div class="editor-section">
-      <label>日本語で3行日記</label>
-      <textarea id="input-jp" rows="4" placeholder="今日あったことを日本語で3行書いてみましょう"></textarea>
-    </div>
+    <button id="hint-btn" class="btn btn-hint" style="display:none;">英訳ヒントを見る</button>
 
-    <button id="hint-btn" class="btn btn-secondary" style="width:100%;margin-bottom:16px;">英訳ヒントを見る</button>
-
-    <div id="writing-area" class="writing-area">
-      <div class="writing-ref" id="writing-ref">
+    <div id="writing-area" class="writing-area" style="display:none;">
+      <div class="writing-ref-jp-sticky" id="writing-ref-jp-sticky" style="display:none;">
         <div class="writing-ref-jp" id="writing-ref-jp"></div>
-        <div id="hints-area" class="hints-area" style="display:none;">
-          <h3>英訳ヒント</h3>
-          <div id="hints-list"></div>
-        </div>
       </div>
-      <div class="writing-input">
-        <label>自分で英訳してみる</label>
-        <textarea id="input-en" rows="8" placeholder="日本語の内容を英語で書いてみましょう"></textarea>
-        <button id="translate-btn" class="btn btn-primary" style="width:100%;margin-top:12px;">添削してもらう</button>
+      <div class="writing-cols">
+        <div class="writing-ref" id="writing-ref">
+          <div id="hints-area" class="hints-area" style="display:none;">
+            <h3>英訳ヒント</h3>
+            <div id="hints-list"></div>
+          </div>
+        </div>
+        <div class="writing-input">
+          <textarea id="input-en" rows="8" class="editor-textarea-minimal en-textarea" placeholder="Write in English"></textarea>
+          <button id="translate-btn" class="btn btn-primary" style="width:100%;margin-top:12px;">添削してもらう</button>
+        </div>
       </div>
     </div>
 
@@ -129,6 +172,15 @@ export async function initEditor(): Promise<void> {
   const params = getRouteParams();
   const postId = params.id;
 
+  // Determine mode from URL or loaded post
+  currentMode = (params.mode as WriteMode) || 'diary';
+  const config = MODE_CONFIG[currentMode];
+
+  // Apply mode icon to header (title will be set by updateHeaderDate)
+  document.querySelector('.editor-header')!.classList.add(`editor-mode-${currentMode}`);
+  const jpLabel = document.querySelector('.editor-section:nth-child(2) label');
+  if (jpLabel) jpLabel.textContent = config.jpLabel;
+
   document.getElementById('back-btn')?.addEventListener('click', () => {
     navigate('/');
   });
@@ -141,6 +193,9 @@ export async function initEditor(): Promise<void> {
   const enInput = document.getElementById('input-en') as HTMLTextAreaElement;
   const translateBtn = document.getElementById('translate-btn') as HTMLButtonElement;
   const correctionArea = document.getElementById('correction-area')!;
+
+  jpInput.placeholder = config.jpPlaceholder;
+  enInput.placeholder = config.enPlaceholder;
 
   // If opening an existing post, hide the new-entry form immediately (before API call)
   if (postId) {
@@ -155,6 +210,7 @@ export async function initEditor(): Promise<void> {
     now.setDate(now.getDate() - 1);
   }
   dateInput.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  updateHeaderDate();
 
   // If editing existing post, load it
   if (postId) {
@@ -163,53 +219,24 @@ export async function initEditor(): Promise<void> {
       jpInput.value = post.contentJp;
       if (post.userTranslation) enInput.value = post.userTranslation;
       if (post.date) dateInput.value = post.date;
-      if (post.accumulatedCorrections) accumulatedCorrections = post.accumulatedCorrections;
+      if (post.attemptCount) attemptCount = post.attemptCount;
+      if (post.mode) {
+        currentMode = post.mode;
+        document.querySelector('.editor-header')!.classList.add(`editor-mode-${currentMode}`);
+        updateHeaderDate();
+      }
 
       if (post.userTranslation) {
-        // Already corrected — show read-only EN text + resubmit
-        const writingArea = document.getElementById('writing-area')!;
-        writingArea.style.display = 'block';
-        const writingRef = document.getElementById('writing-ref')!;
-        writingRef.style.display = 'none';
-        enInput.readOnly = true;
-        enInput.classList.add('readonly');
-        translateBtn.textContent = 'もう一度添削する';
-
-        // Replace label with completion badge
-        const enLabel = enInput.previousElementSibling;
-        if (enLabel?.tagName === 'LABEL') {
-          (enLabel as HTMLElement).innerHTML = `<span class="completion-badge">✅ ${post.date || 'Today'}'s Diary</span>`;
-          (enLabel as HTMLElement).classList.add('completion-label');
-        }
-
-        // Hide sections above writing area
-        const editorSections = document.querySelectorAll('.editor-section');
-        editorSections.forEach((s) => (s as HTMLElement).style.display = 'none');
-        const hintBtn = document.getElementById('hint-btn')!;
-        hintBtn.style.display = 'none';
-
-        // Show vocabulary with Flashcard buttons
-        const vocabContainer = document.getElementById('completed-vocab');
-        if (vocabContainer && post.vocabulary && post.vocabulary.length > 0) {
-          vocabContainer.innerHTML = `
-            <h3 class="completed-section-title">覚えたいフレーズ</h3>
-            ${post.vocabulary.map((v) => `
-              <div class="vocab-item">
-                <div class="vocab-text">
-                  <div class="vocab-en">${escapeHTML(v.word)}</div>
-                  <div class="vocab-jp">${escapeHTML(v.definition)}</div>
-                  <div class="vocab-example">${escapeHTML(v.example)}</div>
-                </div>
-                <button class="btn btn-sm btn-secondary bookmark-btn" data-en="${escapeAttr(v.word)}" data-jp="${escapeAttr(v.definition)}">Flashcard</button>
-              </div>
-            `).join('')}
-          `;
-          vocabContainer.style.display = 'block';
-          attachBookmarkListeners(vocabContainer, post.userTranslation || '');
-        }
+        // Already corrected — show completed view
+        showCompletedView(post, enInput);
       } else if (post.hints && post.hints.length > 0) {
+        document.getElementById('writing-area')!.style.display = '';
         renderHints(post.hints);
         activateWritingMode(post.contentJp);
+      } else {
+        // Japanese only, no translation yet — show editor + hint button
+        document.querySelectorAll('.editor-section').forEach((s) => (s as HTMLElement).style.display = '');
+        document.getElementById('hint-btn')!.style.display = '';
       }
     } catch (_err) {
       console.error('Failed to load post:', _err);
@@ -217,8 +244,12 @@ export async function initEditor(): Promise<void> {
     }
   }
 
-  // Hint button
+  // Show hint button when JP text is entered
   const hintBtn = document.getElementById('hint-btn') as HTMLButtonElement;
+  jpInput.addEventListener('input', () => {
+    hintBtn.style.display = jpInput.value.trim() ? '' : 'none';
+  });
+
   hintBtn.addEventListener('click', async () => {
     const contentJp = jpInput.value.trim();
     if (!contentJp) {
@@ -231,13 +262,13 @@ export async function initEditor(): Promise<void> {
 
     try {
       const date = dateInput.value;
-      const res = await api.post<{ hints: HintItem[] }>('/diary/hints', { contentJp, date });
+      const res = await api.post<{ hints: HintItem[] }>('/diary/hints', { contentJp, date, mode: currentMode });
       renderHints(res.hints);
+      hintBtn.style.display = 'none';
       activateWritingMode(jpInput.value);
     } catch (_err) {
       console.error('Hint generation failed:', _err);
       showToast('ヒント生成に失敗しました');
-    } finally {
       hintBtn.disabled = false;
       hintBtn.textContent = '英訳ヒントを見る';
     }
@@ -253,7 +284,7 @@ export async function initEditor(): Promise<void> {
 
     const userTranslation = enInput.value.trim();
     if (!userTranslation) {
-      showToast('まず自分で英訳してみましょう');
+      showToast('英語を入力してください');
       return;
     }
 
@@ -263,25 +294,25 @@ export async function initEditor(): Promise<void> {
 
     try {
       const date = dateInput.value;
+      attemptCount++;
       const body: Record<string, unknown> = {
         contentJp,
         userTranslation,
         date,
-        previousCorrections: accumulatedCorrections,
+        previousFeedback,
+        attemptCount,
+        mode: currentMode,
       };
 
       const post = await api.post<DiaryPost>('/diary/posts', body);
-      attemptCount++;
 
       // Clear readonly state if re-correcting
       if (enInput.readOnly) {
         enInput.readOnly = false;
         enInput.classList.remove('readonly');
-        const enLabel = enInput.previousElementSibling;
-        if (enLabel?.tagName === 'LABEL') {
-          (enLabel as HTMLElement).textContent = '自分で英訳してみる';
-          (enLabel as HTMLElement).classList.remove('completion-label');
-        }
+        enInput.style.display = '';
+        // Remove selectable text overlay and completion badge
+        enInput.parentNode!.querySelector('.diary-text-selectable')?.remove();
       }
 
       if (post.feedback && post.feedback.length > 0) {
@@ -354,7 +385,6 @@ function startCorrectionReview(post: DiaryPost, enInput: HTMLTextAreaElement): v
     const editArea = document.getElementById('correction-edit') as HTMLTextAreaElement;
     const editedSnippet = editArea.value;
     applySnippetToFullText(enInput, correctionIndex, editedSnippet);
-    accumulatedCorrections.push(editedSnippet);
     advanceCorrection(post, enInput);
   });
 }
@@ -363,9 +393,47 @@ function startCorrectionReview(post: DiaryPost, enInput: HTMLTextAreaElement): v
 function applySnippetToFullText(enInput: HTMLTextAreaElement, _fbIndex: number, editedSnippet: string): void {
   const fb = currentFeedback[_fbIndex]!;
   const fullText = enInput.value;
+
+  // Exact match first
   if (fullText.includes(fb.original)) {
     enInput.value = fullText.replace(fb.original, editedSnippet);
+    return;
   }
+
+  // Fuzzy: normalize whitespace
+  const normalize = (s: string) => s.replace(/\s+/g, ' ').trim();
+  const normalizedOriginal = normalize(fb.original);
+  const sentences = fullText.split(/(?<=[.!?])\s*/);
+  for (const sentence of sentences) {
+    if (normalize(sentence) === normalizedOriginal) {
+      enInput.value = fullText.replace(sentence, editedSnippet);
+      return;
+    }
+  }
+
+  // Similarity match: find the sentence most similar to fb.original
+  // (handles cases where Gemini auto-corrects typos in original)
+  let bestMatch = '';
+  let bestScore = 0;
+  for (const sentence of sentences) {
+    const score = similarity(normalize(sentence), normalizedOriginal);
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = sentence;
+    }
+  }
+  if (bestScore > 0.6 && bestMatch) {
+    enInput.value = fullText.replace(bestMatch, editedSnippet);
+  }
+}
+
+/** Simple word-overlap similarity (0-1) */
+function similarity(a: string, b: string): number {
+  const wordsA = new Set(a.toLowerCase().split(/\s+/));
+  const wordsB = new Set(b.toLowerCase().split(/\s+/));
+  let overlap = 0;
+  for (const w of wordsA) { if (wordsB.has(w)) overlap++; }
+  return overlap / Math.max(wordsA.size, wordsB.size);
 }
 
 function renderCurrentCorrection(): void {
@@ -384,11 +452,121 @@ function renderCurrentCorrection(): void {
 
 function advanceCorrection(post: DiaryPost, enInput: HTMLTextAreaElement): void {
   correctionIndex++;
+  if (correctionIndex >= currentFeedback.length) {
+    // Save latest feedback for next attempt's previousFeedback
+    previousFeedback = currentFeedback;
+  }
   if (correctionIndex < currentFeedback.length) {
     renderCurrentCorrection();
   } else {
     showCompletedView(post, enInput);
   }
+}
+
+function renderVocab(post: DiaryPost, enInput: HTMLTextAreaElement): void {
+  const vocabContainer = document.getElementById('completed-vocab');
+  if (!vocabContainer || !post.vocabulary || post.vocabulary.length === 0) return;
+
+  const dismissed = new Set(post.dismissedVocab || []);
+  const visible = post.vocabulary.filter((v) => !dismissed.has(v.word));
+  if (visible.length === 0) { vocabContainer.style.display = 'none'; return; }
+
+  vocabContainer.innerHTML = `
+    <h3 class="completed-section-title">覚えたいフレーズ</h3>
+    ${visible.map((v) => `
+      <div class="vocab-item" data-word="${escapeAttr(v.word)}">
+        <span class="vocab-en">${escapeHTML(v.word)}</span>
+        <span class="vocab-jp">${escapeHTML(v.definition)}</span>
+        <span class="vocab-example">${escapeHTML(v.example)}</span>
+        <button class="btn btn-sm btn-secondary bookmark-btn" data-en="${escapeAttr(v.word)}" data-jp="${escapeAttr(v.definition)}">Flashcard</button>
+        <button class="vocab-dismiss" title="非表示">×</button>
+      </div>
+    `).join('')}
+  `;
+  vocabContainer.style.display = 'block';
+  attachBookmarkListeners(vocabContainer, post.userTranslation || enInput.value);
+  enableTextSelectionBookmark(vocabContainer);
+
+  function dismissWord(word: string, itemEl: HTMLElement): void {
+    dismissed.add(word);
+    post.dismissedVocab = Array.from(dismissed);
+    itemEl.remove();
+    if (!vocabContainer!.querySelector('.vocab-item')) vocabContainer!.style.display = 'none';
+    // Save dismissed state
+    const dateInput = document.getElementById('input-date') as HTMLInputElement;
+    api.post('/diary/posts', {
+      contentJp: (document.getElementById('input-jp') as HTMLTextAreaElement).value,
+      userTranslation: enInput.value,
+      date: dateInput.value,
+      textOnly: true,
+      mode: currentMode,
+      dismissedVocab: post.dismissedVocab,
+    }).catch(() => {});
+  }
+
+  // Dismiss buttons
+  vocabContainer.querySelectorAll('.vocab-dismiss').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const item = (btn as HTMLElement).closest('.vocab-item') as HTMLElement;
+      const word = item.dataset.word || '';
+      dismissWord(word, item);
+    });
+  });
+
+  // Auto-dismiss after Flashcard save
+  vocabContainer.querySelectorAll('.bookmark-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      setTimeout(() => {
+        const item = (btn as HTMLElement).closest('.vocab-item') as HTMLElement;
+        const word = item.dataset.word || '';
+        item.style.opacity = '0.4';
+        (btn as HTMLButtonElement).textContent = '✓ 保存済';
+        (btn as HTMLButtonElement).disabled = true;
+        dismissWord(word, item);
+      }, 1500);
+    }, { once: true });
+  });
+}
+
+function updateHeaderDate(): void {
+  const dateInput = document.getElementById('input-date') as HTMLInputElement;
+  const headerH2 = document.querySelector('.editor-header h2');
+  if (headerH2 && dateInput?.value) {
+    headerH2.innerHTML = `${lucideIcon(MODE_ICON_NAMES[currentMode] || 'Moon')} ${escapeHTML(dateInput.value)}`;
+  }
+}
+
+/** Insert text after a matching sentence in the diary, with fuzzy whitespace matching */
+function insertAfterSentence(enInput: HTMLTextAreaElement, afterSentence: string, textToInsert: string): void {
+  const diary = enInput.value;
+
+  // Exact match
+  const exactPos = diary.indexOf(afterSentence);
+  if (exactPos >= 0) {
+    const endPos = exactPos + afterSentence.length;
+    enInput.value = diary.slice(0, endPos) + ' ' + textToInsert + diary.slice(endPos);
+    return;
+  }
+
+  // Fuzzy: normalize whitespace and compare sentence by sentence
+  const normalize = (s: string) => s.replace(/\s+/g, ' ').trim();
+  const normalizedTarget = normalize(afterSentence);
+  const sentences = diary.split(/(?<=[.!?])\s*/);
+  let pos = 0;
+  for (const sentence of sentences) {
+    const sentenceEnd = pos + sentence.length;
+    if (normalize(sentence) === normalizedTarget) {
+      // Find actual end in original text (skip trailing whitespace)
+      const actualEnd = diary.indexOf(sentence, pos) + sentence.length;
+      enInput.value = diary.slice(0, actualEnd) + ' ' + textToInsert + diary.slice(actualEnd);
+      return;
+    }
+    pos = sentenceEnd + 1;
+  }
+
+  // Fallback: append to end
+  enInput.value = diary.trimEnd() + ' ' + textToInsert;
 }
 
 function showCompletedView(post: DiaryPost, enInput: HTMLTextAreaElement): void {
@@ -400,7 +578,8 @@ function showCompletedView(post: DiaryPost, enInput: HTMLTextAreaElement): void 
       contentJp: (document.getElementById('input-jp') as HTMLTextAreaElement).value,
       userTranslation: correctedText,
       date: dateInput.value,
-      previousCorrections: accumulatedCorrections,
+      textOnly: true,
+      mode: currentMode,
     }).catch(() => {});
   }
 
@@ -420,35 +599,83 @@ function showCompletedView(post: DiaryPost, enInput: HTMLTextAreaElement): void 
   enInput.readOnly = true;
   enInput.classList.add('readonly');
 
-  const enLabel = enInput.previousElementSibling;
-  if (enLabel?.tagName === 'LABEL') {
-    (enLabel as HTMLElement).innerHTML = `<span class="completion-badge">✅ ${post.date || "Today"}'s Diary</span>`;
-    (enLabel as HTMLElement).classList.add('completion-label');
-  }
+  // Add selectable text overlay for Flashcard bookmarking
+  const existingOverlay = enInput.parentNode!.querySelector('.diary-text-selectable');
+  if (existingOverlay) existingOverlay.remove();
+  const diaryTextDiv = document.createElement('div');
+  diaryTextDiv.className = 'diary-text-selectable';
+  diaryTextDiv.textContent = enInput.value;
+  enInput.style.display = 'none';
+  enInput.parentNode!.insertBefore(diaryTextDiv, enInput.nextSibling);
+  enableTextSelectionBookmark(diaryTextDiv);
+
+  updateHeaderDate();
 
   const translateBtn = document.getElementById('translate-btn')!;
   translateBtn.textContent = 'もう一度添削する';
+  translateBtn.className = 'btn btn-ghost btn-retranslate';
 
-  // Show vocabulary with Flashcard buttons
-  const vocabContainer = document.getElementById('completed-vocab');
-  if (vocabContainer && post.vocabulary && post.vocabulary.length > 0) {
-    vocabContainer.innerHTML = `
-      <h3 class="completed-section-title">覚えたいフレーズ</h3>
-      ${post.vocabulary.map((v) => `
-        <div class="vocab-item">
-          <div class="vocab-text">
-            <div class="vocab-en">${escapeHTML(v.word)}</div>
-            <div class="vocab-jp">${escapeHTML(v.definition)}</div>
-            <div class="vocab-example">${escapeHTML(v.example)}</div>
-          </div>
-          <button class="btn btn-sm btn-secondary bookmark-btn" data-en="${escapeAttr(v.word)}" data-jp="${escapeAttr(v.definition)}">Flashcard</button>
-        </div>
-      `).join('')}
-    `;
-    vocabContainer.style.display = 'block';
-    attachBookmarkListeners(vocabContainer, post.userTranslation || enInput.value);
-    enableTextSelectionBookmark(vocabContainer);
+  // Edit button
+  const existingEditBtn = translateBtn.parentNode!.querySelector('.btn-edit-diary');
+  if (!existingEditBtn) {
+    const jpInput = document.getElementById('input-jp') as HTMLTextAreaElement;
+    const dateInput = document.getElementById('input-date') as HTMLInputElement;
+    const editBtn = document.createElement('button');
+    editBtn.className = 'btn btn-ghost btn-retranslate btn-edit-diary';
+    editBtn.textContent = '編集する';
+    translateBtn.parentNode!.insertBefore(editBtn, translateBtn);
+
+    editBtn.addEventListener('click', () => {
+      diaryTextDiv.style.display = 'none';
+      enInput.style.display = '';
+      enInput.readOnly = false;
+      enInput.classList.remove('readonly');
+      enInput.classList.add('editor-textarea-minimal', 'en-textarea');
+      editBtn.style.display = 'none';
+      translateBtn.style.display = 'none';
+
+      const saveBtn = document.createElement('button');
+      saveBtn.className = 'btn btn-primary';
+      saveBtn.textContent = '保存する';
+      saveBtn.style.width = '100%';
+      saveBtn.style.marginTop = '12px';
+      enInput.parentNode!.insertBefore(saveBtn, enInput.nextSibling);
+
+      saveBtn.addEventListener('click', async () => {
+        saveBtn.disabled = true;
+        saveBtn.textContent = '保存中...';
+        try {
+          await api.post('/diary/posts', {
+            contentJp: jpInput.value,
+            userTranslation: enInput.value,
+            date: dateInput.value,
+            textOnly: true,
+            mode: currentMode,
+          });
+          // Update overlay with edited text
+          const savedText = enInput.value;
+          diaryTextDiv.textContent = savedText;
+          diaryTextDiv.style.display = '';
+          enInput.style.display = 'none';
+          enInput.readOnly = true;
+          enInput.classList.add('readonly');
+          saveBtn.remove();
+          editBtn.style.display = '';
+          translateBtn.style.display = '';
+          showToast('保存しました');
+        } catch {
+          showToast('保存に失敗しました');
+          saveBtn.disabled = false;
+          saveBtn.textContent = '保存する';
+        }
+      });
+
+      enInput.focus();
+    });
   }
+
+  // Show vocabulary
+  renderVocab(post, enInput);
 
   // Show expansion questions
   renderExpansionQuestions(post, enInput);
@@ -471,11 +698,11 @@ function renderExpansionQuestions(post: DiaryPost, enInput: HTMLTextAreaElement)
   }
 
   container.innerHTML = questions.map((q, i) => `
-    <div class="expansion-card" data-index="${i}" data-after="${escapeAttr(q.afterSentence)}">
+    <div class="expansion-card ${q.reflected ? 'reflected' : ''}" data-index="${i}" data-after="${escapeAttr(q.afterSentence)}">
       <div class="expansion-question">${escapeHTML(q.question)}</div>
-      <div class="expansion-hint">${escapeHTML(q.hintJa)}</div>
-      ${q.hintPhrases && q.hintPhrases.length > 0 ? `<div class="expansion-phrases">${q.hintPhrases.map((p) => `<span class="expansion-phrase">${escapeHTML(p)}</span>`).join('')}</div>` : ''}
-      <div class="expansion-answer-area">
+      ${q.reflected ? `<div class="expansion-result" style="display:block;"><div class="expansion-reflected">${lucideIcon('CheckCircle', 14)} 追記しました</div></div>` : ''}
+      ${q.hintPhrases && q.hintPhrases.length > 0 && !q.reflected ? `<div class="expansion-phrases">${q.hintPhrases.map((p) => `<span class="expansion-phrase">${escapeHTML(p)}</span>`).join('')}</div>` : ''}
+      <div class="expansion-answer-area" ${q.reflected ? 'style="display:none;"' : ''}>
         <textarea class="expansion-input" rows="2" placeholder="英語で答えてみましょう"></textarea>
         <button class="btn btn-sm btn-primary expansion-submit">添削</button>
       </div>
@@ -483,10 +710,67 @@ function renderExpansionQuestions(post: DiaryPost, enInput: HTMLTextAreaElement)
     </div>
   `).join('');
 
+  // Remove existing "more" button if any
+  section.querySelector('.expansion-more-wrap')?.remove();
+
   section.style.display = 'block';
+
+  // Enable text selection → Flashcard on expansion section
+  enableTextSelectionBookmark(container);
+
+  const totalCards = questions.length;
+  let doneCount = questions.filter((q) => q.reflected).length;
+
+  function checkAllDone(): void {
+    if (doneCount < totalCards) return;
+    // All cards answered — show "もっと膨らませる" button
+    let moreWrap = section.querySelector('.expansion-more-wrap') as HTMLElement | null;
+    if (!moreWrap) {
+      moreWrap = document.createElement('div');
+      moreWrap.className = 'expansion-more-wrap';
+      moreWrap.innerHTML = '<button class="btn btn-primary expansion-more-btn">もっと膨らませる</button>';
+      section.appendChild(moreWrap);
+
+      moreWrap.querySelector('.expansion-more-btn')!.addEventListener('click', async () => {
+        const btn = moreWrap!.querySelector('.expansion-more-btn') as HTMLButtonElement;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="loading-spinner"></span> 生成中...';
+        try {
+          const dateInput = document.getElementById('input-date') as HTMLInputElement;
+          const res = await api.post<{ expansionQuestions: DiaryPost['expansionQuestions'] }>('/diary/expand', {
+            contentJp: (document.getElementById('input-jp') as HTMLTextAreaElement).value,
+            userTranslation: enInput.value,
+            date: dateInput.value,
+            mode: currentMode,
+          });
+          if (res.expansionQuestions && res.expansionQuestions.length > 0) {
+            renderExpansionQuestions({ ...post, expansionQuestions: res.expansionQuestions }, enInput);
+          } else {
+            showToast('質問を生成できませんでした');
+          }
+        } catch (_err) {
+          showToast('生成に失敗しました');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'もっと膨らませる';
+        }
+      });
+    }
+  }
+
+  function markCardDone(): void {
+    doneCount++;
+    checkAllDone();
+  }
+
+  // Check if all already done on load
+  checkAllDone();
 
   // Attach handlers
   container.querySelectorAll('.expansion-card').forEach((card) => {
+    // Skip already reflected cards
+    if ((card as HTMLElement).classList.contains('reflected')) return;
+
     const submitBtn = card.querySelector('.expansion-submit') as HTMLButtonElement;
     const input = card.querySelector('.expansion-input') as HTMLTextAreaElement;
     const resultDiv = card.querySelector('.expansion-result') as HTMLElement;
@@ -506,66 +790,67 @@ function renderExpansionQuestions(post: DiaryPost, enInput: HTMLTextAreaElement)
           diaryContext: enInput.value,
         });
 
-        let currentCorrected = res.corrected || answer;
+        const corrected = res.corrected || answer;
         const explanation = res.explanation || '';
 
-        function showCorrectionResult(correctedText: string, explanationText: string) {
-          resultDiv.innerHTML = `
-            <div class="expansion-corrected">${escapeHTML(correctedText)}</div>
-            ${explanationText ? `<div class="expansion-explanation">${escapeHTML(explanationText)}</div>` : ''}
-            <div class="expansion-actions">
-              <button class="btn btn-sm btn-secondary expansion-edit">書き直す</button>
-              <button class="btn btn-sm btn-primary expansion-reflect">日記に追記</button>
-            </div>
-          `;
-          resultDiv.style.display = 'block';
+        // Show corrected version and explanation — user edits their own text
+        resultDiv.innerHTML = `
+          <div class="expansion-corrected">${escapeHTML(corrected)}</div>
+          ${explanation ? `<div class="expansion-explanation">${escapeHTML(explanation)}</div>` : ''}
+        `;
+        resultDiv.style.display = 'block';
+
+        // Keep original text in textarea for user to fix themselves
+        submitBtn.textContent = '日記に追記';
+        submitBtn.disabled = false;
+
+        // Replace submit handler with reflect handler
+        const newBtn = submitBtn.cloneNode(true) as HTMLButtonElement;
+        submitBtn.replaceWith(newBtn);
+        newBtn.addEventListener('click', () => {
+          const finalText = input.value.trim();
+          if (!finalText) return;
+
+          insertAfterSentence(enInput, afterSentence, finalText);
+          enInput.readOnly = false;
+          enInput.classList.remove('readonly');
+
+          // Update selectable text overlay with new diary content
+          const overlay = enInput.parentNode!.querySelector('.diary-text-selectable');
+          if (overlay) overlay.textContent = enInput.value;
+
           input.style.display = 'none';
-          submitBtn.style.display = 'none';
+          newBtn.style.display = 'none';
+          resultDiv.innerHTML = `<div class="expansion-reflected">${lucideIcon('CheckCircle', 14)} 追記しました</div>`;
+          resultDiv.style.display = 'block';
 
-          // Edit: go back to input with corrected text
-          resultDiv.querySelector('.expansion-edit')!.addEventListener('click', () => {
-            input.value = correctedText;
-            input.style.display = '';
-            submitBtn.style.display = '';
-            resultDiv.style.display = 'none';
-          });
+          // Mark this question as reflected and save state
+          const cardIndex = parseInt((card as HTMLElement).dataset.index || '0', 10);
+          if (questions[cardIndex]) {
+            questions[cardIndex].reflected = true;
+            questions[cardIndex].answer = finalText;
+          }
+          markCardDone();
 
-          // Reflect: insert into diary
-          resultDiv.querySelector('.expansion-reflect')!.addEventListener('click', () => {
-            const diary = enInput.value;
-            const insertPos = diary.indexOf(afterSentence);
-            if (insertPos >= 0) {
-              const endPos = insertPos + afterSentence.length;
-              enInput.value = diary.slice(0, endPos) + ' ' + correctedText + diary.slice(endPos);
-            } else {
-              enInput.value = diary.trimEnd() + ' ' + correctedText;
-            }
-            enInput.readOnly = false;
-            enInput.classList.remove('readonly');
+          setTimeout(() => {
+            enInput.readOnly = true;
+            enInput.classList.add('readonly');
+          }, 0);
 
-            resultDiv.innerHTML = `<div class="expansion-reflected">✅ 追記しました</div>`;
+          const dateInput = document.getElementById('input-date') as HTMLInputElement;
+          api.post('/diary/posts', {
+            contentJp: (document.getElementById('input-jp') as HTMLTextAreaElement).value,
+            userTranslation: enInput.value,
+            date: dateInput.value,
+            textOnly: true,
+            mode: currentMode,
+            expansionQuestions: questions,
+          }).catch(() => {});
 
-            setTimeout(() => {
-              enInput.readOnly = true;
-              enInput.classList.add('readonly');
-            }, 0);
-
-            const dateInput = document.getElementById('input-date') as HTMLInputElement;
-            api.post('/diary/posts', {
-              contentJp: (document.getElementById('input-jp') as HTMLTextAreaElement).value,
-              userTranslation: enInput.value,
-              date: dateInput.value,
-              previousCorrections: accumulatedCorrections,
-            }).catch(() => {});
-
-            showToast('日記に追記しました');
-          });
-        }
-
-        showCorrectionResult(currentCorrected, explanation);
+          showToast('日記に追記しました');
+        });
       } catch (_err) {
         showToast('添削に失敗しました');
-      } finally {
         submitBtn.disabled = false;
         submitBtn.textContent = '添削';
       }
@@ -575,18 +860,61 @@ function renderExpansionQuestions(post: DiaryPost, enInput: HTMLTextAreaElement)
 
 // ─── Rendering helpers ───
 
-/** Activate 2-column writing mode: JP+hints on left (sticky), EN on right */
+/** Activate 2-column writing mode: JP sticky on top, hints on left, EN on right */
 function activateWritingMode(jpText: string): void {
-  // Copy JP text to reference panel
+  // Copy JP text to sticky panel
   const refJp = document.getElementById('writing-ref-jp')!;
   refJp.textContent = jpText;
+  document.getElementById('writing-ref-jp-sticky')!.style.display = '';
 
-  // Add 2-column class
+  // Show writing area and add 2-column class
   const writingArea = document.getElementById('writing-area')!;
+  writingArea.style.display = '';
   writingArea.classList.add('two-col');
+
+  // Set CSS variable for writing-input sticky offset
+  requestAnimationFrame(() => {
+    const jpSticky = document.getElementById('writing-ref-jp-sticky')!;
+    const height = jpSticky.offsetHeight;
+    writingArea.style.setProperty('--jp-sticky-height', `${height}px`);
+  });
+
+  // Mobile: floating JP toggle button + overlay
+  setupMobileJpToggle(jpText);
 
   // Scroll to writing area
   writingArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function setupMobileJpToggle(jpText: string): void {
+  // Remove existing if any
+  document.querySelector('.jp-float-btn')?.remove();
+  document.querySelector('.jp-overlay')?.remove();
+
+  const btn = document.createElement('button');
+  btn.className = 'jp-float-btn';
+  btn.textContent = 'JP';
+  btn.type = 'button';
+
+  const overlay = document.createElement('div');
+  overlay.className = 'jp-overlay';
+  overlay.textContent = jpText;
+
+  document.body.appendChild(overlay);
+  document.body.appendChild(btn);
+
+  btn.addEventListener('click', () => {
+    const showing = overlay.classList.toggle('show');
+    btn.classList.toggle('active', showing);
+  });
+
+  // Close on outside tap
+  document.addEventListener('click', (e) => {
+    if (overlay.classList.contains('show') && !overlay.contains(e.target as Node) && !btn.contains(e.target as Node)) {
+      overlay.classList.remove('show');
+      btn.classList.remove('active');
+    }
+  });
 }
 
 function renderHints(hints: HintItem[]): void {

@@ -3,6 +3,12 @@
     "target": "lediary",
     "public": "web/dist",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "headers": [
+      {
+        "source": "index.html",
+        "headers": [{"key": "Cache-Control", "value": "no-cache"}]
+      }
+    ],
     "rewrites": [
       {
         "source": "/api/**",
