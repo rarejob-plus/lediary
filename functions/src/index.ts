@@ -92,6 +92,17 @@ interface VocabItem { word: string; definition: string; example: string }
 interface ExpansionQuestion { question: string; hintJa: string; hintPhrases: string[]; afterSentence: string }
 interface HintItem { japanese: string; english: string; note: string }
 
+interface LessonSheetDiscussionTopic {
+  topic: string;
+  questions: string[];
+}
+
+interface LessonSheet {
+  title: string;
+  vocabulary: { word: string; definition: string; example: string }[];
+  discussionTopics: LessonSheetDiscussionTopic[];
+}
+
 interface DiaryAnalysis {
   feedback: FeedbackItem[];
   vocabulary: VocabItem[];
@@ -198,6 +209,19 @@ Return ONLY the JSON array, no markdown fences or extra text.`;
   return hints || [];
 }
 
+// ─── Share ID ───
+
+function generateShareId(): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let result = "";
+  const bytes = new Uint8Array(12);
+  crypto.getRandomValues(bytes);
+  for (const b of bytes) {
+    result += chars[b % chars.length];
+  }
+  return result;
+}
+
 // ─── API handler ───
 
 export const api = onRequest(
@@ -206,7 +230,20 @@ export const api = onRequest(
     const path = req.path;
     const method = req.method;
 
-    // All diary endpoints require auth
+    // Public endpoint: GET /api/diary/lesson-sheet/:id (no auth)
+    const sheetMatch = path.match(/^\/api\/diary\/lesson-sheet\/([a-zA-Z0-9_-]+)$/);
+    if (sheetMatch && method === "GET") {
+      const shareId = sheetMatch[1];
+      const doc = await db.collection("lediary-sheets").doc(shareId!).get();
+      if (!doc.exists) {
+        res.status(404).json({ error: "Not found" });
+        return;
+      }
+      res.json(doc.data());
+      return;
+    }
+
+    // All other diary endpoints require auth
     const userId = await verifyToken(req);
     if (!userId) {
       res.status(401).json({ error: "Unauthorized" });
@@ -406,6 +443,84 @@ If the answer is already correct, return it as-is with empty explanation. Return
       const response = await callGemini(systemPrompt, userMessage);
       const result = parseJsonObject<{ corrected: string; explanation: string }>(response);
       res.json(result);
+      return;
+    }
+
+    // POST /api/diary/lesson-sheet — generate lesson sheet from diary
+    if (path === "/api/diary/lesson-sheet" && method === "POST") {
+      const { postId } = req.body;
+      if (!postId) {
+        res.status(400).json({ error: "postId is required" });
+        return;
+      }
+
+      const postDoc = await db.collection("lediary-posts").doc(postId).get();
+      if (!postDoc.exists) {
+        res.status(404).json({ error: "Post not found" });
+        return;
+      }
+      const postData = postDoc.data()!;
+      if (postData.userId !== userId) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+
+      // Collect corrected text: apply feedback corrections to userTranslation
+      const correctedText = postData.userTranslation || "";
+      const vocabulary = (postData.vocabulary || []) as VocabItem[];
+      const contentJp = postData.contentJp || "";
+
+      const systemPrompt = `You are creating lesson material for an online English conversation lesson, formatted like a RareJob Weekly News Article (WNA).
+The material is based on a student's diary entry. The student wrote in Japanese, then translated to English with AI correction.
+
+Return a JSON object with the EXACT same structure as a WNA material:
+{
+  "title": "A short, engaging title for this lesson (like a news article headline)",
+  "vocabulary": [
+    { "word": "key phrase or expression", "definition": "simple English definition", "example": "example sentence using the word" }
+  ],
+  "discussionTopics": [
+    {
+      "topic": "Topic heading (e.g., About the Diary, Going Deeper, Your Opinion)",
+      "questions": ["Discussion question 1", "Discussion question 2"]
+    }
+  ]
+}
+
+Rules:
+- "title": Create a catchy, article-style title based on the diary content (e.g., "A Quiet Lunch at a Traditional Japanese Cafe")
+- "vocabulary": Pick 4-6 useful words/phrases from the diary or its corrections. Each needs a clear English definition and a natural example sentence.
+- "discussionTopics": Create exactly 2 topic groups with 2-3 questions each. IMPORTANT: Do NOT ask factual questions whose answers are already in the diary (e.g., "How many times did you practice?"). Instead, use the diary as a springboard for broader, opinion-based discussion. Questions should be about the TOPICS and THEMES in the diary, not about the diary itself. Good example: diary mentions practicing English 3 times → ask "How often do you think someone should practice writing to improve?" or "What's the best way to build a daily study habit?". Order from easier to harder.
+- All content must be in English only (the tutor does not speak Japanese)
+- Discussion questions should feel natural for a 25-minute conversation lesson
+- The diary text itself will be shown as the "Article" section, so do NOT include it in the JSON
+Return ONLY the JSON object.`;
+
+      const userMessage = `Student's diary (Japanese):\n${contentJp}\n\nStudent's English text (corrected):\n${correctedText}\n\nVocabulary learned:\n${vocabulary.map((v) => `${v.word}: ${v.definition}`).join("\n")}`;
+
+      const response = await callGemini(systemPrompt, userMessage);
+      const sheet = parseJsonObject<LessonSheet>(response);
+
+      // Generate share ID
+      const shareId = generateShareId();
+
+      // Save to Firestore
+      const sheetData = {
+        shareId,
+        userId,
+        postId,
+        title: sheet.title,
+        articleBody: correctedText,
+        contentJp,
+        vocabulary: sheet.vocabulary,
+        discussionTopics: sheet.discussionTopics,
+        date: postData.date || "",
+        mode: postData.mode || "diary",
+        createdAt: Date.now(),
+      };
+      await db.collection("lediary-sheets").doc(shareId).set(sheetData);
+
+      res.json(sheetData);
       return;
     }
 

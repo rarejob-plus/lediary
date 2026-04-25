@@ -4,6 +4,7 @@
 
 import { homeHTML, initHome } from './pages/home/index';
 import { editorHTML, initEditor } from './pages/editor/index';
+import { lessonSheetHTML, initLessonSheet } from './pages/lesson/index';
 import { onAuth, getCurrentUser } from './auth';
 import { loginHTML, initLogin } from './pages/login';
 
@@ -60,11 +61,13 @@ export function getRouteParams(): Record<string, string> {
 async function handleRoute() {
   const path = location.pathname;
 
-  // Wait for auth to initialize
-  if (!authReady) await authPromise;
+  // Public paths skip auth entirely
+  const isPublic = publicPaths.has(path) || path.startsWith('/s/');
 
-  // Auth guard
-  if (!publicPaths.has(path)) {
+  // Wait for auth to initialize (skip for public paths)
+  if (!isPublic && !authReady) await authPromise;
+
+  if (!isPublic) {
     if (!getCurrentUser()) {
       history.replaceState(null, '', '/login');
       const app = document.getElementById('app')!;
@@ -121,6 +124,12 @@ export function initRouter() {
     const app = document.getElementById('app')!;
     app.innerHTML = editorHTML();
     initEditor();
+  });
+
+  routes.set('/s/:id', () => {
+    const app = document.getElementById('app')!;
+    app.innerHTML = lessonSheetHTML();
+    initLessonSheet();
   });
 
   // Listen for popstate (back/forward navigation)

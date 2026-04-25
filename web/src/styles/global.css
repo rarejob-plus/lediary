@@ -392,6 +392,69 @@ textarea.readonly:focus {
   width: 100%;
 }
 
+/* Insertion point picker */
+.insertion-picker-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 999;
+}
+
+.insertion-picker {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  max-height: 70vh;
+  overflow-y: auto;
+  background: var(--surface);
+  border-radius: 16px 16px 0 0;
+  padding: 20px 16px calc(env(safe-area-inset-bottom, 0px) + 20px);
+  z-index: 1000;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.12);
+}
+
+.insertion-picker-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 12px;
+  text-align: center;
+}
+
+.insertion-picker-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.insertion-sentence {
+  font-family: 'Lora', serif;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+  padding: 6px 8px;
+}
+
+.insertion-slot {
+  display: block;
+  width: 100%;
+  padding: 8px;
+  border: none;
+  background: none;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s;
+}
+
+.insertion-slot:hover,
+.insertion-slot:active {
+  background: var(--primary-light);
+}
+
 
 input[type="date"] {
   width: 100%;
@@ -1405,4 +1468,219 @@ input[type="date"]:focus {
     bottom: 20px;
     right: 16px;
   }
+}
+
+/* ─── Lesson Sheet (WNA/DNA-style public page) ─── */
+
+.ls-page {
+  max-width: 640px;
+  margin: 0 auto;
+  background: #fff;
+  min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #333;
+}
+
+.ls-loading {
+  text-align: center;
+  padding: 60px 20px;
+  color: #999;
+  font-size: 15px;
+}
+
+/* Title bar — mimics WNA header */
+.ls-title-bar {
+  background: #0055a4;
+  color: #fff;
+  padding: 20px 24px 16px;
+}
+
+.ls-category {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  opacity: 0.8;
+  margin-bottom: 6px;
+}
+
+.ls-title {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.4;
+  margin: 0 0 8px;
+}
+
+.ls-date {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+/* Section nav — mimics WNA tab bar */
+.ls-nav {
+  display: flex;
+  border-bottom: 2px solid #e0e0e0;
+  background: #fafafa;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.ls-nav-item {
+  flex: 1;
+  text-align: center;
+  padding: 12px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #666;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.ls-nav-item:hover,
+.ls-nav-item:active {
+  color: #0055a4;
+  border-bottom-color: #0055a4;
+}
+
+/* Section headings */
+.ls-section {
+  padding: 0 24px 24px;
+}
+
+.ls-section-heading {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0055a4;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 20px 0 12px;
+  border-bottom: 2px solid #0055a4;
+  margin-bottom: 16px;
+}
+
+/* Vocabulary — like WNA vocab cards */
+.ls-vocab-card {
+  padding: 12px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.ls-vocab-card:last-child {
+  border-bottom: none;
+}
+
+.ls-vocab-word {
+  font-size: 16px;
+  font-weight: 700;
+  color: #222;
+  margin-bottom: 4px;
+}
+
+.ls-vocab-def {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 6px;
+}
+
+.ls-vocab-ex {
+  font-size: 14px;
+  color: #444;
+  font-style: italic;
+  padding-left: 12px;
+  border-left: 3px solid #e0e0e0;
+}
+
+/* Article — like WNA article body */
+.ls-article-body {
+  line-height: 1.8;
+}
+
+.ls-article-p {
+  font-size: 16px;
+  margin-bottom: 16px;
+  color: #333;
+}
+
+/* Discussion — like WNA discussion section (side by side) */
+.ls-discussion-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 520px) {
+  .ls-discussion-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.ls-discussion-group {
+  margin-bottom: 0;
+}
+
+.ls-topic-heading {
+  font-size: 15px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: #f5f7fa;
+  border-radius: 6px;
+}
+
+.ls-topic-num {
+  color: #0055a4;
+  font-weight: 700;
+  margin-right: 8px;
+}
+
+.ls-question {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.ls-question:last-child {
+  border-bottom: none;
+}
+
+.ls-question-num {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  background: #0055a4;
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+.ls-question-text {
+  font-size: 15px;
+  line-height: 1.6;
+  color: #333;
+}
+
+.ls-footer {
+  text-align: center;
+  padding: 24px;
+  font-size: 11px;
+  color: #ccc;
+}
+
+/* Lesson sheet button in editor */
+.lesson-sheet-section {
+  margin-top: 20px;
+  text-align: center;
+}
+
+.btn-lesson-sheet {
+  width: 100%;
 }

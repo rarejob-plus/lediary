@@ -29,6 +29,7 @@ type WriteMode = 'diary' | 'morning' | 'lesson';
 
 interface DiaryPost {
   id: string;
+  userId: string;
   contentJp: string;
   userTranslation?: string;
   date?: string;
@@ -39,6 +40,7 @@ interface DiaryPost {
   hints?: HintItem[];
   attemptCount?: number;
   dismissedVocab?: string[];
+  lessonSheetId?: string;
 }
 
 const MODE_CONFIG: Record<WriteMode, { title: string; jpLabel: string; jpPlaceholder: string; enPlaceholder: string }> = {
@@ -164,6 +166,11 @@ export function editorHTML(): string {
     <div id="expansion-section" style="display:none;">
       <h3 class="expansion-title">日記を膨らまそう</h3>
       <div id="expansion-questions"></div>
+    </div>
+
+    <!-- Lesson sheet -->
+    <div id="lesson-sheet-section" class="lesson-sheet-section" style="display:none;">
+      <button id="lesson-sheet-btn" class="btn btn-primary btn-lesson-sheet">レッスンシートを作る</button>
     </div>
   `;
 }
@@ -537,36 +544,83 @@ function updateHeaderDate(): void {
   }
 }
 
-/** Insert text after a matching sentence in the diary, with fuzzy whitespace matching */
-function insertAfterSentence(enInput: HTMLTextAreaElement, afterSentence: string, textToInsert: string): void {
-  const diary = enInput.value;
-
-  // Exact match
-  const exactPos = diary.indexOf(afterSentence);
-  if (exactPos >= 0) {
-    const endPos = exactPos + afterSentence.length;
-    enInput.value = diary.slice(0, endPos) + ' ' + textToInsert + diary.slice(endPos);
-    return;
+/** Split diary text into sentences, preserving original positions */
+function splitSentences(text: string): { text: string; end: number }[] {
+  const results: { text: string; end: number }[] = [];
+  const regex = /[^.!?]*[.!?]+\s*/g;
+  let match: RegExpExecArray | null;
+  let lastEnd = 0;
+  while ((match = regex.exec(text)) !== null) {
+    results.push({ text: match[0].trim(), end: match.index + match[0].length });
+    lastEnd = match.index + match[0].length;
   }
+  // Remaining text without sentence-ending punctuation
+  const remainder = text.slice(lastEnd).trim();
+  if (remainder) {
+    results.push({ text: remainder, end: text.length });
+  }
+  return results;
+}
 
-  // Fuzzy: normalize whitespace and compare sentence by sentence
-  const normalize = (s: string) => s.replace(/\s+/g, ' ').trim();
-  const normalizedTarget = normalize(afterSentence);
-  const sentences = diary.split(/(?<=[.!?])\s*/);
-  let pos = 0;
-  for (const sentence of sentences) {
-    const sentenceEnd = pos + sentence.length;
-    if (normalize(sentence) === normalizedTarget) {
-      // Find actual end in original text (skip trailing whitespace)
-      const actualEnd = diary.indexOf(sentence, pos) + sentence.length;
-      enInput.value = diary.slice(0, actualEnd) + ' ' + textToInsert + diary.slice(actualEnd);
-      return;
+/** Show insertion point picker — user taps where to insert the text */
+function showInsertionPicker(enInput: HTMLTextAreaElement, textToInsert: string): Promise<void> {
+  return new Promise((resolve) => {
+    const diary = enInput.value;
+    const sentences = splitSentences(diary);
+
+    const overlay = document.createElement('div');
+    overlay.className = 'insertion-picker-overlay';
+
+    const panel = document.createElement('div');
+    panel.className = 'insertion-picker';
+
+    const title = document.createElement('div');
+    title.className = 'insertion-picker-title';
+    title.textContent = '挿入する場所を選択';
+    panel.appendChild(title);
+
+    const preview = document.createElement('div');
+    preview.className = 'insertion-picker-preview';
+    panel.appendChild(preview);
+
+    function insertAt(pos: number): void {
+      const before = diary.slice(0, pos).trimEnd();
+      const after = diary.slice(pos).trimStart();
+      enInput.value = before + (before ? ' ' : '') + textToInsert + (after ? ' ' + after : '');
+      overlay.remove();
+      panel.remove();
+      resolve();
     }
-    pos = sentenceEnd + 1;
-  }
 
-  // Fallback: append to end
-  enInput.value = diary.trimEnd() + ' ' + textToInsert;
+    // "Insert at beginning" slot
+    const topSlot = document.createElement('button');
+    topSlot.className = 'insertion-slot';
+    topSlot.textContent = '▼ ここに挿入';
+    topSlot.addEventListener('click', () => insertAt(0));
+    preview.appendChild(topSlot);
+
+    for (const s of sentences) {
+      const sentEl = document.createElement('div');
+      sentEl.className = 'insertion-sentence';
+      sentEl.textContent = s.text;
+      preview.appendChild(sentEl);
+
+      const slot = document.createElement('button');
+      slot.className = 'insertion-slot';
+      slot.textContent = '▼ ここに挿入';
+      slot.addEventListener('click', () => insertAt(s.end));
+      preview.appendChild(slot);
+    }
+
+    overlay.addEventListener('click', () => {
+      overlay.remove();
+      panel.remove();
+      resolve();
+    });
+
+    document.body.appendChild(overlay);
+    document.body.appendChild(panel);
+  });
 }
 
 function showCompletedView(post: DiaryPost, enInput: HTMLTextAreaElement): void {
@@ -583,11 +637,13 @@ function showCompletedView(post: DiaryPost, enInput: HTMLTextAreaElement): void 
     }).catch(() => {});
   }
 
-  // Hide correction UI
+  // Hide correction UI and JP input
   const correctionCard = document.getElementById('correction-card')!;
   const correctionArea = document.getElementById('correction-area')!;
   correctionCard.style.display = 'none';
   correctionArea.style.display = 'none';
+  document.querySelectorAll('.editor-section').forEach((s) => (s as HTMLElement).style.display = 'none');
+  document.getElementById('hint-btn')!.style.display = 'none';
 
   // Show writing area with readonly English
   const writingArea = document.getElementById('writing-area')!;
@@ -680,6 +736,9 @@ function showCompletedView(post: DiaryPost, enInput: HTMLTextAreaElement): void 
   // Show expansion questions
   renderExpansionQuestions(post, enInput);
 
+  // Show lesson sheet button
+  renderLessonSheetButton(post);
+
   // Re-show editor header (back button)
   const editorHeader = document.querySelector('.editor-header') as HTMLElement;
   if (editorHeader) editorHeader.style.display = '';
@@ -698,7 +757,7 @@ function renderExpansionQuestions(post: DiaryPost, enInput: HTMLTextAreaElement)
   }
 
   container.innerHTML = questions.map((q, i) => `
-    <div class="expansion-card ${q.reflected ? 'reflected' : ''}" data-index="${i}" data-after="${escapeAttr(q.afterSentence)}">
+    <div class="expansion-card ${q.reflected ? 'reflected' : ''}" data-index="${i}">
       <div class="expansion-question">${escapeHTML(q.question)}</div>
       ${q.reflected ? `<div class="expansion-result" style="display:block;"><div class="expansion-reflected">${lucideIcon('CheckCircle', 14)} 追記しました</div></div>` : ''}
       ${q.hintPhrases && q.hintPhrases.length > 0 && !q.reflected ? `<div class="expansion-phrases">${q.hintPhrases.map((p) => `<span class="expansion-phrase">${escapeHTML(p)}</span>`).join('')}</div>` : ''}
@@ -774,7 +833,6 @@ function renderExpansionQuestions(post: DiaryPost, enInput: HTMLTextAreaElement)
     const submitBtn = card.querySelector('.expansion-submit') as HTMLButtonElement;
     const input = card.querySelector('.expansion-input') as HTMLTextAreaElement;
     const resultDiv = card.querySelector('.expansion-result') as HTMLElement;
-    const afterSentence = (card as HTMLElement).dataset.after || '';
 
     submitBtn.addEventListener('click', async () => {
       const answer = input.value.trim();
@@ -807,17 +865,19 @@ function renderExpansionQuestions(post: DiaryPost, enInput: HTMLTextAreaElement)
         // Replace submit handler with reflect handler
         const newBtn = submitBtn.cloneNode(true) as HTMLButtonElement;
         submitBtn.replaceWith(newBtn);
-        newBtn.addEventListener('click', () => {
+        newBtn.addEventListener('click', async () => {
           const finalText = input.value.trim();
           if (!finalText) return;
 
-          insertAfterSentence(enInput, afterSentence, finalText);
+          newBtn.disabled = true;
+          await showInsertionPicker(enInput, finalText);
+
           enInput.readOnly = false;
           enInput.classList.remove('readonly');
 
           // Update selectable text overlay with new diary content
-          const overlay = enInput.parentNode!.querySelector('.diary-text-selectable');
-          if (overlay) overlay.textContent = enInput.value;
+          const textOverlay = enInput.parentNode!.querySelector('.diary-text-selectable');
+          if (textOverlay) textOverlay.textContent = enInput.value;
 
           input.style.display = 'none';
           newBtn.style.display = 'none';
@@ -855,6 +915,58 @@ function renderExpansionQuestions(post: DiaryPost, enInput: HTMLTextAreaElement)
         submitBtn.textContent = '添削';
       }
     });
+  });
+}
+
+function renderLessonSheetButton(post: DiaryPost): void {
+  const section = document.getElementById('lesson-sheet-section')!;
+  const btn = document.getElementById('lesson-sheet-btn') as HTMLButtonElement;
+
+  // Only show if diary has been corrected (has userTranslation)
+  if (!post.userTranslation) {
+    section.style.display = 'none';
+    return;
+  }
+
+  // If lesson sheet already exists, show link instead
+  if (post.lessonSheetId) {
+    section.style.display = 'block';
+    btn.textContent = 'レッスンシートを開く';
+    btn.className = 'btn btn-ghost btn-lesson-sheet';
+    btn.onclick = () => {
+      window.open(`/s/${post.lessonSheetId}`, '_blank');
+    };
+    return;
+  }
+
+  section.style.display = 'block';
+
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="loading-spinner"></span> 生成中...';
+
+    try {
+      const dateInput = document.getElementById('input-date') as HTMLInputElement;
+      const postId = `${post.userId}_${dateInput.value}_${currentMode}`;
+      const res = await api.post<{ shareId: string }>('/diary/lesson-sheet', { postId });
+
+      post.lessonSheetId = res.shareId;
+      btn.textContent = 'レッスンシートを開く';
+      btn.className = 'btn btn-ghost btn-lesson-sheet';
+      btn.disabled = false;
+      btn.onclick = () => {
+        window.open(`/s/${res.shareId}`, '_blank');
+      };
+
+      // Copy URL to clipboard
+      const url = `${location.origin}/s/${res.shareId}`;
+      await navigator.clipboard.writeText(url);
+      showToast('URLをコピーしました');
+    } catch {
+      showToast('生成に失敗しました');
+      btn.disabled = false;
+      btn.textContent = 'レッスンシートを作る';
+    }
   });
 }
 
