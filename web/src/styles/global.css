@@ -1675,6 +1675,148 @@ input[type="date"]:focus {
   color: #ccc;
 }
 
+/* Read aloud practice */
+.ra-generate-wrap {
+  margin-bottom: 16px;
+}
+
+.ra-generate-btn {
+  width: 100%;
+}
+
+.ra-speed-control {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 8px 12px;
+  background: var(--primary-light);
+  border-radius: var(--radius-sm);
+}
+
+.ra-speed-label {
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.ra-speed-value {
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.ra-speed-range {
+  flex: 1;
+  accent-color: var(--primary);
+}
+
+.ra-text {
+  font-family: 'Lora', serif;
+  font-size: 16px;
+  line-height: 1.7;
+  color: var(--text);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 4px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.ra-text-disabled {
+  color: var(--text-muted);
+}
+
+.ra-text-ready {
+  cursor: pointer;
+}
+
+.ra-text-ready:hover,
+.ra-text-ready:active {
+  background: var(--primary-light);
+}
+
+.ra-text-playing {
+  background: var(--primary);
+  color: #fff;
+}
+
+/* Settings page */
+.settings-page {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 0;
+}
+
+.settings-header h2 {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.settings-section {
+  margin-bottom: 24px;
+}
+
+.settings-section-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.settings-section-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.voice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.voice-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.voice-option.selected {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+
+.voice-option input[type="radio"] {
+  accent-color: var(--primary);
+}
+
+.voice-name {
+  font-size: 14px;
+  font-weight: 600;
+  min-width: 80px;
+}
+
+.voice-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  flex: 1;
+}
+
+.voice-try-btn {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
 /* Lesson sheet button in editor */
 .lesson-sheet-section {
   margin-top: 20px;

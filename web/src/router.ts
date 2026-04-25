@@ -5,6 +5,7 @@
 import { homeHTML, initHome } from './pages/home/index';
 import { editorHTML, initEditor } from './pages/editor/index';
 import { lessonSheetHTML, initLessonSheet } from './pages/lesson/index';
+import { settingsHTML, initSettings } from './pages/settings';
 import { onAuth, getCurrentUser } from './auth';
 import { loginHTML, initLogin } from './pages/login';
 
@@ -124,6 +125,12 @@ export function initRouter() {
     const app = document.getElementById('app')!;
     app.innerHTML = editorHTML();
     initEditor();
+  });
+
+  routes.set('/settings', () => {
+    const app = document.getElementById('app')!;
+    app.innerHTML = settingsHTML();
+    initSettings();
   });
 
   routes.set('/s/:id', () => {

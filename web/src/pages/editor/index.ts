@@ -8,6 +8,7 @@ import { getIdToken } from '../../auth';
 import { getRouteParams, navigate } from '../../router';
 import { showToast } from '../../components/toast';
 import { enableTextSelectionBookmark } from '../../components/text-selection-bookmark';
+import { getSettings } from '../settings';
 import { Sunrise, GraduationCap, Moon, CheckCircle, type IconNode } from 'lucide';
 
 const EDITOR_ICONS: Record<string, IconNode> = { Sunrise, GraduationCap, Moon, CheckCircle };
@@ -166,6 +167,12 @@ export function editorHTML(): string {
     <div id="expansion-section" style="display:none;">
       <h3 class="expansion-title">日記を膨らまそう</h3>
       <div id="expansion-questions"></div>
+    </div>
+
+    <!-- Read aloud practice -->
+    <div id="read-aloud-section" style="display:none;">
+      <h3 class="expansion-title">音読練習</h3>
+      <div id="read-aloud-content"></div>
     </div>
 
     <!-- Lesson sheet -->
@@ -736,6 +743,9 @@ function showCompletedView(post: DiaryPost, enInput: HTMLTextAreaElement): void 
   // Show expansion questions
   renderExpansionQuestions(post, enInput);
 
+  // Show read aloud practice
+  renderReadAloud(enInput.value);
+
   // Show lesson sheet button
   renderLessonSheetButton(post);
 
@@ -915,6 +925,124 @@ function renderExpansionQuestions(post: DiaryPost, enInput: HTMLTextAreaElement)
         submitBtn.textContent = '添削';
       }
     });
+  });
+}
+
+function renderReadAloud(diaryText: string): void {
+  const section = document.getElementById('read-aloud-section')!;
+  const container = document.getElementById('read-aloud-content')!;
+
+  if (!diaryText.trim()) {
+    section.style.display = 'none';
+    return;
+  }
+
+  // Split into sentences
+  const sentences = (diaryText.match(/[^.!?]+[.!?]+/g) || [diaryText]).map((s) => s.trim()).filter((s) => s);
+
+  // Audio buffers per sentence (filled after generation)
+  const audioBuffers: (AudioBuffer | null)[] = new Array(sentences.length).fill(null);
+  let audioCtx: AudioContext | null = null;
+  let currentSource: AudioBufferSourceNode | null = null;
+  let playbackRate = 1.0;
+
+  container.innerHTML = `
+    <div class="ra-generate-wrap">
+      <button class="btn btn-primary ra-generate-btn">音声を生成</button>
+    </div>
+    <div class="ra-speed-control" style="display:none;">
+      <label class="ra-speed-label">速度: <span class="ra-speed-value">1.0x</span></label>
+      <input type="range" class="ra-speed-range" min="0.5" max="1.5" step="0.1" value="1.0" />
+    </div>
+    <div class="ra-sentences">
+      ${sentences.map((s, i) => `
+        <p class="ra-text ra-text-disabled" data-index="${i}">${escapeHTML(s)}</p>
+      `).join('')}
+    </div>
+  `;
+
+  section.style.display = '';
+
+  const generateBtn = container.querySelector('.ra-generate-btn') as HTMLButtonElement;
+  const speedControl = container.querySelector('.ra-speed-control') as HTMLElement;
+  const speedRange = container.querySelector('.ra-speed-range') as HTMLInputElement;
+  const speedValue = container.querySelector('.ra-speed-value') as HTMLElement;
+
+  // Speed control
+  speedRange.addEventListener('input', () => {
+    playbackRate = parseFloat(speedRange.value);
+    speedValue.textContent = `${playbackRate.toFixed(1)}x`;
+  });
+
+  // Generate all audio at once
+  generateBtn.addEventListener('click', async () => {
+    generateBtn.disabled = true;
+    generateBtn.innerHTML = '<span class="loading-spinner"></span> 生成中...';
+
+    try {
+      audioCtx = audioCtx || new AudioContext();
+      const token = await (await import('../../auth')).getIdToken();
+
+      // Fetch all sentences in parallel
+      const voice = getSettings().ttsVoice;
+      const fetches = sentences.map((s) =>
+        fetch(`/api/diary/tts?text=${encodeURIComponent(s)}&voice=${voice}`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        }).then((r) => r.ok ? r.arrayBuffer() : Promise.reject())
+      );
+
+      const results = await Promise.all(fetches);
+
+      // Decode all audio
+      for (let i = 0; i < results.length; i++) {
+        audioBuffers[i] = await audioCtx.decodeAudioData(results[i]!);
+      }
+
+      // Enable sentence clicks
+      container.querySelectorAll('.ra-text').forEach((el) => {
+        el.classList.remove('ra-text-disabled');
+        el.classList.add('ra-text-ready');
+      });
+
+      // Hide generate button, show speed control
+      (container.querySelector('.ra-generate-wrap') as HTMLElement).style.display = 'none';
+      speedControl.style.display = '';
+    } catch {
+      showToast('音声の生成に失敗しました');
+      generateBtn.disabled = false;
+      generateBtn.textContent = '音声を生成';
+    }
+  });
+
+  // Click to play
+  container.querySelector('.ra-sentences')!.addEventListener('click', (e) => {
+    const target = (e.target as HTMLElement).closest('.ra-text-ready') as HTMLElement | null;
+    if (!target || !audioCtx) return;
+
+    const idx = parseInt(target.dataset.index || '0', 10);
+    const buffer = audioBuffers[idx];
+    if (!buffer) return;
+
+    // Stop current playback
+    if (currentSource) {
+      try { currentSource.stop(); } catch { /* already stopped */ }
+    }
+
+    // Highlight playing sentence
+    container.querySelectorAll('.ra-text').forEach((el) => el.classList.remove('ra-text-playing'));
+    target.classList.add('ra-text-playing');
+
+    // Play
+    const source = audioCtx.createBufferSource();
+    source.buffer = buffer;
+    source.playbackRate.value = playbackRate;
+    source.connect(audioCtx.destination);
+    source.onended = () => {
+      target.classList.remove('ra-text-playing');
+      currentSource = null;
+    };
+    source.start();
+    currentSource = source;
   });
 }
 
