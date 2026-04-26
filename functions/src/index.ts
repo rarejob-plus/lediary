@@ -264,7 +264,8 @@ Rules:
 - Focus on expressions the learner might not know or might get wrong
 - Each Japanese concept/phrase should appear only ONCE — do not suggest multiple alternatives for the same idea
 - Do NOT provide a full translation — just building blocks
-- All suggestions must be natural casual spoken English
+- All suggestions must sound like something you'd say in casual conversation with a friend. NEVER suggest formal/written expressions like: "furthermore", "therefore", "nevertheless", "in addition", "regarding", "approximately", "I would like to", "due to the fact that", "in order to", "prior to", "subsequently". Prefer short, everyday phrases: "also", "so", "about", "I wanna", "because", "before", "then" etc.
+- Think of how a 20-something native speaker would text a friend about their day — that's the register.
 - Always show expressions in their base/dictionary form (e.g. "feel under the weather" not "feeling under the weather", "hit up" not "hit up a restaurant")
 - Return 8-12 items
 
