@@ -1684,12 +1684,27 @@ input[type="date"]:focus {
   width: 100%;
 }
 
-.ra-speed-control {
+.ra-controls {
+  margin-bottom: 16px;
+}
+
+.ra-controls-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 16px;
-  padding: 8px 12px;
+}
+
+.ra-play-all-btn {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ra-speed-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  padding: 6px 12px;
   background: var(--primary-light);
   border-radius: var(--radius-sm);
 }

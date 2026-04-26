@@ -950,9 +950,14 @@ function renderReadAloud(diaryText: string): void {
     <div class="ra-generate-wrap">
       <button class="btn btn-primary ra-generate-btn">音声を生成</button>
     </div>
-    <div class="ra-speed-control" style="display:none;">
-      <label class="ra-speed-label">速度: <span class="ra-speed-value">1.0x</span></label>
-      <input type="range" class="ra-speed-range" min="0.5" max="1.5" step="0.1" value="1.0" />
+    <div class="ra-controls" style="display:none;">
+      <div class="ra-controls-row">
+        <button class="btn btn-ghost ra-play-all-btn">通し再生</button>
+        <div class="ra-speed-control">
+          <label class="ra-speed-label">速度: <span class="ra-speed-value">1.0x</span></label>
+          <input type="range" class="ra-speed-range" min="0.5" max="1.5" step="0.1" value="1.0" />
+        </div>
+      </div>
     </div>
     <div class="ra-sentences">
       ${sentences.map((s, i) => `
@@ -964,9 +969,10 @@ function renderReadAloud(diaryText: string): void {
   section.style.display = '';
 
   const generateBtn = container.querySelector('.ra-generate-btn') as HTMLButtonElement;
-  const speedControl = container.querySelector('.ra-speed-control') as HTMLElement;
   const speedRange = container.querySelector('.ra-speed-range') as HTMLInputElement;
   const speedValue = container.querySelector('.ra-speed-value') as HTMLElement;
+  const playAllBtn = container.querySelector('.ra-play-all-btn') as HTMLButtonElement;
+  let isPlayingAll = false;
 
   // Speed control
   speedRange.addEventListener('input', () => {
@@ -1004,9 +1010,9 @@ function renderReadAloud(diaryText: string): void {
         el.classList.add('ra-text-ready');
       });
 
-      // Hide generate button, show speed control
+      // Hide generate button, show controls
       (container.querySelector('.ra-generate-wrap') as HTMLElement).style.display = 'none';
-      speedControl.style.display = '';
+      (container.querySelector('.ra-controls') as HTMLElement).style.display = '';
     } catch {
       showToast('音声の生成に失敗しました');
       generateBtn.disabled = false;
@@ -1014,7 +1020,63 @@ function renderReadAloud(diaryText: string): void {
     }
   });
 
-  // Click to play
+  // Play all sequentially
+  playAllBtn.addEventListener('click', () => {
+    if (!audioCtx) return;
+
+    if (isPlayingAll) {
+      // Stop
+      if (currentSource) {
+        try { currentSource.stop(); } catch { /* */ }
+      }
+      isPlayingAll = false;
+      playAllBtn.textContent = '通し再生';
+      container.querySelectorAll('.ra-text').forEach((el) => el.classList.remove('ra-text-playing'));
+      return;
+    }
+
+    isPlayingAll = true;
+    playAllBtn.textContent = '停止';
+
+    let idx = 0;
+    const sentenceEls = container.querySelectorAll('.ra-text');
+
+    function playNext(): void {
+      if (!isPlayingAll || !audioCtx || idx >= audioBuffers.length) {
+        isPlayingAll = false;
+        playAllBtn.textContent = '通し再生';
+        sentenceEls.forEach((el) => el.classList.remove('ra-text-playing'));
+        currentSource = null;
+        return;
+      }
+
+      const buffer = audioBuffers[idx];
+      if (!buffer) { idx++; playNext(); return; }
+
+      sentenceEls.forEach((el) => el.classList.remove('ra-text-playing'));
+      sentenceEls[idx]?.classList.add('ra-text-playing');
+
+      const source = audioCtx!.createBufferSource();
+      source.buffer = buffer;
+      source.playbackRate.value = playbackRate;
+      source.connect(audioCtx!.destination);
+      source.onended = () => {
+        idx++;
+        currentSource = null;
+        playNext();
+      };
+      source.start();
+      currentSource = source;
+    }
+
+    // Stop any current playback first
+    if (currentSource) {
+      try { currentSource.stop(); } catch { /* */ }
+    }
+    playNext();
+  });
+
+  // Click to play single sentence
   container.querySelector('.ra-sentences')!.addEventListener('click', (e) => {
     const target = (e.target as HTMLElement).closest('.ra-text-ready') as HTMLElement | null;
     if (!target || !audioCtx) return;
@@ -1023,7 +1085,11 @@ function renderReadAloud(diaryText: string): void {
     const buffer = audioBuffers[idx];
     if (!buffer) return;
 
-    // Stop current playback
+    // Stop current playback + cancel play-all
+    if (isPlayingAll) {
+      isPlayingAll = false;
+      playAllBtn.textContent = '通し再生';
+    }
     if (currentSource) {
       try { currentSource.stop(); } catch { /* already stopped */ }
     }
