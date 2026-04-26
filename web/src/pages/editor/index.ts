@@ -1004,9 +1004,9 @@ function renderReadAloud(diaryText: string): void {
       </div>
     </div>
     <div class="ra-sentences">
-      ${sentences.map((s, i) => `
-        <p class="ra-text ra-text-disabled" data-index="${i}">${escapeHTML(s)}</p>
-      `).join('')}
+      <p class="ra-paragraph">${sentences.map((s, i) =>
+        `<span class="ra-text ra-text-disabled" data-index="${i}">${escapeHTML(s)}</span>`
+      ).join(' ')}</p>
     </div>
   `;
 

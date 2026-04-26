@@ -1826,15 +1826,17 @@ input[type="date"]:focus {
   accent-color: var(--primary);
 }
 
-.ra-text {
+.ra-paragraph {
   font-family: 'Lora', serif;
   font-size: 16px;
-  line-height: 1.7;
+  line-height: 1.8;
   color: var(--text);
-  padding: 8px 12px;
-  border-radius: var(--radius-sm);
-  margin-bottom: 4px;
+}
+
+.ra-text {
   transition: background 0.15s, color 0.15s;
+  border-radius: 4px;
+  padding: 1px 2px;
 }
 
 .ra-text-disabled {
