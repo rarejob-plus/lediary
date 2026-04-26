@@ -160,24 +160,46 @@ export function editorHTML(): string {
       </div>
     </div>
 
-    <!-- Vocabulary shown after correction complete -->
-    <div id="completed-vocab" style="display:none;"></div>
+    <!-- Tabs (shown after correction complete) -->
+    <div id="completed-tabs" style="display:none;">
+      <div class="diary-tabs">
+        <button class="diary-tab active" data-tab="tab-diary">日記</button>
+        <button class="diary-tab" data-tab="tab-practice">練習</button>
+        <button class="diary-tab" data-tab="tab-lesson">レッスン準備</button>
+      </div>
 
-    <!-- Expansion questions -->
-    <div id="expansion-section" style="display:none;">
-      <h3 class="expansion-title">日記を膨らまそう</h3>
-      <div id="expansion-questions"></div>
-    </div>
+      <!-- Tab: 日記 -->
+      <div id="tab-diary" class="diary-tab-content active">
+        <div id="completed-vocab"></div>
+      </div>
 
-    <!-- Read aloud practice -->
-    <div id="read-aloud-section" style="display:none;">
-      <h3 class="expansion-title">音読練習</h3>
-      <div id="read-aloud-content"></div>
-    </div>
+      <!-- Tab: 練習 -->
+      <div id="tab-practice" class="diary-tab-content">
+        <div class="shadowing-guide">
+          <h3>シャドーイングの練習方法</h3>
+          <ol>
+            <li><strong>まず聞く</strong> — 文をタップしてお手本を聞く</li>
+            <li><strong>通し再生</strong> — 全文を流して内容を掴む</li>
+            <li><strong>追いかける</strong> — 通し再生に0.5〜1秒遅れて声に出す。完璧じゃなくてOK</li>
+            <li><strong>録音して比較</strong> — 自分の声を録音してお手本と聞き比べる</li>
+            <li><strong>繰り返す</strong> — 3〜5回繰り返すと口が慣れる</li>
+          </ol>
+        </div>
+        <div id="read-aloud-section">
+          <div id="read-aloud-content"></div>
+        </div>
+      </div>
 
-    <!-- Lesson sheet -->
-    <div id="lesson-sheet-section" class="lesson-sheet-section" style="display:none;">
-      <button id="lesson-sheet-btn" class="btn btn-primary btn-lesson-sheet">レッスンシートを作る</button>
+      <!-- Tab: レッスン準備 -->
+      <div id="tab-lesson" class="diary-tab-content">
+        <div id="expansion-section">
+          <h3 class="expansion-title">日記を膨らまそう</h3>
+          <div id="expansion-questions"></div>
+        </div>
+        <div id="lesson-sheet-section" class="lesson-sheet-section">
+          <button id="lesson-sheet-btn" class="btn btn-primary btn-lesson-sheet">レッスンシートを作る</button>
+        </div>
+      </div>
     </div>
   `;
 }
@@ -737,16 +759,14 @@ function showCompletedView(post: DiaryPost, enInput: HTMLTextAreaElement): void 
     });
   }
 
-  // Show vocabulary
+  // Show tabs
+  document.getElementById('completed-tabs')!.style.display = '';
+  initTabs();
+
+  // Render tab content
   renderVocab(post, enInput);
-
-  // Show expansion questions
   renderExpansionQuestions(post, enInput);
-
-  // Show read aloud practice
   renderReadAloud(enInput.value);
-
-  // Show lesson sheet button
   renderLessonSheetButton(post);
 
   // Re-show editor header (back button)
@@ -928,12 +948,25 @@ function renderExpansionQuestions(post: DiaryPost, enInput: HTMLTextAreaElement)
   });
 }
 
+function initTabs(): void {
+  const tabs = document.querySelectorAll('.diary-tab');
+  const contents = document.querySelectorAll('.diary-tab-content');
+
+  tabs.forEach((tab) => {
+    tab.addEventListener('click', () => {
+      const target = (tab as HTMLElement).dataset.tab;
+      tabs.forEach((t) => t.classList.remove('active'));
+      contents.forEach((c) => c.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(target!)?.classList.add('active');
+    });
+  });
+}
+
 function renderReadAloud(diaryText: string): void {
-  const section = document.getElementById('read-aloud-section')!;
   const container = document.getElementById('read-aloud-content')!;
 
   if (!diaryText.trim()) {
-    section.style.display = 'none';
     return;
   }
 
@@ -953,9 +986,20 @@ function renderReadAloud(diaryText: string): void {
     <div class="ra-controls" style="display:none;">
       <div class="ra-controls-row">
         <button class="btn btn-ghost ra-play-all-btn">通し再生</button>
+        <button class="btn btn-ghost ra-record-btn">録音</button>
         <div class="ra-speed-control">
-          <label class="ra-speed-label">速度: <span class="ra-speed-value">1.0x</span></label>
+          <label class="ra-speed-label"><span class="ra-speed-value">1.0x</span></label>
           <input type="range" class="ra-speed-range" min="0.5" max="1.5" step="0.1" value="1.0" />
+        </div>
+      </div>
+      <div class="ra-recordings" style="display:none;">
+        <div class="ra-recordings-row">
+          <span class="ra-recordings-label">お手本</span>
+          <button class="btn btn-sm btn-ghost ra-play-model">再生</button>
+        </div>
+        <div class="ra-recordings-row">
+          <span class="ra-recordings-label">あなた</span>
+          <audio class="ra-recording-audio" controls></audio>
         </div>
       </div>
     </div>
@@ -966,13 +1010,62 @@ function renderReadAloud(diaryText: string): void {
     </div>
   `;
 
-  section.style.display = '';
-
   const generateBtn = container.querySelector('.ra-generate-btn') as HTMLButtonElement;
   const speedRange = container.querySelector('.ra-speed-range') as HTMLInputElement;
   const speedValue = container.querySelector('.ra-speed-value') as HTMLElement;
   const playAllBtn = container.querySelector('.ra-play-all-btn') as HTMLButtonElement;
+  const recordBtn = container.querySelector('.ra-record-btn') as HTMLButtonElement;
+  const recordingsArea = container.querySelector('.ra-recordings') as HTMLElement;
+  const recordingAudio = container.querySelector('.ra-recording-audio') as HTMLAudioElement;
+  const playModelBtn = container.querySelector('.ra-play-model') as HTMLButtonElement;
   let isPlayingAll = false;
+  let mediaRecorder: MediaRecorder | null = null;
+  let recordingChunks: Blob[] = [];
+
+  // Record button: starts play-all + records mic simultaneously
+  recordBtn.addEventListener('click', async () => {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      // Stop recording
+      mediaRecorder.stop();
+      if (isPlayingAll) {
+        isPlayingAll = false;
+        playAllBtn.textContent = '通し再生';
+        if (currentSource) { try { currentSource.stop(); } catch { /* */ } }
+        container.querySelectorAll('.ra-text').forEach((el) => el.classList.remove('ra-text-playing'));
+      }
+      recordBtn.textContent = '録音';
+      recordBtn.classList.remove('ra-recording');
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordingChunks = [];
+      mediaRecorder = new MediaRecorder(stream);
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) recordingChunks.push(e.data);
+      };
+      mediaRecorder.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(recordingChunks, { type: 'audio/webm' });
+        recordingAudio.src = URL.createObjectURL(blob);
+        recordingsArea.style.display = '';
+      };
+      mediaRecorder.start();
+      recordBtn.textContent = '停止';
+      recordBtn.classList.add('ra-recording');
+
+      // Also start play-all
+      playAllBtn.click();
+    } catch {
+      showToast('マイクへのアクセスが必要です');
+    }
+  });
+
+  // Play model (play-all from recordings area)
+  playModelBtn.addEventListener('click', () => {
+    playAllBtn.click();
+  });
 
   // Speed control
   speedRange.addEventListener('input', () => {

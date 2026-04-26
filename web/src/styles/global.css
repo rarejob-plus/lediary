@@ -1675,6 +1675,71 @@ input[type="date"]:focus {
   color: #ccc;
 }
 
+/* Diary completed tabs */
+.diary-tabs {
+  display: flex;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 16px;
+}
+
+.diary-tab {
+  flex: 1;
+  padding: 10px 8px;
+  background: none;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.diary-tab.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+.diary-tab-content {
+  display: none;
+}
+
+.diary-tab-content.active {
+  display: block;
+}
+
+/* Shadowing guide */
+.shadowing-guide {
+  margin-bottom: 20px;
+  padding: 16px;
+  background: var(--primary-light);
+  border-radius: var(--radius-sm);
+}
+
+.shadowing-guide h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: var(--text);
+}
+
+.shadowing-guide ol {
+  padding-left: 20px;
+  margin: 0;
+}
+
+.shadowing-guide li {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.shadowing-guide li strong {
+  color: var(--primary-dark);
+}
+
 /* Read aloud practice */
 .ra-generate-wrap {
   margin-bottom: 16px;
@@ -1699,6 +1764,11 @@ input[type="date"]:focus {
   flex-shrink: 0;
 }
 
+.ra-record-btn.ra-recording {
+  color: #e74c3c;
+  border-color: #e74c3c;
+}
+
 .ra-speed-control {
   display: flex;
   align-items: center;
@@ -1707,6 +1777,37 @@ input[type="date"]:focus {
   padding: 6px 12px;
   background: var(--primary-light);
   border-radius: var(--radius-sm);
+}
+
+.ra-recordings {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.ra-recordings-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.ra-recordings-row:last-child {
+  margin-bottom: 0;
+}
+
+.ra-recordings-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  min-width: 48px;
+}
+
+.ra-recording-audio {
+  flex: 1;
+  height: 32px;
 }
 
 .ra-speed-label {
