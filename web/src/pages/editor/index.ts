@@ -970,14 +970,13 @@ function renderReadAloud(diaryText: string): void {
     return;
   }
 
-  // Split into sentences
-  const sentences = (diaryText.match(/[^.!?]+[.!?]+/g) || [diaryText]).map((s) => s.trim()).filter((s) => s);
-
-  // Audio buffers per sentence (filled after generation)
-  const audioBuffers: (AudioBuffer | null)[] = new Array(sentences.length).fill(null);
   let audioCtx: AudioContext | null = null;
+  let audioBuffer: AudioBuffer | null = null;
   let currentSource: AudioBufferSourceNode | null = null;
+  let isPlaying = false;
   let playbackRate = 1.0;
+  let mediaRecorder: MediaRecorder | null = null;
+  let recordingChunks: Blob[] = [];
 
   container.innerHTML = `
     <div class="ra-generate-wrap">
@@ -985,7 +984,7 @@ function renderReadAloud(diaryText: string): void {
     </div>
     <div class="ra-controls" style="display:none;">
       <div class="ra-controls-row">
-        <button class="btn btn-ghost ra-play-all-btn">通し再生</button>
+        <button class="btn btn-ghost ra-play-btn">再生</button>
         <button class="btn btn-ghost ra-record-btn">録音</button>
         <div class="ra-speed-control">
           <label class="ra-speed-label"><span class="ra-speed-value">1.0x</span></label>
@@ -1003,36 +1002,86 @@ function renderReadAloud(diaryText: string): void {
         </div>
       </div>
     </div>
-    <div class="ra-sentences">
-      <p class="ra-paragraph">${sentences.map((s, i) =>
-        `<span class="ra-text ra-text-disabled" data-index="${i}">${escapeHTML(s)}</span>`
-      ).join(' ')}</p>
-    </div>
+    <p class="ra-paragraph">${escapeHTML(diaryText)}</p>
   `;
 
   const generateBtn = container.querySelector('.ra-generate-btn') as HTMLButtonElement;
-  const speedRange = container.querySelector('.ra-speed-range') as HTMLInputElement;
-  const speedValue = container.querySelector('.ra-speed-value') as HTMLElement;
-  const playAllBtn = container.querySelector('.ra-play-all-btn') as HTMLButtonElement;
+  const playBtn = container.querySelector('.ra-play-btn') as HTMLButtonElement;
   const recordBtn = container.querySelector('.ra-record-btn') as HTMLButtonElement;
   const recordingsArea = container.querySelector('.ra-recordings') as HTMLElement;
   const recordingAudio = container.querySelector('.ra-recording-audio') as HTMLAudioElement;
   const playModelBtn = container.querySelector('.ra-play-model') as HTMLButtonElement;
-  let isPlayingAll = false;
-  let mediaRecorder: MediaRecorder | null = null;
-  let recordingChunks: Blob[] = [];
+  const speedRange = container.querySelector('.ra-speed-range') as HTMLInputElement;
+  const speedValue = container.querySelector('.ra-speed-value') as HTMLElement;
 
-  // Record button: starts play-all + records mic simultaneously
+  function stopPlayback(): void {
+    if (currentSource) { try { currentSource.stop(); } catch { /* */ } }
+    currentSource = null;
+    isPlaying = false;
+    playBtn.textContent = '再生';
+  }
+
+  function startPlayback(): void {
+    if (!audioCtx || !audioBuffer) return;
+    stopPlayback();
+    const source = audioCtx.createBufferSource();
+    source.buffer = audioBuffer;
+    source.playbackRate.value = playbackRate;
+    source.connect(audioCtx.destination);
+    source.onended = () => {
+      isPlaying = false;
+      currentSource = null;
+      playBtn.textContent = '再生';
+    };
+    source.start();
+    currentSource = source;
+    isPlaying = true;
+    playBtn.textContent = '停止';
+  }
+
+  // Speed control
+  speedRange.addEventListener('input', () => {
+    playbackRate = parseFloat(speedRange.value);
+    speedValue.textContent = `${playbackRate.toFixed(1)}x`;
+  });
+
+  // Generate audio (single API call for full text)
+  generateBtn.addEventListener('click', async () => {
+    generateBtn.disabled = true;
+    generateBtn.innerHTML = '<span class="loading-spinner"></span> 生成中...';
+
+    try {
+      audioCtx = audioCtx || new AudioContext();
+      const token = await (await import('../../auth')).getIdToken();
+      const voice = getSettings().ttsVoice;
+      const res = await fetch(`/api/diary/tts?text=${encodeURIComponent(diaryText)}&voice=${voice}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('TTS failed');
+      audioBuffer = await audioCtx.decodeAudioData(await res.arrayBuffer());
+
+      (container.querySelector('.ra-generate-wrap') as HTMLElement).style.display = 'none';
+      (container.querySelector('.ra-controls') as HTMLElement).style.display = '';
+    } catch {
+      showToast('音声の生成に失敗しました');
+      generateBtn.disabled = false;
+      generateBtn.textContent = '音声を生成';
+    }
+  });
+
+  // Play/stop
+  playBtn.addEventListener('click', () => {
+    isPlaying ? stopPlayback() : startPlayback();
+  });
+
+  // Play model from recordings area
+  playModelBtn.addEventListener('click', () => startPlayback());
+
+  // Record: play + mic simultaneously
   recordBtn.addEventListener('click', async () => {
     if (mediaRecorder && mediaRecorder.state === 'recording') {
-      // Stop recording
       mediaRecorder.stop();
-      if (isPlayingAll) {
-        isPlayingAll = false;
-        playAllBtn.textContent = '通し再生';
-        if (currentSource) { try { currentSource.stop(); } catch { /* */ } }
-        container.querySelectorAll('.ra-text').forEach((el) => el.classList.remove('ra-text-playing'));
-      }
+      stopPlayback();
       recordBtn.textContent = '録音';
       recordBtn.classList.remove('ra-recording');
       return;
@@ -1054,150 +1103,10 @@ function renderReadAloud(diaryText: string): void {
       mediaRecorder.start();
       recordBtn.textContent = '停止';
       recordBtn.classList.add('ra-recording');
-
-      // Also start play-all
-      playAllBtn.click();
+      startPlayback();
     } catch {
       showToast('マイクへのアクセスが必要です');
     }
-  });
-
-  // Play model (play-all from recordings area)
-  playModelBtn.addEventListener('click', () => {
-    playAllBtn.click();
-  });
-
-  // Speed control
-  speedRange.addEventListener('input', () => {
-    playbackRate = parseFloat(speedRange.value);
-    speedValue.textContent = `${playbackRate.toFixed(1)}x`;
-  });
-
-  // Generate all audio at once
-  generateBtn.addEventListener('click', async () => {
-    generateBtn.disabled = true;
-    generateBtn.innerHTML = '<span class="loading-spinner"></span> 生成中...';
-
-    try {
-      audioCtx = audioCtx || new AudioContext();
-      const token = await (await import('../../auth')).getIdToken();
-
-      // Fetch sentences sequentially (TTS model has 10 RPM limit)
-      const voice = getSettings().ttsVoice;
-      for (let i = 0; i < sentences.length; i++) {
-        const res = await fetch(`/api/diary/tts?text=${encodeURIComponent(sentences[i]!)}&voice=${voice}`, {
-          headers: { 'Authorization': `Bearer ${token}` },
-        });
-        if (!res.ok) throw new Error(`TTS failed for sentence ${i}`);
-        const buf = await res.arrayBuffer();
-        audioBuffers[i] = await audioCtx.decodeAudioData(buf);
-      }
-
-      // Enable sentence clicks
-      container.querySelectorAll('.ra-text').forEach((el) => {
-        el.classList.remove('ra-text-disabled');
-        el.classList.add('ra-text-ready');
-      });
-
-      // Hide generate button, show controls
-      (container.querySelector('.ra-generate-wrap') as HTMLElement).style.display = 'none';
-      (container.querySelector('.ra-controls') as HTMLElement).style.display = '';
-    } catch {
-      showToast('音声の生成に失敗しました');
-      generateBtn.disabled = false;
-      generateBtn.textContent = '音声を生成';
-    }
-  });
-
-  // Play all sequentially
-  playAllBtn.addEventListener('click', () => {
-    if (!audioCtx) return;
-
-    if (isPlayingAll) {
-      // Stop
-      if (currentSource) {
-        try { currentSource.stop(); } catch { /* */ }
-      }
-      isPlayingAll = false;
-      playAllBtn.textContent = '通し再生';
-      container.querySelectorAll('.ra-text').forEach((el) => el.classList.remove('ra-text-playing'));
-      return;
-    }
-
-    isPlayingAll = true;
-    playAllBtn.textContent = '停止';
-
-    let idx = 0;
-    const sentenceEls = container.querySelectorAll('.ra-text');
-
-    function playNext(): void {
-      if (!isPlayingAll || !audioCtx || idx >= audioBuffers.length) {
-        isPlayingAll = false;
-        playAllBtn.textContent = '通し再生';
-        sentenceEls.forEach((el) => el.classList.remove('ra-text-playing'));
-        currentSource = null;
-        return;
-      }
-
-      const buffer = audioBuffers[idx];
-      if (!buffer) { idx++; playNext(); return; }
-
-      sentenceEls.forEach((el) => el.classList.remove('ra-text-playing'));
-      sentenceEls[idx]?.classList.add('ra-text-playing');
-
-      const source = audioCtx!.createBufferSource();
-      source.buffer = buffer;
-      source.playbackRate.value = playbackRate;
-      source.connect(audioCtx!.destination);
-      source.onended = () => {
-        idx++;
-        currentSource = null;
-        playNext();
-      };
-      source.start();
-      currentSource = source;
-    }
-
-    // Stop any current playback first
-    if (currentSource) {
-      try { currentSource.stop(); } catch { /* */ }
-    }
-    playNext();
-  });
-
-  // Click to play single sentence
-  container.querySelector('.ra-sentences')!.addEventListener('click', (e) => {
-    const target = (e.target as HTMLElement).closest('.ra-text-ready') as HTMLElement | null;
-    if (!target || !audioCtx) return;
-
-    const idx = parseInt(target.dataset.index || '0', 10);
-    const buffer = audioBuffers[idx];
-    if (!buffer) return;
-
-    // Stop current playback + cancel play-all
-    if (isPlayingAll) {
-      isPlayingAll = false;
-      playAllBtn.textContent = '通し再生';
-    }
-    if (currentSource) {
-      try { currentSource.stop(); } catch { /* already stopped */ }
-    }
-
-    // Highlight playing sentence
-    container.querySelectorAll('.ra-text').forEach((el) => el.classList.remove('ra-text-playing'));
-    target.classList.add('ra-text-playing');
-
-    // Play
-    const source = audioCtx.createBufferSource();
-    source.buffer = buffer;
-    source.playbackRate.value = playbackRate;
-    source.connect(audioCtx.destination);
-    source.onended = () => {
-      target.classList.remove('ra-text-playing');
-      currentSource = null;
-    };
-    source.start();
-    currentSource = source;
   });
 }
 
