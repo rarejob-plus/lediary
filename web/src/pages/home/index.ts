@@ -174,9 +174,9 @@ function showDayDetail(date: string, posts: DiaryPost[]): void {
           <span class="day-mode-label">${m.label}</span>
           <span class="day-mode-check">${lucide('CheckCircle', 14, 'check-done')}</span>
         </div>`;
-    } else if (isToday) {
+    } else {
       html += `
-        <div class="day-mode-item todo" data-mode="${m.key}">
+        <div class="day-mode-item todo" ${isToday ? `data-mode="${m.key}"` : ''}>
           <span class="day-mode-icon">${modeIconSvg(m.key, 16)}</span>
           <span class="day-mode-label">${m.label}</span>
         </div>`;
