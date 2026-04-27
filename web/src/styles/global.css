@@ -547,7 +547,6 @@ input[type="date"]:focus {
 /* ============ Home Calendar ============ */
 .home-calendar {
   margin-bottom: 12px;
-  max-width: 400px;
 }
 
 .cal-header {
@@ -597,8 +596,9 @@ input[type="date"]:focus {
 }
 
 .cal-cell {
-  width: 28px;
-  height: 28px;
+  width: 100%;
+  max-width: 36px;
+  aspect-ratio: 1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -653,10 +653,16 @@ input[type="date"]:focus {
   display: none;
 }
 
+@media (min-width: 500px) {
+  .home-calendar,
+  .day-detail {
+    max-width: 380px;
+  }
+}
+
 /* Day detail (below calendar) */
 .day-detail {
   margin-bottom: 16px;
-  max-width: 400px;
 }
 
 .day-detail-header {
