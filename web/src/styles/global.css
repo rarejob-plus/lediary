@@ -656,7 +656,13 @@ input[type="date"]:focus {
 @media (min-width: 500px) {
   .home-calendar,
   .day-detail {
-    max-width: 380px;
+    max-width: 340px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .cal-cell {
+    max-width: 32px;
   }
 }
 
