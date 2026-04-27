@@ -403,8 +403,10 @@ textarea.readonly:focus {
 .insertion-picker {
   position: fixed;
   bottom: 0;
-  left: 0;
-  right: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 520px;
   max-height: 70vh;
   overflow-y: auto;
   background: var(--surface);
