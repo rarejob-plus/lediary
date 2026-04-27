@@ -592,6 +592,9 @@ Return ONLY the JSON object.`;
       };
       await db.collection("lediary-sheets").doc(shareId).set(sheetData);
 
+      // Save lessonSheetId back to the diary post
+      await db.collection("lediary-posts").doc(postId).update({ lessonSheetId: shareId });
+
       res.json(sheetData);
       return;
     }
