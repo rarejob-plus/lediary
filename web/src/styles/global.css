@@ -544,44 +544,44 @@ input[type="date"]:focus {
   text-decoration: none;
 }
 
-/* ============ Streak Calendar ============ */
-.streak-section {
+/* ============ Home Calendar ============ */
+.home-calendar {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 16px;
+  border: 1px solid var(--border);
   margin-bottom: 16px;
+}
+
+.cal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
 }
 
 .streak-header {
   display: flex;
   align-items: baseline;
-  gap: 6px;
-  margin-bottom: 10px;
+  gap: 4px;
 }
 
 .streak-count {
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 700;
   color: var(--primary);
   line-height: 1;
 }
 
 .streak-label {
-  font-size: 14px;
+  font-size: 12px;
   color: var(--text-muted);
-  font-weight: 500;
-}
-
-.streak-calendar {
-  background: var(--surface);
-  border-radius: var(--radius-sm);
-  padding: 12px;
-  border: 1px solid var(--border);
 }
 
 .cal-month {
   font-size: 13px;
   font-weight: 600;
-  color: var(--text);
-  margin-bottom: 8px;
-  text-align: center;
+  color: var(--text-muted);
 }
 
 .cal-weekdays {
@@ -596,7 +596,7 @@ input[type="date"]:focus {
 .cal-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 2px;
+  gap: 3px;
 }
 
 .cal-cell {
@@ -607,21 +607,40 @@ input[type="date"]:focus {
   border-radius: 4px;
   font-size: 11px;
   color: var(--text-muted);
+  transition: transform 0.1s;
+}
+
+.cal-cell.clickable {
+  cursor: pointer;
+}
+
+.cal-cell.clickable:active {
+  transform: scale(0.9);
 }
 
 .cal-cell.empty {
   visibility: hidden;
 }
 
-.cal-cell.written {
-  background: var(--primary);
+.cal-cell.level-0 {
+  background: var(--border);
+}
+
+.cal-cell.level-1 {
+  background: #b2dfdb;
+  color: #1b5e20;
+}
+
+.cal-cell.level-2 {
+  background: #4caf50;
   color: #fff;
   font-weight: 600;
 }
 
-.cal-cell.missed {
-  background: var(--border);
-  color: var(--text-muted);
+.cal-cell.level-3 {
+  background: #1b5e20;
+  color: #fff;
+  font-weight: 600;
 }
 
 .cal-cell.today {
@@ -629,9 +648,84 @@ input[type="date"]:focus {
   outline-offset: -1px;
 }
 
-.cal-cell.today:not(.written) {
-  color: var(--primary);
+.cal-cell.selected {
+  outline: 2px solid var(--text);
+  outline-offset: -1px;
+}
+
+.cal-legend {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.cal-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.cal-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.cal-dot.level-0 { background: var(--border); }
+.cal-dot.level-1 { background: #b2dfdb; }
+.cal-dot.level-2 { background: #4caf50; }
+.cal-dot.level-3 { background: #1b5e20; }
+
+/* Day detail (below calendar) */
+.day-detail {
+  margin-bottom: 16px;
+}
+
+.day-detail-header {
+  font-size: 14px;
   font-weight: 600;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.day-detail-modes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.day-mode-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.day-mode-item:active {
+  background: var(--primary-light);
+}
+
+.day-mode-item.done {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+
+.day-mode-label {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.day-mode-check {
+  color: var(--primary);
 }
 
 /* ============ Today's Writing Modes ============ */
