@@ -55,9 +55,9 @@ export function homeHTML(): string {
         <button id="logout-btn" class="btn btn-ghost" title="Logout">Logout</button>
       </div>
     </div>
+    <div id="streak-section" class="streak-section"></div>
     <div id="today-modes" class="today-modes"></div>
     <div id="diary-list">
-      <div class="skeleton-block"></div>
       <div class="skeleton-block"></div>
       <div class="skeleton-block"></div>
     </div>
@@ -76,12 +76,22 @@ function renderPosts(listEl: HTMLElement, posts: DiaryPost[]): void {
     return;
   }
 
-  listEl.innerHTML = posts
+  // Show only today + yesterday
+  const today = getToday();
+  const yesterday = getYesterday();
+  const recentPosts = posts.filter((p) => p.date === today || p.date === yesterday);
+
+  if (recentPosts.length === 0) {
+    listEl.innerHTML = '';
+    return;
+  }
+
+  listEl.innerHTML = recentPosts
     .map(
       (post) => `
       <div class="card diary-card" data-id="${post.id}">
         <div class="diary-card-header">
-          <div class="diary-card-date"><span class="diary-card-mode">${modeIconSvg(post.mode, 14)}</span> ${post.date || ''}</div>
+          <div class="diary-card-date"><span class="diary-card-mode">${modeIconSvg(post.mode, 14)}</span> ${post.date === today ? '今日' : '昨日'}</div>
           <button class="delete-btn" data-id="${post.id}" title="削除"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
         </div>
         <div class="diary-card-en">${escapeHTML(post.userTranslation || post.contentJp || '')}</div>
@@ -89,6 +99,82 @@ function renderPosts(listEl: HTMLElement, posts: DiaryPost[]): void {
     `
     )
     .join('');
+}
+
+function getYesterday(): string {
+  const d = new Date();
+  if (d.getHours() < 4) d.setDate(d.getDate() - 1);
+  d.setDate(d.getDate() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function renderStreak(posts: DiaryPost[]): void {
+  const container = document.getElementById('streak-section');
+  if (!container) return;
+
+  const today = getToday();
+
+  // Build set of dates that have entries
+  const writtenDates = new Set<string>();
+  for (const p of posts) {
+    if (p.date && p.userTranslation) writtenDates.add(p.date);
+  }
+
+  // Calculate streak
+  let streak = 0;
+  const d = new Date(today + 'T00:00:00');
+  while (true) {
+    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    if (writtenDates.has(dateStr)) {
+      streak++;
+      d.setDate(d.getDate() - 1);
+    } else {
+      // Allow today to be unwritten (streak doesn't break until tomorrow)
+      if (dateStr === today) {
+        d.setDate(d.getDate() - 1);
+        continue;
+      }
+      break;
+    }
+  }
+
+  // Build monthly calendar grid
+  const now = new Date(today + 'T00:00:00');
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const firstDay = new Date(year, month, 1).getDay(); // 0=Sun
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const monthName = now.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' });
+
+  let calCells = '';
+  // Empty cells for days before 1st
+  for (let i = 0; i < firstDay; i++) calCells += '<div class="cal-cell empty"></div>';
+  // Day cells
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const isToday = dateStr === today;
+    const written = writtenDates.has(dateStr);
+    const isPast = dateStr < today;
+    let cls = 'cal-cell';
+    if (written) cls += ' written';
+    else if (isPast) cls += ' missed';
+    if (isToday) cls += ' today';
+    calCells += `<div class="${cls}"><span>${day}</span></div>`;
+  }
+
+  container.innerHTML = `
+    <div class="streak-header">
+      <div class="streak-count">${streak}</div>
+      <div class="streak-label">日連続</div>
+    </div>
+    <div class="streak-calendar">
+      <div class="cal-month">${monthName}</div>
+      <div class="cal-weekdays">
+        <span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span>
+      </div>
+      <div class="cal-grid">${calCells}</div>
+    </div>
+  `;
 }
 
 function attachCardListeners(listEl: HTMLElement, loadedPosts: DiaryPost[]): void {
@@ -140,6 +226,7 @@ export async function initHome(): Promise<void> {
       renderPosts(listEl, loadedPosts);
       attachCardListeners(listEl, loadedPosts);
       renderTodayModes(loadedPosts);
+      renderStreak(loadedPosts);
     } catch { /* ignore bad cache */ }
   }
 
@@ -155,6 +242,7 @@ export async function initHome(): Promise<void> {
       renderPosts(listEl, loadedPosts);
       attachCardListeners(listEl, loadedPosts);
       renderTodayModes(loadedPosts);
+      renderStreak(loadedPosts);
     }
   } catch (err) {
     console.error('Failed to fetch posts:', err);
