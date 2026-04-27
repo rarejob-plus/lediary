@@ -240,12 +240,17 @@ export async function initEditor(): Promise<void> {
     document.getElementById('writing-area')!.style.display = 'none';
   }
 
-  // Default date: today, but before 4:00 AM → yesterday
-  const now = new Date();
-  if (now.getHours() < 4) {
-    now.setDate(now.getDate() - 1);
+  // Date: from query param, or today (before 4:00 AM → yesterday)
+  const urlDate = new URLSearchParams(location.search).get('date');
+  if (urlDate && /^\d{4}-\d{2}-\d{2}$/.test(urlDate)) {
+    dateInput.value = urlDate;
+  } else {
+    const now = new Date();
+    if (now.getHours() < 4) {
+      now.setDate(now.getDate() - 1);
+    }
+    dateInput.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   }
-  dateInput.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   updateHeaderDate();
 
   // If editing existing post, load it

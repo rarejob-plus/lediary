@@ -176,7 +176,7 @@ function showDayDetail(date: string, posts: DiaryPost[]): void {
         </div>`;
     } else {
       html += `
-        <div class="day-mode-item todo" ${isToday ? `data-mode="${m.key}"` : ''}>
+        <div class="day-mode-item todo" data-mode="${m.key}" data-date="${date}">
           <span class="day-mode-icon">${modeIconSvg(m.key, 16)}</span>
           <span class="day-mode-label">${m.label}</span>
         </div>`;
@@ -195,7 +195,9 @@ function showDayDetail(date: string, posts: DiaryPost[]): void {
   });
   detail.querySelectorAll('.day-mode-item.todo').forEach((el) => {
     el.addEventListener('click', () => {
-      navigate(`/new/${(el as HTMLElement).dataset.mode}`);
+      const mode = (el as HTMLElement).dataset.mode;
+      const d = (el as HTMLElement).dataset.date;
+      navigate(`/new/${mode}${d ? `?date=${d}` : ''}`);
     });
   });
 }
