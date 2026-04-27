@@ -1082,19 +1082,15 @@ function renderReadAloud(diaryText: string): void {
       audioCtx = audioCtx || new AudioContext();
       const token = await (await import('../../auth')).getIdToken();
 
-      // Fetch all sentences in parallel
+      // Fetch sentences sequentially (TTS model has 10 RPM limit)
       const voice = getSettings().ttsVoice;
-      const fetches = sentences.map((s) =>
-        fetch(`/api/diary/tts?text=${encodeURIComponent(s)}&voice=${voice}`, {
+      for (let i = 0; i < sentences.length; i++) {
+        const res = await fetch(`/api/diary/tts?text=${encodeURIComponent(sentences[i]!)}&voice=${voice}`, {
           headers: { 'Authorization': `Bearer ${token}` },
-        }).then((r) => r.ok ? r.arrayBuffer() : Promise.reject())
-      );
-
-      const results = await Promise.all(fetches);
-
-      // Decode all audio
-      for (let i = 0; i < results.length; i++) {
-        audioBuffers[i] = await audioCtx.decodeAudioData(results[i]!);
+        });
+        if (!res.ok) throw new Error(`TTS failed for sentence ${i}`);
+        const buf = await res.arrayBuffer();
+        audioBuffers[i] = await audioCtx.decodeAudioData(buf);
       }
 
       // Enable sentence clicks
