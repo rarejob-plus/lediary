@@ -196,9 +196,6 @@ export function editorHTML(): string {
           <h3 class="expansion-title">日記を膨らまそう</h3>
           <div id="expansion-questions"></div>
         </div>
-        <div id="lesson-sheet-section" class="lesson-sheet-section">
-          <button id="lesson-sheet-btn" class="btn btn-primary btn-lesson-sheet">レッスンシートを作る</button>
-        </div>
       </div>
     </div>
   `;
@@ -510,7 +507,11 @@ function renderVocab(post: DiaryPost, enInput: HTMLTextAreaElement): void {
 
   const dismissed = new Set(post.dismissedVocab || []);
   const visible = post.vocabulary.filter((v) => !dismissed.has(v.word));
-  if (visible.length === 0) { vocabContainer.style.display = 'none'; return; }
+  if (visible.length === 0) {
+    vocabContainer.innerHTML = '<p class="vocab-empty">すべてのフレーズを確認済みです</p>';
+    vocabContainer.style.display = 'block';
+    return;
+  }
 
   vocabContainer.innerHTML = `
     <h3 class="completed-section-title">覚えたいフレーズ</h3>
@@ -532,7 +533,9 @@ function renderVocab(post: DiaryPost, enInput: HTMLTextAreaElement): void {
     dismissed.add(word);
     post.dismissedVocab = Array.from(dismissed);
     itemEl.remove();
-    if (!vocabContainer!.querySelector('.vocab-item')) vocabContainer!.style.display = 'none';
+    if (!vocabContainer!.querySelector('.vocab-item')) {
+      vocabContainer!.innerHTML = '<p class="vocab-empty">すべてのフレーズを確認済みです</p>';
+    }
     // Save dismissed state
     const dateInput = document.getElementById('input-date') as HTMLInputElement;
     api.post('/diary/posts', {
@@ -685,6 +688,7 @@ function showCompletedView(post: DiaryPost, enInput: HTMLTextAreaElement): void 
   writingArea.style.display = 'block';
   const writingRef = document.getElementById('writing-ref')!;
   writingRef.style.display = 'none';
+  document.getElementById('writing-ref-jp-sticky')!.style.display = 'none';
 
   enInput.readOnly = true;
   enInput.classList.add('readonly');
@@ -702,18 +706,47 @@ function showCompletedView(post: DiaryPost, enInput: HTMLTextAreaElement): void 
   updateHeaderDate();
 
   const translateBtn = document.getElementById('translate-btn')!;
-  translateBtn.textContent = 'もう一度添削する';
+  translateBtn.textContent = 'もう一度添削';
   translateBtn.className = 'btn btn-ghost btn-retranslate';
+  translateBtn.removeAttribute('style');
 
-  // Edit button
+  // Action buttons row
   const existingEditBtn = translateBtn.parentNode!.querySelector('.btn-edit-diary');
   if (!existingEditBtn) {
     const jpInput = document.getElementById('input-jp') as HTMLTextAreaElement;
     const dateInput = document.getElementById('input-date') as HTMLInputElement;
+
+    // Wrap buttons in a row
+    const btnRow = document.createElement('div');
+    btnRow.className = 'diary-action-row';
+    translateBtn.parentNode!.insertBefore(btnRow, translateBtn);
+    btnRow.appendChild(translateBtn);
+
     const editBtn = document.createElement('button');
     editBtn.className = 'btn btn-ghost btn-retranslate btn-edit-diary';
     editBtn.textContent = '編集する';
-    translateBtn.parentNode!.insertBefore(editBtn, translateBtn);
+    btnRow.insertBefore(editBtn, translateBtn);
+
+    const flowBtn = document.createElement('button');
+    flowBtn.className = 'btn btn-ghost btn-retranslate btn-flow-check';
+    flowBtn.textContent = 'つながり確認';
+    btnRow.appendChild(flowBtn);
+
+    flowBtn.addEventListener('click', async () => {
+      flowBtn.disabled = true;
+      flowBtn.textContent = '確認中…';
+      try {
+        const result = await api.post<{ suggestions: Array<{ between: string; suggestion: string; revised: string; reason: string }>; overall: string }>('/diary/flow-check', {
+          text: enInput.value,
+        });
+        renderFlowCheckResult(result, enInput.parentNode as HTMLElement);
+      } catch {
+        showToast('チェックに失敗しました');
+      } finally {
+        flowBtn.disabled = false;
+        flowBtn.textContent = 'つながり確認';
+      }
+    });
 
     editBtn.addEventListener('click', () => {
       diaryTextDiv.style.display = 'none';
@@ -723,6 +756,9 @@ function showCompletedView(post: DiaryPost, enInput: HTMLTextAreaElement): void 
       enInput.classList.add('editor-textarea-minimal', 'en-textarea');
       editBtn.style.display = 'none';
       translateBtn.style.display = 'none';
+      // 編集中はつながり確認のフィードバック（修正後英文を含む）を隠す
+      const existingFlow = (enInput.parentNode as HTMLElement | null)?.querySelector('.flow-check-result') as HTMLElement | null;
+      if (existingFlow) existingFlow.style.display = 'none';
 
       const saveBtn = document.createElement('button');
       saveBtn.className = 'btn btn-primary';
@@ -752,6 +788,8 @@ function showCompletedView(post: DiaryPost, enInput: HTMLTextAreaElement): void 
           saveBtn.remove();
           editBtn.style.display = '';
           translateBtn.style.display = '';
+          // 編集で本文が変わったので古いつながりフィードバックは破棄
+          (enInput.parentNode as HTMLElement | null)?.querySelector('.flow-check-result')?.remove();
           showToast('保存しました');
         } catch {
           showToast('保存に失敗しました');
@@ -772,7 +810,6 @@ function showCompletedView(post: DiaryPost, enInput: HTMLTextAreaElement): void 
   renderVocab(post, enInput);
   renderExpansionQuestions(post, enInput);
   renderReadAloud(enInput.value);
-  renderLessonSheetButton(post);
 
   // Re-show editor header (back button)
   const editorHeader = document.querySelector('.editor-header') as HTMLElement;
@@ -821,9 +858,41 @@ function renderExpansionQuestions(post: DiaryPost, enInput: HTMLTextAreaElement)
     let moreWrap = section.querySelector('.expansion-more-wrap') as HTMLElement | null;
     if (!moreWrap) {
       moreWrap = document.createElement('div');
-      moreWrap.className = 'expansion-more-wrap';
-      moreWrap.innerHTML = '<button class="btn btn-primary expansion-more-btn">もっと膨らませる</button>';
+      moreWrap.className = 'expansion-actions-row';
+      moreWrap.innerHTML = `
+        <button class="btn btn-secondary btn-action-col expansion-more-btn">膨らませる</button>
+        <button class="btn btn-secondary btn-action-col lesson-sheet-btn">レッスンシート</button>
+      `;
       section.appendChild(moreWrap);
+
+      const lsBtn = moreWrap.querySelector('.lesson-sheet-btn') as HTMLButtonElement;
+      if (post.lessonSheetId) {
+        lsBtn.textContent = 'シートを開く';
+        lsBtn.addEventListener('click', () => {
+          window.open(`/s/${post.lessonSheetId}`, '_blank');
+        });
+      } else {
+        lsBtn.addEventListener('click', async () => {
+          lsBtn.disabled = true;
+          lsBtn.textContent = '作成中…';
+          try {
+            const dateInput = document.getElementById('input-date') as HTMLInputElement;
+            const postId = `${post.userId}_${dateInput.value}_${currentMode}`;
+            const res = await api.post<{ shareId: string }>('/diary/lesson-sheet', { postId });
+            post.lessonSheetId = res.shareId;
+            lsBtn.textContent = 'シートを開く';
+            lsBtn.disabled = false;
+            lsBtn.onclick = () => window.open(`/s/${res.shareId}`, '_blank');
+            const url = `${location.origin}/s/${res.shareId}`;
+            await navigator.clipboard.writeText(url);
+            showToast('URLをコピーしました');
+          } catch {
+            showToast('作成に失敗しました');
+            lsBtn.disabled = false;
+            lsBtn.textContent = 'レッスンシート';
+          }
+        });
+      }
 
       moreWrap.querySelector('.expansion-more-btn')!.addEventListener('click', async () => {
         const btn = moreWrap!.querySelector('.expansion-more-btn') as HTMLButtonElement;
@@ -951,6 +1020,31 @@ function renderExpansionQuestions(post: DiaryPost, enInput: HTMLTextAreaElement)
       }
     });
   });
+}
+
+function renderFlowCheckResult(result: { suggestions: Array<{ between: string; suggestion: string; revised: string; reason: string }>; overall: string }, section: HTMLElement): void {
+  // Remove previous result
+  section.querySelector('.flow-check-result')?.remove();
+
+  const div = document.createElement('div');
+  div.className = 'flow-check-result';
+
+  if (!result.suggestions || result.suggestions.length === 0) {
+    div.innerHTML = `<div class="flow-check-overall">${escapeHTML(result.overall || '文のつながりは自然です')}</div>`;
+  } else {
+    div.innerHTML = `
+      ${result.suggestions.map((s) => `
+        <div class="flow-check-item">
+          <div class="flow-check-suggestion"><span class="flow-check-connector">${escapeHTML(s.suggestion)}</span> を入れると自然に</div>
+          <div class="flow-check-revised">${escapeHTML(s.revised)}</div>
+          <div class="flow-check-reason">${escapeHTML(s.reason)}</div>
+        </div>
+      `).join('')}
+      <div class="flow-check-overall">${escapeHTML(result.overall)}</div>
+    `;
+  }
+
+  section.appendChild(div);
 }
 
 function initTabs(): void {
@@ -1115,57 +1209,6 @@ function renderReadAloud(diaryText: string): void {
   });
 }
 
-function renderLessonSheetButton(post: DiaryPost): void {
-  const section = document.getElementById('lesson-sheet-section')!;
-  const btn = document.getElementById('lesson-sheet-btn') as HTMLButtonElement;
-
-  // Only show if diary has been corrected (has userTranslation)
-  if (!post.userTranslation) {
-    section.style.display = 'none';
-    return;
-  }
-
-  // If lesson sheet already exists, show link instead
-  if (post.lessonSheetId) {
-    section.style.display = 'block';
-    btn.textContent = 'レッスンシートを開く';
-    btn.className = 'btn btn-ghost btn-lesson-sheet';
-    btn.onclick = () => {
-      window.open(`/s/${post.lessonSheetId}`, '_blank');
-    };
-    return;
-  }
-
-  section.style.display = 'block';
-
-  btn.addEventListener('click', async () => {
-    btn.disabled = true;
-    btn.innerHTML = '<span class="loading-spinner"></span> 生成中...';
-
-    try {
-      const dateInput = document.getElementById('input-date') as HTMLInputElement;
-      const postId = `${post.userId}_${dateInput.value}_${currentMode}`;
-      const res = await api.post<{ shareId: string }>('/diary/lesson-sheet', { postId });
-
-      post.lessonSheetId = res.shareId;
-      btn.textContent = 'レッスンシートを開く';
-      btn.className = 'btn btn-ghost btn-lesson-sheet';
-      btn.disabled = false;
-      btn.onclick = () => {
-        window.open(`/s/${res.shareId}`, '_blank');
-      };
-
-      // Copy URL to clipboard
-      const url = `${location.origin}/s/${res.shareId}`;
-      await navigator.clipboard.writeText(url);
-      showToast('URLをコピーしました');
-    } catch {
-      showToast('生成に失敗しました');
-      btn.disabled = false;
-      btn.textContent = 'レッスンシートを作る';
-    }
-  });
-}
 
 // ─── Rendering helpers ───
 

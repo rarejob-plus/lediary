@@ -153,7 +153,23 @@ function showFloatingButton(rect: DOMRect, text: string, context: string): void 
       });
 
       if (!res.ok) throw new Error(`${res.status}`);
-      showToast('Flashcardに保存しました');
+      const data = await res.json();
+      const bookmarkId = data.id;
+      showToast('Flashcardに保存しました', bookmarkId ? {
+        label: '取り消す',
+        onClick: async () => {
+          try {
+            const delToken = await getIdToken();
+            await fetch(`${RJPLUS_API}/bookmarks/${bookmarkId}`, {
+              method: 'DELETE',
+              headers: { 'Authorization': `Bearer ${delToken}` },
+            });
+            showToast('取り消しました');
+          } catch {
+            showToast('取り消しに失敗しました');
+          }
+        },
+      } : undefined);
     } catch {
       showToast('保存に失敗しました');
     }

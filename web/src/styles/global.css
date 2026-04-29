@@ -135,6 +135,19 @@ button {
   border-radius: var(--radius-sm);
 }
 
+.diary-action-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.diary-action-row .btn-retranslate {
+  margin-top: 0;
+  width: auto;
+  flex: 1;
+  padding: 12px 10px;
+}
+
 .btn-retranslate {
   font-size: 13px;
   color: var(--primary);
@@ -284,6 +297,13 @@ textarea.readonly:focus {
   margin-top: 16px;
 }
 
+.vocab-empty {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 24px 0;
+}
+
 /* ============ Expansion Questions ============ */
 #expansion-section {
   margin-top: 32px;
@@ -388,8 +408,67 @@ textarea.readonly:focus {
   margin-top: 16px;
 }
 
-.expansion-more-btn {
-  width: 100%;
+.expansion-actions-row {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-action-col {
+  flex: 1;
+  font-size: 12px;
+  padding: 10px 4px;
+}
+
+.flow-check-result {
+  margin-top: 16px;
+  padding: 16px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.flow-check-item {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.flow-check-item:last-of-type {
+  border-bottom: none;
+}
+
+.flow-check-suggestion {
+  font-size: 13px;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.flow-check-connector {
+  font-family: 'Lora', Georgia, serif;
+  font-weight: 600;
+  color: var(--primary-dark);
+}
+
+.flow-check-revised {
+  font-family: 'Lora', Georgia, serif;
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.7;
+  padding: 6px 10px;
+  background: var(--primary-light);
+  border-radius: var(--radius-sm);
+  margin-bottom: 4px;
+}
+
+.flow-check-reason {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.flow-check-overall {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 10px;
+  text-align: center;
 }
 
 /* Insertion point picker */
@@ -658,13 +737,35 @@ input[type="date"]:focus {
 @media (min-width: 500px) {
   .home-calendar,
   .day-detail {
-    max-width: 340px;
+    max-width: 680px;
     margin-left: auto;
     margin-right: auto;
   }
 
   .cal-cell {
-    max-width: 32px;
+    max-width: 64px;
+    font-size: 14px;
+  }
+
+  .cal-weekdays {
+    font-size: 11px;
+    margin-bottom: 4px;
+  }
+
+  .cal-grid {
+    gap: 6px;
+  }
+
+  .streak-count {
+    font-size: 28px;
+  }
+
+  .cal-month {
+    font-size: 14px;
+  }
+
+  .cal-header {
+    margin-bottom: 12px;
   }
 }
 
@@ -1425,7 +1526,8 @@ input[type="date"]:focus {
 }
 
 /* Mobile: floating JP toggle button + overlay */
-.jp-float-btn {
+.jp-float-btn,
+.jp-overlay {
   display: none;
 }
 
@@ -1625,10 +1727,25 @@ input[type="date"]:focus {
   z-index: 200;
   transition: bottom 0.3s ease;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .toast.visible {
   bottom: 32px;
+}
+
+.toast-action {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 /* ============ Responsive ============ */
@@ -1841,6 +1958,18 @@ input[type="date"]:focus {
   color: #333;
 }
 
+.ls-instruction {
+  margin-top: 20px;
+  padding: 12px 16px;
+  background: #fff8e1;
+  border-left: 3px solid #f9a825;
+  border-radius: 4px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #555;
+  font-style: italic;
+}
+
 .ls-footer {
   text-align: center;
   padding: 24px;
@@ -1947,6 +2076,7 @@ input[type="date"]:focus {
   align-items: center;
   gap: 8px;
   flex: 1;
+  max-width: 200px;
   padding: 6px 12px;
   background: var(--primary-light);
   border-radius: var(--radius-sm);

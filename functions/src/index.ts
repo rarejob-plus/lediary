@@ -518,6 +518,42 @@ If the answer is already correct, return it as-is with empty explanation. Return
       return;
     }
 
+    // POST /api/diary/flow-check — check sentence connections and suggest improvements
+    if (path === "/api/diary/flow-check" && method === "POST") {
+      const { text } = req.body;
+      if (!text) {
+        res.status(400).json({ error: "text is required" });
+        return;
+      }
+
+      const systemPrompt = `You are an English writing coach helping a Japanese learner improve the flow and cohesion of their diary entry.
+Analyze how the sentences connect to each other. Focus ONLY on transitions and connections between sentences — not grammar or vocabulary.
+
+Return a JSON object:
+{
+  "suggestions": [
+    {
+      "between": "Quote the end of sentence A and start of sentence B where the connection is weak",
+      "suggestion": "The specific connector or transition to add (e.g., 'Actually,', 'That's why', ', so')",
+      "revised": "Show the two sentences naturally connected",
+      "reason": "日本語で簡潔に理由"
+    }
+  ],
+  "overall": "日本語で全体の流れについて一言コメント（良い場合は褒める）"
+}
+
+Rules:
+- Return 0-3 suggestions. If the text flows well, return empty suggestions array with a positive overall comment.
+- Keep suggestions practical and specific.
+- "between" should quote enough text to identify the location (5-10 words from each sentence).
+- Return ONLY JSON.`;
+
+      const response = await callGemini(systemPrompt, `Diary entry:\n${text}`);
+      const result = parseJsonObject<{ suggestions: Array<{ between: string; suggestion: string; revised: string; reason: string }>; overall: string }>(response);
+      res.json(result);
+      return;
+    }
+
     // POST /api/diary/lesson-sheet — generate lesson sheet from diary
     if (path === "/api/diary/lesson-sheet" && method === "POST") {
       const { postId } = req.body;

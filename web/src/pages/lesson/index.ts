@@ -75,9 +75,9 @@ function render(page: Element, data: LessonSheetData): void {
 
     <section id="ls-vocab" class="ls-section">
       <h2 class="ls-section-heading">Vocabulary</h2>
-      ${data.vocabulary.map((v) => `
+      ${data.vocabulary.map((v, i) => `
         <div class="ls-vocab-card">
-          <div class="ls-vocab-word">${esc(v.word)}</div>
+          <div class="ls-vocab-word">${i + 1}. ${esc(v.word)}</div>
           <div class="ls-vocab-def">${esc(v.definition)}</div>
           ${v.example ? `<div class="ls-vocab-ex">${esc(v.example)}</div>` : ''}
         </div>
@@ -88,6 +88,9 @@ function render(page: Element, data: LessonSheetData): void {
       <h2 class="ls-section-heading">Article</h2>
       <div class="ls-article-body">
         ${articleChunks.map((p) => `<p class="ls-article-p">${esc(p)}</p>`).join('')}
+      </div>
+      <div class="ls-instruction">
+        <p>After reading the article aloud, ask the student a few short comprehension questions about the content (e.g. "What is the main idea?" / "Why did ...?").</p>
       </div>
     </section>
 
@@ -120,6 +123,41 @@ function render(page: Element, data: LessonSheetData): void {
       }
     });
   });
+}
+
+export function initLessonSheetDemo(): void {
+  const page = document.querySelector('.ls-page')!;
+  const demoData: LessonSheetData = {
+    title: 'My First Time Trying a Standing Desk',
+    date: '2026-04-25',
+    vocabulary: [
+      { word: 'standing desk', definition: 'a desk designed to be used while standing up', example: 'I recently bought a standing desk for my home office.' },
+      { word: 'get used to', definition: 'to become familiar with something through experience', example: "It took me a week to get used to working while standing." },
+      { word: 'productivity', definition: 'the rate at which work is completed', example: 'My productivity actually improved after switching desks.' },
+      { word: 'take a toll on', definition: 'to have a negative effect over time', example: 'Sitting all day was starting to take a toll on my back.' },
+      { word: 'alternate', definition: 'to switch back and forth between two things', example: 'I alternate between sitting and standing every hour.' },
+    ],
+    articleBody: "I bought a standing desk last month because sitting all day was taking a toll on my back. At first, my legs got tired really quickly, and I could only stand for about 30 minutes at a time.\n\nBut after a week, I got used to it and started standing for two hours straight. I noticed that I feel more focused when I'm standing, especially in the morning. I think it's because standing keeps me alert.\n\nNow I alternate between sitting and standing throughout the day. I usually stand in the morning when I need to concentrate, and sit in the afternoon when I'm doing lighter tasks like reading emails. My back pain has improved a lot, and I feel more energetic overall.",
+    discussionTopics: [
+      {
+        topic: 'About the Diary',
+        questions: [
+          'Why did the writer decide to buy a standing desk?',
+          'How long did it take for the writer to get used to standing?',
+          'When does the writer prefer to stand versus sit?',
+        ],
+      },
+      {
+        topic: 'Your Experience',
+        questions: [
+          'Have you ever tried using a standing desk? If so, what was your experience?',
+          'What do you usually do to stay comfortable while working at a desk?',
+          'Do you think the way we sit or stand affects how well we work? Why or why not?',
+        ],
+      },
+    ],
+  };
+  render(page, demoData);
 }
 
 function splitIntoChunks(text: string): string[] {
