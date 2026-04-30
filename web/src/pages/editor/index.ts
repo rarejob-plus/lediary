@@ -782,9 +782,7 @@ function showCompletedView(post: DiaryPost, enInput: HTMLTextAreaElement): void 
       enInput.classList.add('editor-textarea-minimal', 'en-textarea');
       editBtn.style.display = 'none';
       translateBtn.style.display = 'none';
-      // 編集中はつながり確認のフィードバック（修正後英文を含む）を隠す
-      const existingFlow = (enInput.parentNode as HTMLElement | null)?.querySelector('.flow-check-result') as HTMLElement | null;
-      if (existingFlow) existingFlow.style.display = 'none';
+      // つながり確認の提案は編集の参考にしたいので残す（保存後に削除）
 
       const saveBtn = document.createElement('button');
       saveBtn.className = 'btn btn-primary';
