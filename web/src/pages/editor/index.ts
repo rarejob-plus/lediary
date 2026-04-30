@@ -682,6 +682,11 @@ function showCompletedView(post: DiaryPost, enInput: HTMLTextAreaElement): void 
   document.querySelectorAll('.editor-section').forEach((s) => (s as HTMLElement).style.display = 'none');
   document.getElementById('hint-btn')!.style.display = 'none';
 
+  // モバイル用 JP overlay/トグルが body に残っている場合があるので必ず除去
+  // （morning/lesson/diary 全モード共通）
+  document.querySelector('.jp-float-btn')?.remove();
+  document.querySelector('.jp-overlay')?.remove();
+
   // Show writing area with readonly English
   const writingArea = document.getElementById('writing-area')!;
   writingArea.classList.remove('two-col');
@@ -689,6 +694,8 @@ function showCompletedView(post: DiaryPost, enInput: HTMLTextAreaElement): void 
   const writingRef = document.getElementById('writing-ref')!;
   writingRef.style.display = 'none';
   document.getElementById('writing-ref-jp-sticky')!.style.display = 'none';
+  // sticky JP テキストもクリア（writing-ref-jp の textContent が残る可能性）
+  document.getElementById('writing-ref-jp')!.textContent = '';
 
   enInput.readOnly = true;
   enInput.classList.add('readonly');
