@@ -830,8 +830,46 @@ function renderExpansionQuestions(post: DiaryPost, enInput: HTMLTextAreaElement)
   const section = document.getElementById('expansion-section')!;
   const container = document.getElementById('expansion-questions')!;
   const questions = post.expansionQuestions;
+
+  // Remove existing "more" button if any (cleanup before re-render)
+  section.querySelector('.expansion-more-wrap')?.remove();
+
   if (!questions || questions.length === 0) {
-    section.style.display = 'none';
+    // 自動生成は廃止。再添削で本文が変わるケースで質問が古くなる問題を避けるため、
+    // ユーザーが本文を確定したタイミングで明示的に生成させる。
+    container.innerHTML = `
+      <div class="expansion-empty">
+        <p class="expansion-empty-hint">添削が一段落したら、5W1H で深掘り質問を作れます</p>
+        <button class="btn btn-primary expansion-generate-btn">質問を生成</button>
+      </div>
+    `;
+    section.style.display = 'block';
+
+    const genBtn = container.querySelector('.expansion-generate-btn') as HTMLButtonElement;
+    genBtn.addEventListener('click', async () => {
+      genBtn.disabled = true;
+      genBtn.innerHTML = '<span class="loading-spinner"></span> 生成中...';
+      try {
+        const dateInput = document.getElementById('input-date') as HTMLInputElement;
+        const res = await api.post<{ expansionQuestions: DiaryPost['expansionQuestions'] }>('/diary/expand', {
+          contentJp: (document.getElementById('input-jp') as HTMLTextAreaElement).value,
+          userTranslation: enInput.value,
+          date: dateInput.value,
+          mode: currentMode,
+        });
+        if (res.expansionQuestions && res.expansionQuestions.length > 0) {
+          renderExpansionQuestions({ ...post, expansionQuestions: res.expansionQuestions }, enInput);
+        } else {
+          showToast('質問を生成できませんでした');
+          genBtn.disabled = false;
+          genBtn.textContent = '質問を生成';
+        }
+      } catch {
+        showToast('生成に失敗しました');
+        genBtn.disabled = false;
+        genBtn.textContent = '質問を生成';
+      }
+    });
     return;
   }
 

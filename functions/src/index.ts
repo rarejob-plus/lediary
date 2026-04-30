@@ -212,21 +212,12 @@ Return a JSON object with exactly these fields:
       "definition": "concise definition in Japanese",
       "example": "a natural example sentence using the word"
     }
-  ],
-  "expansionQuestions": [
-    {
-      "question": "A 5W1H question to expand a specific part of the diary (Why/How/What/When/Where/Who)",
-      "hintJa": "日本語での回答ヒント（1文）",
-      "hintPhrases": ["useful English phrase for answering", "another helpful expression"],
-      "afterSentence": "The user's sentence after which the answer should be inserted (exact match from the translation)"
-    }
   ]
 }
 
 Rules:
 - feedback: Compare the user's translation sentence by sentence and suggest corrections appropriate to the CORRECTION LEVEL above. For each correction: "original" must be the user's FULL sentence, "corrected" must be the corrected FULL sentence, and "explanation" must explain in Japanese WHY the corrected version is better — specifically describe the nuance difference between the two expressions (e.g., when each would be used, what impression each gives, what subtle meaning differs). ALL alternatives MUST sound natural in casual spoken English — never use formal/written words like "therefore", "furthermore", "nevertheless". If the user's translation is empty, return an empty array [].
 - vocabulary: Extract 3-5 useful vocabulary items ONLY from expressions used in the "corrected" sentences above. These must be words/phrases that actually appear in your corrections. Do NOT include unrelated vocabulary.
-- expansionQuestions: Generate exactly 3 questions that dig deeper into SPECIFIC parts of the diary using 5W1H (Why/How/What/When/Where/Who). Each question should target a sentence that could be expanded with more detail. "afterSentence" must exactly match one of the user's sentences — the answer will be inserted right after it. "hintPhrases" should contain 2-3 useful English phrases/collocations the learner can use to answer the question (e.g. "because I stayed up late", "I couldn't help but..."). Example: if the user wrote "I felt sleepy all day", ask "Why did you feel sleepy even though you went to bed early?" with afterSentence "I felt sleepy all day."
 
 Return ONLY the JSON object, no markdown fences or extra text.`;
 
