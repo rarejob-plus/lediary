@@ -1107,6 +1107,9 @@ function renderFlowCheckResult(result: { suggestions: Array<{ between: string; s
   }
 
   section.appendChild(div);
+
+  // 提案の英文（connector / revised）をテキスト選択で Flashcard 保存できるように
+  enableTextSelectionBookmark(div);
 }
 
 function initTabs(): void {
