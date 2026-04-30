@@ -106,6 +106,7 @@ export function editorHTML(): string {
     <div class="editor-header">
       <button class="back-btn" id="back-btn">&larr;</button>
       <h2></h2>
+      <button class="delete-entry-btn" id="delete-entry-btn" title="この日記を削除" style="display:none;">削除</button>
     </div>
 
     <input type="hidden" id="input-date" />
@@ -220,6 +221,24 @@ export async function initEditor(): Promise<void> {
   document.getElementById('correction-back-btn')?.addEventListener('click', () => {
     navigate('/');
   });
+
+  // 既存エントリ編集時のみ削除ボタンを表示
+  const deleteBtn = document.getElementById('delete-entry-btn') as HTMLButtonElement | null;
+  if (deleteBtn && postId) {
+    deleteBtn.style.display = '';
+    deleteBtn.addEventListener('click', async () => {
+      if (!confirm('この日記を削除しますか？元に戻せません。')) return;
+      deleteBtn.disabled = true;
+      try {
+        await api.delete(`/diary/posts/${postId}`);
+        showToast('削除しました');
+        navigate('/');
+      } catch {
+        showToast('削除に失敗しました');
+        deleteBtn.disabled = false;
+      }
+    });
+  }
 
   const dateInput = document.getElementById('input-date') as HTMLInputElement;
   const jpInput = document.getElementById('input-jp') as HTMLTextAreaElement;
