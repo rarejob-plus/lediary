@@ -753,7 +753,7 @@ function showCompletedView(post: DiaryPost, enInput: HTMLTextAreaElement): void 
 
     const flowBtn = document.createElement('button');
     flowBtn.className = 'btn btn-ghost btn-retranslate btn-flow-check';
-    flowBtn.textContent = 'つながり確認';
+    flowBtn.textContent = '流れを整える';
     btnRow.appendChild(flowBtn);
 
     flowBtn.addEventListener('click', async () => {
@@ -768,7 +768,7 @@ function showCompletedView(post: DiaryPost, enInput: HTMLTextAreaElement): void 
         showToast('チェックに失敗しました');
       } finally {
         flowBtn.disabled = false;
-        flowBtn.textContent = 'つながり確認';
+        flowBtn.textContent = '流れを整える';
       }
     });
 
@@ -780,7 +780,7 @@ function showCompletedView(post: DiaryPost, enInput: HTMLTextAreaElement): void 
       enInput.classList.add('editor-textarea-minimal', 'en-textarea');
       editBtn.style.display = 'none';
       translateBtn.style.display = 'none';
-      // つながり確認の提案は編集の参考にしたいので残す（保存後に削除）
+      // 流れを整えるの提案は編集の参考にしたいので残す（保存後に削除）
 
       const saveBtn = document.createElement('button');
       saveBtn.className = 'btn btn-primary';
@@ -1090,7 +1090,7 @@ function renderFlowCheckResult(result: { suggestions: Array<{ between: string; s
   div.className = 'flow-check-result';
 
   if (!result.suggestions || result.suggestions.length === 0) {
-    div.innerHTML = `<div class="flow-check-overall">${escapeHTML(result.overall || '文のつながりは自然です')}</div>`;
+    div.innerHTML = `<div class="flow-check-overall">${escapeHTML(result.overall || '文の流れは自然です')}</div>`;
   } else {
     div.innerHTML = `
       ${result.suggestions.map((s) => `
