@@ -164,12 +164,12 @@ export function editorHTML(): string {
     <!-- Tabs (shown after correction complete) -->
     <div id="completed-tabs" style="display:none;">
       <div class="diary-tabs">
-        <button class="diary-tab active" data-tab="tab-diary">日記</button>
-        <button class="diary-tab" data-tab="tab-practice">練習</button>
+        <button class="diary-tab active" data-tab="tab-diary">覚えたいフレーズ</button>
+        <button class="diary-tab" data-tab="tab-practice">シャドーイング</button>
         <button class="diary-tab" data-tab="tab-lesson">レッスン準備</button>
       </div>
 
-      <!-- Tab: 日記 -->
+      <!-- Tab: 覚えたいフレーズ -->
       <div id="tab-diary" class="diary-tab-content active">
         <div id="completed-vocab"></div>
       </div>
@@ -194,7 +194,6 @@ export function editorHTML(): string {
       <!-- Tab: レッスン準備 -->
       <div id="tab-lesson" class="diary-tab-content">
         <div id="expansion-section">
-          <h3 class="expansion-title">日記を膨らまそう</h3>
           <div id="expansion-questions"></div>
         </div>
       </div>
@@ -533,7 +532,6 @@ function renderVocab(post: DiaryPost, enInput: HTMLTextAreaElement): void {
   }
 
   vocabContainer.innerHTML = `
-    <h3 class="completed-section-title">覚えたいフレーズ</h3>
     ${visible.map((v) => `
       <div class="vocab-item" data-word="${escapeAttr(v.word)}">
         <span class="vocab-en">${escapeHTML(v.word)}</span>
@@ -1166,7 +1164,7 @@ function renderReadAloud(diaryText: string): void {
         </div>
       </div>
     </div>
-    <p class="ra-paragraph">${escapeHTML(diaryText)}</p>
+    <p class="ra-paragraph" style="display:none;">${escapeHTML(diaryText)}</p>
   `;
 
   const generateBtn = container.querySelector('.ra-generate-btn') as HTMLButtonElement;
@@ -1226,6 +1224,7 @@ function renderReadAloud(diaryText: string): void {
 
       (container.querySelector('.ra-generate-wrap') as HTMLElement).style.display = 'none';
       (container.querySelector('.ra-controls') as HTMLElement).style.display = '';
+      (container.querySelector('.ra-paragraph') as HTMLElement).style.display = '';
     } catch {
       showToast('音声の生成に失敗しました');
       generateBtn.disabled = false;
