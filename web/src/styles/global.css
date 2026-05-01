@@ -1481,6 +1481,15 @@ input[type="date"]:focus {
   flex: 1;
 }
 
+/* iOS Safari は font-size < 16px の input/textarea にフォーカスすると自動ズームするため、
+   モバイルでは 16px に引き上げる */
+@media (max-width: 700px) {
+  .correction-edit-textarea,
+  .expansion-input {
+    font-size: 16px;
+  }
+}
+
 .correction-complete {
   background: var(--primary-light);
   border-radius: var(--radius);
