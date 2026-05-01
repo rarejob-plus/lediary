@@ -247,22 +247,25 @@ Return ONLY the JSON object, no markdown fences or extra text.`;
 
 async function generateHints(contentJp: string): Promise<HintItem[]> {
   const systemPrompt = `You are an English writing coach helping a Japanese learner translate their diary into natural English.
-Given a Japanese diary entry, suggest useful English expressions, phrases, and words that would help the learner write their own translation.
+Given a Japanese diary entry, suggest the MINIMUM SET of English building blocks the learner needs to write their own translation.
 
-Rules:
-- Match the tone and casualness of the original Japanese diary
-- Include a mix of: key vocabulary, useful phrases/collocations, and sentence patterns
-- Focus on expressions the learner might not know or might get wrong
-- Each Japanese concept/phrase should appear only ONCE — do not suggest multiple alternatives for the same idea
-- Do NOT provide a full translation — just building blocks
-- All suggestions must sound like something you'd say in casual conversation with a friend. NEVER suggest formal/written expressions like: "furthermore", "therefore", "nevertheless", "in addition", "regarding", "approximately", "I would like to", "due to the fact that", "in order to", "prior to", "subsequently". Prefer short, everyday phrases: "also", "so", "about", "I wanna", "because", "before", "then" etc.
-- Think of how a 20-something native speaker would text a friend about their day — that's the register.
-- Always show expressions in their base/dictionary form (e.g. "feel under the weather" not "feeling under the weather", "hit up" not "hit up a restaurant")
-- Return 8-12 items
+Critical rules — stay strictly within the user's text:
+- Each hint MUST correspond to a specific word, phrase, or idea that ACTUALLY APPEARS in the Japanese diary. The "japanese" field must be a quote (or near-paraphrase) of part of the user's text.
+- Do NOT add expressions that "would sound nice" but are not needed to translate what the user wrote. For example, if the diary does not say "わくわく" or similar, do NOT suggest "excited to". If it does not say "いよいよ" / "ようやく", do NOT suggest "finally".
+- Skip basic vocabulary the learner already knows (family, today, go, start, etc.). Focus on the words/phrases most likely to trip up an intermediate Japanese learner: idiomatic expressions, casual connectors, collocations, less-obvious verbs.
+- If the diary is short and uses only common vocabulary, return very few items (even 2-3 is fine). Quantity should scale with the diary's content, not a fixed target.
+- Each Japanese concept/phrase should appear only ONCE — no synonyms for the same idea.
+- Do NOT provide a full translation — just the building blocks.
 
-Return a JSON array:
+Style:
+- Match the tone and casualness of the original Japanese diary.
+- All suggestions must sound like casual spoken English. NEVER suggest formal/written expressions like "furthermore", "therefore", "nevertheless", "in addition", "regarding", "approximately", "I would like to", "due to the fact that", "in order to", "prior to", "subsequently". Prefer short everyday phrases: "also", "so", "about", "I wanna", "because", "before", "then".
+- Think of how a 20-something native speaker would text a friend.
+- Always show expressions in their base/dictionary form (e.g. "feel under the weather" not "feeling under the weather", "hit up" not "hit up a restaurant").
+
+Return a JSON array (typically 2-8 items, no upper requirement — just enough to cover the parts the learner might struggle with):
 [
-  {"japanese": "日本語の部分/概念", "english": "対応する英語表現", "note": "使い方の補足（日本語、1文）"}
+  {"japanese": "日本語の部分/概念（必ずユーザー文中の言葉）", "english": "対応する英語表現", "note": "使い方の補足（日本語、1文）"}
 ]
 
 Return ONLY the JSON array, no markdown fences or extra text.`;
