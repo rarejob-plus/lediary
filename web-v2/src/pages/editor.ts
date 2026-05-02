@@ -44,8 +44,10 @@ export function renderEditor(root: HTMLElement): void {
   const dateObj = new Date(dateStr + 'T00:00:00');
   const validModes: Mode[] = ['morning', 'lesson', 'diary', 'story'];
   let currentMode: Mode = validModes.includes(initialMode as Mode) ? (initialMode as Mode) : 'diary';
+  const action = params.get('action'); // 'correct' | 'flow' | null
   let stoic = localStorage.getItem(STOIC_KEY) === '1';
   let currentFeedback: FeedbackItem[] = [];
+  let feedbackKind: 'correct' | 'flow' = 'correct';
   let rewrites: string[] = [];
   let revealed: boolean[] = [];
   let submitting = false;
@@ -149,7 +151,9 @@ export function renderEditor(root: HTMLElement): void {
 
     const label = document.createElement('div');
     label.className = 'compose-label';
-    label.textContent = '添削（自分で書き直して定着させよう）';
+    label.textContent = feedbackKind === 'flow'
+      ? '流れを整える（自分で書き直して定着させよう）'
+      : '添削（自分で書き直して定着させよう）';
     correctionSection.appendChild(label);
 
     const toggleRow = document.createElement('div');
@@ -268,8 +272,9 @@ export function renderEditor(root: HTMLElement): void {
     btn.disabled = true;
     btn.textContent = '添削中…';
     try {
+      feedbackKind = 'correct';
       currentFeedback = await loadFeedback(jp, en, dateStr, currentMode);
-      rewrites = [];     // 新規 feedback では旧 rewrites をクリア
+      rewrites = [];
       revealed = [];
       renderCorrection();
       correctionSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -283,17 +288,48 @@ export function renderEditor(root: HTMLElement): void {
     }
   });
 
+  // 流れを整える 経由で来たときの自動トリガー（再添削も同様）
+  async function triggerFlow(en: string) {
+    if (submitting) return;
+    submitting = true;
+    const btn = actionRow.querySelector('#correct-btn') as HTMLButtonElement;
+    btn.disabled = true;
+    btn.textContent = '流れを確認中…';
+    try {
+      feedbackKind = 'flow';
+      currentFeedback = await loadFlowCheck(en);
+      rewrites = [];
+      revealed = [];
+      renderCorrection();
+      correctionSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (e) {
+      console.error(e);
+      alert('流れチェックに失敗しました');
+    } finally {
+      submitting = false;
+      btn.disabled = false;
+      btn.textContent = 'もう一度添削';
+    }
+  }
+
   root.appendChild(wrap);
   root.appendChild(renderMockBanner());
 
-  // Pre-fill if existing entry for this date+mode
+  // Pre-fill if existing entry for this date+mode, then optionally auto-trigger
   loadExisting(dateStr, currentMode).then((entry) => {
-    if (!entry) return;
-    (jpBlock.querySelector('#jp-input') as HTMLTextAreaElement).value = entry.contentJp;
-    (enBlock.querySelector('#en-input') as HTMLTextAreaElement).value = entry.userTranslation;
-    if (entry.feedback?.length) {
-      currentFeedback = entry.feedback;
-      renderCorrection();
+    if (entry) {
+      (jpBlock.querySelector('#jp-input') as HTMLTextAreaElement).value = entry.contentJp;
+      (enBlock.querySelector('#en-input') as HTMLTextAreaElement).value = entry.userTranslation;
+      if (entry.feedback?.length) {
+        feedbackKind = 'correct';
+        currentFeedback = entry.feedback;
+        renderCorrection();
+      }
+    }
+    if (action === 'flow' && entry?.userTranslation) {
+      triggerFlow(entry.userTranslation);
+    } else if (action === 'correct' && entry) {
+      (actionRow.querySelector('#correct-btn') as HTMLButtonElement).click();
     }
   }).catch(() => {});
 }
@@ -333,6 +369,24 @@ async function loadFeedback(contentJp: string, userTranslation: string, date: st
   });
   invalidateEntriesCache();
   return res.feedback || [];
+}
+
+interface FlowCheckResponse {
+  suggestions?: { between: string; suggestion: string; revised: string; reason: string }[];
+  overall?: string;
+}
+
+async function loadFlowCheck(text: string): Promise<FeedbackItem[]> {
+  if (!getCurrentUser()) {
+    await new Promise((r) => setTimeout(r, 600));
+    return SAMPLE_FEEDBACK;
+  }
+  const res = await api.post<FlowCheckResponse>('/diary/flow-check', { text });
+  return (res.suggestions || []).map((s) => ({
+    original: s.between,
+    corrected: s.revised,
+    explanation: `「${s.suggestion}」を入れると自然になります — ${s.reason}`,
+  }));
 }
 
 function renderHintsInto(card: HTMLElement, hints: HintItem[]): void {
