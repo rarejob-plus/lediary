@@ -1,29 +1,45 @@
 import { renderHeader, renderMockBanner } from '../components/header';
 import { icons } from '../components/icons';
 import { coverFor } from '../components/cover';
-import { findEntry, MODE_META } from '../data/mock';
+import { MODE_META, type DiaryEntry } from '../data/mock';
+import { fetchEntry } from '../data/entries';
 import { solarTerm, dayOfYear, daysInYear } from '../data/dateInfo';
 import { navigate } from '../router';
 
 export function renderEntry(root: HTMLElement, id: string): void {
   root.appendChild(renderHeader(null));
 
-  const entry = findEntry(id);
-  if (!entry) {
-    const wrap = document.createElement('div');
-    wrap.style.cssText = 'padding: 32px 24px;';
-    wrap.innerHTML = `
-      <button class="btn btn-sm" id="back">${icons.chevronLeft(14)} 戻る</button>
-      <p style="margin-top:18px;color:var(--text-muted);">エントリが見つかりませんでした</p>
-    `;
-    wrap.querySelector('#back')!.addEventListener('click', () => navigate('/'));
-    root.appendChild(wrap);
-    root.appendChild(renderMockBanner());
-    return;
-  }
+  const placeholder = document.createElement('p');
+  placeholder.style.cssText = 'color:var(--text-muted);text-align:center;padding:60px 24px;font-size:13px;';
+  placeholder.textContent = '読み込み中…';
+  root.appendChild(placeholder);
+  root.appendChild(renderMockBanner());
 
+  fetchEntry(id).then((entry) => {
+    placeholder.remove();
+    if (!entry) {
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'padding: 32px 24px;';
+      wrap.innerHTML = `
+        <button class="btn btn-sm" id="back">${icons.chevronLeft(14)} 戻る</button>
+        <p style="margin-top:18px;color:var(--text-muted);">エントリが見つかりませんでした</p>
+      `;
+      wrap.querySelector('#back')!.addEventListener('click', () => navigate('/'));
+      root.insertBefore(wrap, root.querySelector('.mock-banner'));
+      return;
+    }
+    renderEntryBody(root, entry);
+  }).catch((err) => {
+    placeholder.textContent = '読み込みに失敗しました';
+    console.error(err);
+  });
+}
+
+function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
   const meta = MODE_META[entry.mode];
   const d = new Date(entry.date + 'T00:00:00');
+  // remove placeholder/banner so we can append in order, banner re-added at end
+  root.querySelector('.mock-banner')?.remove();
 
   // Hero
   const hero = document.createElement('div');

@@ -9,6 +9,9 @@
     "preview": "vite preview",
     "deploy": "npm run build && firebase deploy --only hosting:lediary-v2 --project otokichi-app"
   },
+  "dependencies": {
+    "firebase": "^11.10.0"
+  },
   "devDependencies": {
     "typescript": "^5.7.2",
     "vite": "^6.0.7"

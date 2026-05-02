@@ -1,17 +1,14 @@
 import { renderHeader, renderFab, renderMockBanner } from '../components/header';
 import { icons } from '../components/icons';
 import { coverFor } from '../components/cover';
-import { MOCK_ENTRIES, MODE_META, type DiaryEntry, type Mode } from '../data/mock';
+import { MODE_META, type DiaryEntry, type Mode } from '../data/mock';
+import { fetchEntries } from '../data/entries';
 import { solarTerm, dayOfYear, daysInYear } from '../data/dateInfo';
 import { navigate } from '../router';
 
 function todayStr(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-function dayKey(d: string): string {
-  return d;
 }
 
 function dayHeaderParts(dateStr: string): { num: string; weekday: string; monthYear: string } {
@@ -28,6 +25,19 @@ export function renderTimeline(root: HTMLElement): void {
 
   const wrap = document.createElement('div');
   wrap.className = 'timeline';
+  wrap.innerHTML = `<p style="color:var(--text-muted);text-align:center;padding:40px 0;font-size:13px;">読み込み中…</p>`;
+  root.appendChild(wrap);
+  root.appendChild(renderFab());
+  root.appendChild(renderMockBanner());
+
+  fetchEntries().then((entries) => renderBody(wrap, entries)).catch((err) => {
+    console.error(err);
+    wrap.innerHTML = `<p style="color:var(--text-muted);text-align:center;padding:40px 0;">読み込みに失敗しました</p>`;
+  });
+}
+
+function renderBody(wrap: HTMLElement, entries: DiaryEntry[]): void {
+  wrap.innerHTML = '';
 
   // Top row: streak + today label
   const topRow = document.createElement('div');
@@ -40,7 +50,7 @@ export function renderTimeline(root: HTMLElement): void {
 
   // Today's 3-mode cards
   const today = todayStr();
-  const todayEntries = MOCK_ENTRIES.filter((e) => e.date === today);
+  const todayEntries = entries.filter((e) => e.date === today);
   const todayByMode = new Map(todayEntries.map((e) => [e.mode, e]));
 
   const todayRow = document.createElement('div');
@@ -72,14 +82,13 @@ export function renderTimeline(root: HTMLElement): void {
 
   // Group past entries by date (excluding today)
   const groups = new Map<string, DiaryEntry[]>();
-  for (const e of MOCK_ENTRIES) {
+  for (const e of entries) {
     if (e.date === today) continue;
-    const k = dayKey(e.date);
-    if (!groups.has(k)) groups.set(k, []);
-    groups.get(k)!.push(e);
+    if (!groups.has(e.date)) groups.set(e.date, []);
+    groups.get(e.date)!.push(e);
   }
 
-  for (const [date, entries] of groups) {
+  for (const [date, dayEntries] of groups) {
     const day = document.createElement('div');
     day.className = 'timeline-day';
 
@@ -95,7 +104,7 @@ export function renderTimeline(root: HTMLElement): void {
     `;
     day.appendChild(header);
 
-    for (const entry of entries) {
+    for (const entry of dayEntries) {
       const meta = MODE_META[entry.mode];
       const card = document.createElement('button');
       card.className = 'entry-card';
@@ -125,9 +134,12 @@ export function renderTimeline(root: HTMLElement): void {
     wrap.appendChild(day);
   }
 
-  root.appendChild(wrap);
-  root.appendChild(renderFab());
-  root.appendChild(renderMockBanner());
+  if (entries.length === 0) {
+    const empty = document.createElement('p');
+    empty.style.cssText = 'color:var(--text-muted);text-align:center;padding:40px 0;font-style:italic;';
+    empty.textContent = 'まだエントリがありません。今日のひとことから始めましょう。';
+    wrap.appendChild(empty);
+  }
 }
 
 function iconFor(name: 'sun' | 'graduation' | 'moon', size = 11): string {
