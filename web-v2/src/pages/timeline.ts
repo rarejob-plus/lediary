@@ -32,7 +32,7 @@ export function renderTimeline(root: HTMLElement): void {
   const topRow = document.createElement('div');
   topRow.className = 'timeline-top-row';
   topRow.innerHTML = `
-    <span class="timeline-today-label">今日 (${formatJpDate(new Date())})</span>
+    <span class="timeline-today-label">${formatYmd(new Date())}</span>
     <div class="timeline-streak">${icons.flame(13)} <span>4 day streak</span></div>
   `;
   wrap.appendChild(topRow);
@@ -133,8 +133,8 @@ function iconFor(name: 'sun' | 'graduation' | 'moon', size = 11): string {
   return icons.moon(size);
 }
 
-function formatJpDate(d: Date): string {
-  return d.toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' });
+function formatYmd(d: Date): string {
+  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function escapeHtml(s: string): string {
