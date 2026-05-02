@@ -31,6 +31,7 @@ export interface DiaryEntry {
   weather?: string; // mock — currently unused
   cover?: string; // CSS background string override for hero placeholder
   mood?: string; // 感情語（AI feedback 解析結果想定）— "はずむ" "穏やか" 等
+  lessonSheetId?: string; // 共有レッスンシート ID（生成済みなら）
   contentJp: string;
   userTranslation: string;
   feedback: FeedbackItem[];

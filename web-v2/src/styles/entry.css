@@ -273,3 +273,54 @@
   font-size: 13px;
   padding: 16px 0;
 }
+
+/* Flow check inline panel */
+.flow-check-panel {
+  background: var(--surface-warm);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  margin: 8px 0 32px;
+  border-left: 3px solid var(--accent);
+}
+
+.flow-check-item {
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.flow-check-item:last-child {
+  border-bottom: none;
+}
+
+.flow-check-suggestion {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.flow-check-suggestion strong {
+  color: var(--text);
+  font-family: var(--serif);
+  font-weight: 600;
+}
+
+.flow-check-revised {
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.flow-check-reason {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.flow-check-overall {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-style: italic;
+  margin-top: 4px;
+}

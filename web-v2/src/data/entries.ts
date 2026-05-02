@@ -19,6 +19,7 @@ interface RawPost {
   createdAt?: number | { _seconds: number };
   updatedAt?: number | { _seconds: number };
   mood?: string;
+  lessonSheetId?: string;
 }
 
 function timeFromCreatedAt(c?: RawPost['createdAt']): string {
@@ -45,6 +46,7 @@ function toEntry(raw: RawPost): DiaryEntry {
     vocabulary: raw.vocabulary || [],
     expansionQuestions: raw.expansionQuestions || [],
     mood: raw.mood,
+    lessonSheetId: raw.lessonSheetId,
     createdAt: ms,
   };
 }

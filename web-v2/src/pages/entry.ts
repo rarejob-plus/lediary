@@ -85,9 +85,62 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
   actions.querySelector('#edit')!.addEventListener('click', () => {
     navigate(`/editor?date=${entry.date}&mode=${entry.mode}`);
   });
-  actions.querySelector('#redo')!.addEventListener('click', () => alert('もう一度添削モック'));
-  actions.querySelector('#flow')!.addEventListener('click', () => alert('流れを整えるモック'));
-  actions.querySelector('#sheet')!.addEventListener('click', () => alert('レッスンシート作成モック'));
+  actions.querySelector('#redo')!.addEventListener('click', () => {
+    // エディタを既存内容で開いて、ユーザーが「添削してもらう」を押す動線
+    navigate(`/editor?date=${entry.date}&mode=${entry.mode}`);
+  });
+  const flowBtn = actions.querySelector('#flow') as HTMLButtonElement;
+  flowBtn.addEventListener('click', async () => {
+    if (!getCurrentUser()) {
+      alert('ログインが必要です');
+      return;
+    }
+    const original = flowBtn.textContent;
+    flowBtn.disabled = true;
+    flowBtn.textContent = '確認中…';
+    try {
+      const res = await api.post<FlowCheckResult>('/diary/flow-check', { text: entry.userTranslation });
+      renderFlowCheck(content, res);
+    } catch (err) {
+      console.error(err);
+      alert('流れチェックに失敗しました');
+    } finally {
+      flowBtn.disabled = false;
+      flowBtn.textContent = original;
+    }
+  });
+  const sheetBtn = actions.querySelector('#sheet') as HTMLButtonElement;
+  if (entry.lessonSheetId) {
+    sheetBtn.innerHTML = `${icons.share(14)} シートを開く`;
+  }
+  sheetBtn.addEventListener('click', async () => {
+    if (!getCurrentUser()) {
+      alert('ログインが必要です');
+      return;
+    }
+    if (entry.lessonSheetId) {
+      window.open(`https://lediary.web.app/s/${entry.lessonSheetId}`, '_blank');
+      return;
+    }
+    const original = sheetBtn.innerHTML;
+    sheetBtn.disabled = true;
+    sheetBtn.textContent = '作成中…';
+    try {
+      const res = await api.post<{ shareId: string }>('/diary/lesson-sheet', { postId: entry.id });
+      entry.lessonSheetId = res.shareId;
+      sheetBtn.innerHTML = `${icons.share(14)} シートを開く`;
+      sheetBtn.disabled = false;
+      invalidateEntriesCache();
+      const url = `https://lediary.web.app/s/${res.shareId}`;
+      window.open(url, '_blank');
+      navigator.clipboard?.writeText(url).catch(() => {});
+    } catch (err) {
+      console.error(err);
+      alert('レッスンシート作成に失敗しました');
+      sheetBtn.disabled = false;
+      sheetBtn.innerHTML = original;
+    }
+  });
   actions.querySelector('#del')!.addEventListener('click', async () => {
     if (!confirm('この日記を削除しますか？元に戻せません。')) return;
     const delBtn = actions.querySelector('#del') as HTMLButtonElement;
@@ -116,12 +169,45 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
   body.textContent = entry.userTranslation;
   content.appendChild(body);
 
+  // 流れを整える結果の挿入位置（ボタン押下時に renderFlowCheck が差し込む）
+  const flowCheckSlot = document.createElement('div');
+  flowCheckSlot.id = 'flow-check-slot';
+  content.appendChild(flowCheckSlot);
+
   appendSection(content, '覚えたいフレーズ', renderVocabSection(entry.vocabulary), true);
   appendSection(content, 'シャドーイング', renderShadowingSection(entry.userTranslation), false);
   appendSection(content, '日記を膨らませる', renderExpansionSection(entry.expansionQuestions), false);
 
   root.appendChild(content);
   root.appendChild(renderMockBanner());
+}
+
+interface FlowCheckResult {
+  suggestions: { between: string; suggestion: string; revised: string; reason: string }[];
+  overall: string;
+}
+
+function renderFlowCheck(parent: HTMLElement, result: FlowCheckResult): void {
+  const slot = parent.querySelector('#flow-check-slot') as HTMLElement;
+  slot.innerHTML = '';
+  const panel = document.createElement('div');
+  panel.className = 'flow-check-panel';
+  if (!result.suggestions || result.suggestions.length === 0) {
+    panel.innerHTML = `<div class="flow-check-overall">${escapeHtml(result.overall || '文の流れは自然です')}</div>`;
+  } else {
+    panel.innerHTML = `
+      ${result.suggestions.map((s) => `
+        <div class="flow-check-item">
+          <div class="flow-check-suggestion"><strong>${escapeHtml(s.suggestion)}</strong> を入れると自然に</div>
+          <div class="flow-check-revised">${escapeHtml(s.revised)}</div>
+          <div class="flow-check-reason">${escapeHtml(s.reason)}</div>
+        </div>
+      `).join('')}
+      <div class="flow-check-overall">${escapeHtml(result.overall)}</div>
+    `;
+  }
+  slot.appendChild(panel);
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function appendSection(parent: HTMLElement, title: string, body: HTMLElement, openByDefault: boolean): void {
