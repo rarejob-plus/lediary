@@ -2,8 +2,10 @@ import { renderHeader, renderMockBanner } from '../components/header';
 import { icons } from '../components/icons';
 import { coverFor } from '../components/cover';
 import { MODE_META, type DiaryEntry } from '../data/mock';
-import { fetchEntry } from '../data/entries';
+import { fetchEntry, invalidateEntriesCache } from '../data/entries';
 import { solarTerm, dayOfYear, daysInYear } from '../data/dateInfo';
+import { api } from '../api/client';
+import { getCurrentUser } from '../auth';
 import { navigate } from '../router';
 
 export function renderEntry(root: HTMLElement, id: string): void {
@@ -80,14 +82,26 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
     <button class="btn btn-sm" id="sheet">${icons.share(14)} レッスンシート</button>
     <button class="btn btn-sm btn-ghost danger" id="del" title="削除">${icons.trash(14)}</button>
   `;
-  actions.querySelector('#edit')!.addEventListener('click', () => alert('編集モック'));
+  actions.querySelector('#edit')!.addEventListener('click', () => {
+    navigate(`/editor?date=${entry.date}&mode=${entry.mode}`);
+  });
   actions.querySelector('#redo')!.addEventListener('click', () => alert('もう一度添削モック'));
   actions.querySelector('#flow')!.addEventListener('click', () => alert('流れを整えるモック'));
   actions.querySelector('#sheet')!.addEventListener('click', () => alert('レッスンシート作成モック'));
-  actions.querySelector('#del')!.addEventListener('click', () => {
-    if (confirm('この日記を削除しますか？')) {
-      alert('削除モック → タイムラインに戻ります');
+  actions.querySelector('#del')!.addEventListener('click', async () => {
+    if (!confirm('この日記を削除しますか？元に戻せません。')) return;
+    const delBtn = actions.querySelector('#del') as HTMLButtonElement;
+    delBtn.disabled = true;
+    try {
+      if (getCurrentUser()) {
+        await api.delete(`/diary/posts/${entry.id}`);
+        invalidateEntriesCache();
+      }
       navigate('/');
+    } catch (err) {
+      console.error(err);
+      alert('削除に失敗しました');
+      delBtn.disabled = false;
     }
   });
   content.appendChild(actions);
