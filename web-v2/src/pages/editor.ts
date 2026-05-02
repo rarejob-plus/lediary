@@ -215,12 +215,41 @@ export function renderEditor(root: HTMLElement): void {
     doneBtn.className = 'btn btn-primary';
     doneBtn.style.cssText = 'width:100%;margin-top:12px;';
     doneBtn.textContent = '完成';
-    doneBtn.addEventListener('click', () => {
+    doneBtn.addEventListener('click', async () => {
+      captureRewrites(); // 直前の入力も拾う
       const user = getCurrentUser();
-      if (user) {
-        navigate(`/entry/${user.uid}_${dateStr}_${currentMode}`);
-      } else {
-        navigate('/entry/mock_2026-05-02_morning');
+      // rewrites を本文に反映（空なら AI の corrected を採用）
+      let finalText = (enBlock.querySelector('#en-input') as HTMLTextAreaElement).value;
+      currentFeedback.forEach((fb, i) => {
+        const replacement = (rewrites[i] || '').trim() || fb.corrected;
+        if (fb.original && finalText.includes(fb.original)) {
+          finalText = finalText.replace(fb.original, replacement);
+        }
+      });
+
+      doneBtn.disabled = true;
+      doneBtn.textContent = '保存中…';
+      try {
+        if (user && currentFeedback.length > 0) {
+          await api.post('/diary/posts', {
+            contentJp: (jpBlock.querySelector('#jp-input') as HTMLTextAreaElement).value,
+            userTranslation: finalText,
+            date: dateStr,
+            mode: currentMode,
+            textOnly: true,
+          });
+          invalidateEntriesCache();
+        }
+        if (user) {
+          navigate(`/entry/${user.uid}_${dateStr}_${currentMode}`);
+        } else {
+          navigate('/entry/mock_2026-05-02_morning');
+        }
+      } catch (err) {
+        console.error(err);
+        alert('保存に失敗しました');
+        doneBtn.disabled = false;
+        doneBtn.textContent = '完成';
       }
     });
     correctionSection.appendChild(doneBtn);
