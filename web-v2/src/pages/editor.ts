@@ -1,10 +1,15 @@
 import { renderHeader, renderMockBanner } from '../components/header';
 import { icons } from '../components/icons';
-import type { Mode } from '../data/mock';
+import type { Mode, FeedbackItem } from '../data/mock';
 import { MODE_META } from '../data/mock';
+import { fetchEntry } from '../data/entries';
+import { api } from '../api/client';
+import { getCurrentUser } from '../auth';
 import { navigate } from '../router';
 
-const SAMPLE_FEEDBACK = [
+interface HintItem { english: string; japanese: string; note?: string; }
+
+const SAMPLE_FEEDBACK: FeedbackItem[] = [
   {
     original: "I'm head to flower park with my family today!",
     corrected: "I'm heading to a flower park with my family today!",
@@ -17,20 +22,30 @@ const SAMPLE_FEEDBACK = [
   },
 ];
 
-const SAMPLE_HINTS = [
-  { en: 'head to', ja: '〜へ向かう' },
-  { en: 'mark the start of', ja: '〜の始まりを告げる' },
-  { en: 'finally', ja: 'いよいよ、ようやく' },
+const SAMPLE_HINTS: HintItem[] = [
+  { english: 'head to', japanese: '〜へ向かう' },
+  { english: 'mark the start of', japanese: '〜の始まりを告げる' },
+  { english: 'finally', japanese: 'いよいよ、ようやく' },
 ];
+
+const STOIC_KEY = 'lediary_v2_stoic';
+
+function todayStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 export function renderEditor(root: HTMLElement): void {
   root.appendChild(renderHeader('editor'));
 
-  const today = new Date();
   const params = new URLSearchParams(location.search);
-  const initialMode = params.get('mode') as Mode | null;
+  const initialMode = params.get('mode');
+  const dateStr = params.get('date') || todayStr();
+  const dateObj = new Date(dateStr + 'T00:00:00');
   let currentMode: Mode = (initialMode === 'morning' || initialMode === 'lesson' || initialMode === 'diary') ? initialMode : 'diary';
-  let stoic = false;
+  let stoic = localStorage.getItem(STOIC_KEY) === '1';
+  let currentFeedback: FeedbackItem[] = [];
+  let submitting = false;
 
   const wrap = document.createElement('div');
   wrap.className = 'editor';
@@ -39,10 +54,10 @@ export function renderEditor(root: HTMLElement): void {
   meta.className = 'editor-meta';
   meta.innerHTML = `
     <div class="editor-date">
-      <div class="editor-date-num">${today.getDate()}</div>
+      <div class="editor-date-num">${dateObj.getDate()}</div>
       <div class="editor-date-meta">
-        <strong>${today.toLocaleDateString('en-US', { weekday: 'long' })}</strong>
-        <span>${today.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
+        <strong>${dateObj.toLocaleDateString('en-US', { weekday: 'long' })}</strong>
+        <span>${dateObj.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
       </div>
     </div>
     <div class="mode-pills">
@@ -64,11 +79,10 @@ export function renderEditor(root: HTMLElement): void {
   jpBlock.className = 'compose-block';
   jpBlock.innerHTML = `
     <div class="compose-label">日本語で書く</div>
-    <textarea class="compose-textarea" placeholder="今日あったことを日本語で…">今日は家族でフラワーパークに行く！いよいよゴールデンウィーク開始！</textarea>
+    <textarea id="jp-input" class="compose-textarea" placeholder="今日あったことを日本語で…"></textarea>
   `;
   wrap.appendChild(jpBlock);
 
-  // 英訳ヒントは明示的なボタン押下で生成
   const hintToggleRow = document.createElement('div');
   hintToggleRow.className = 'compose-action-row';
   hintToggleRow.style.marginBottom = '24px';
@@ -78,35 +92,35 @@ export function renderEditor(root: HTMLElement): void {
   const hintsCard = document.createElement('div');
   hintsCard.className = 'hints-card';
   hintsCard.style.display = 'none';
-  hintsCard.innerHTML = `
-    <div class="hints-card-header">
-      <span>英訳ヒント</span>
-      <span style="text-transform:none;letter-spacing:0;color:var(--text-faint);font-weight:400;">日本語に対応する語のみ</span>
-    </div>
-    ${SAMPLE_HINTS.map((h) => `
-      <div class="hint-row">
-        <span class="hint-en">${h.en}</span>
-        <span class="hint-ja">${h.ja}</span>
-      </div>
-    `).join('')}
-  `;
   wrap.appendChild(hintsCard);
 
-  hintToggleRow.querySelector('#show-hints')!.addEventListener('click', () => {
+  hintToggleRow.querySelector('#show-hints')!.addEventListener('click', async () => {
     const btn = hintToggleRow.querySelector('#show-hints') as HTMLButtonElement;
+    const jp = (jpBlock.querySelector('#jp-input') as HTMLTextAreaElement).value.trim();
+    if (!jp) {
+      alert('まず日本語を書いてください');
+      return;
+    }
     btn.disabled = true;
     btn.textContent = '生成中…';
-    setTimeout(() => {
+    try {
+      const hints = await loadHints(jp, dateStr, currentMode);
+      renderHintsInto(hintsCard, hints);
       hintsCard.style.display = '';
       hintToggleRow.style.display = 'none';
-    }, 350);
+    } catch (e) {
+      console.error(e);
+      btn.disabled = false;
+      btn.textContent = '英訳ヒントを見る';
+      alert('ヒント生成に失敗しました');
+    }
   });
 
   const enBlock = document.createElement('div');
   enBlock.className = 'compose-block';
   enBlock.innerHTML = `
     <div class="compose-label">英語にする</div>
-    <textarea class="compose-textarea en" placeholder="Write in English…">I'm head to flower park with my family today! Anyway, today marks the start of Golden Week!</textarea>
+    <textarea id="en-input" class="compose-textarea en" placeholder="Write in English…"></textarea>
   `;
   wrap.appendChild(enBlock);
 
@@ -135,18 +149,26 @@ export function renderEditor(root: HTMLElement): void {
     `;
     toggleRow.querySelector('#stoic-toggle')!.addEventListener('click', () => {
       stoic = !stoic;
+      localStorage.setItem(STOIC_KEY, stoic ? '1' : '0');
       renderCorrection();
     });
     correctionSection.appendChild(toggleRow);
 
-    SAMPLE_FEEDBACK.forEach((fb, i) => {
+    if (currentFeedback.length === 0) {
+      const noFb = document.createElement('p');
+      noFb.style.cssText = 'color:var(--text-muted);text-align:center;padding:24px 0;font-size:13px;';
+      noFb.textContent = '修正点はありません。よく書けています。';
+      correctionSection.appendChild(noFb);
+    }
+
+    currentFeedback.forEach((fb, i) => {
       const card = document.createElement('div');
       card.className = 'correction-card';
       card.innerHTML = `
-        <div class="correction-step">${i + 1} / ${SAMPLE_FEEDBACK.length}</div>
+        <div class="correction-step">${i + 1} / ${currentFeedback.length}</div>
         <div class="correction-original">${escapeHtml(fb.original)}</div>
         ${stoic ? `
-          <div class="stoic-veil" data-reveal="0">
+          <div class="stoic-veil">
             <div class="correction-corrected">${escapeHtml(fb.corrected)}</div>
             <div class="stoic-veil-hint">タップで答えを見る</div>
           </div>
@@ -176,17 +198,110 @@ export function renderEditor(root: HTMLElement): void {
     doneBtn.className = 'btn btn-primary';
     doneBtn.style.cssText = 'width:100%;margin-top:12px;';
     doneBtn.textContent = '完成';
-    doneBtn.addEventListener('click', () => navigate('/entry/mock_2026-05-02_morning'));
+    doneBtn.addEventListener('click', () => {
+      const user = getCurrentUser();
+      if (user) {
+        navigate(`/entry/${user.uid}_${dateStr}_${currentMode}`);
+      } else {
+        navigate('/entry/mock_2026-05-02_morning');
+      }
+    });
     correctionSection.appendChild(doneBtn);
   }
 
-  actionRow.querySelector('#correct-btn')!.addEventListener('click', () => {
-    renderCorrection();
-    correctionSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  actionRow.querySelector('#correct-btn')!.addEventListener('click', async () => {
+    if (submitting) return;
+    const jp = (jpBlock.querySelector('#jp-input') as HTMLTextAreaElement).value.trim();
+    const en = (enBlock.querySelector('#en-input') as HTMLTextAreaElement).value.trim();
+    if (!jp) {
+      alert('日本語を書いてください');
+      return;
+    }
+    const btn = actionRow.querySelector('#correct-btn') as HTMLButtonElement;
+    submitting = true;
+    btn.disabled = true;
+    btn.textContent = '添削中…';
+    try {
+      currentFeedback = await loadFeedback(jp, en, dateStr, currentMode);
+      renderCorrection();
+      correctionSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (e) {
+      console.error(e);
+      alert('添削に失敗しました');
+    } finally {
+      submitting = false;
+      btn.disabled = false;
+      btn.textContent = 'もう一度添削';
+    }
   });
 
   root.appendChild(wrap);
   root.appendChild(renderMockBanner());
+
+  // Pre-fill if existing entry for this date+mode
+  loadExisting(dateStr, currentMode).then((entry) => {
+    if (!entry) return;
+    (jpBlock.querySelector('#jp-input') as HTMLTextAreaElement).value = entry.contentJp;
+    (enBlock.querySelector('#en-input') as HTMLTextAreaElement).value = entry.userTranslation;
+    if (entry.feedback?.length) {
+      currentFeedback = entry.feedback;
+      renderCorrection();
+    }
+  }).catch(() => {});
+}
+
+async function loadExisting(date: string, mode: Mode) {
+  const user = getCurrentUser();
+  if (!user) return undefined;
+  const id = `${user.uid}_${date}_${mode}`;
+  return fetchEntry(id);
+}
+
+async function loadHints(contentJp: string, date: string, mode: Mode): Promise<HintItem[]> {
+  if (!getCurrentUser()) {
+    await new Promise((r) => setTimeout(r, 350));
+    return SAMPLE_HINTS;
+  }
+  const res = await api.post<{ hints: HintItem[] }>('/diary/hints', { contentJp, date, mode });
+  return res.hints || [];
+}
+
+interface RawAnalysisResponse {
+  feedback?: FeedbackItem[];
+  vocabulary?: unknown[];
+  expansionQuestions?: unknown[];
+}
+
+async function loadFeedback(contentJp: string, userTranslation: string, date: string, mode: Mode): Promise<FeedbackItem[]> {
+  if (!getCurrentUser()) {
+    await new Promise((r) => setTimeout(r, 600));
+    return SAMPLE_FEEDBACK;
+  }
+  const res = await api.post<RawAnalysisResponse>('/diary/posts', {
+    contentJp,
+    userTranslation,
+    date,
+    mode,
+  });
+  return res.feedback || [];
+}
+
+function renderHintsInto(card: HTMLElement, hints: HintItem[]): void {
+  card.innerHTML = `
+    <div class="hints-card-header">
+      <span>英訳ヒント</span>
+      <span style="text-transform:none;letter-spacing:0;color:var(--text-faint);font-weight:400;">日本語に対応する語のみ</span>
+    </div>
+    ${hints.length === 0
+      ? '<p style="color:var(--text-muted);text-align:center;padding:8px 0;font-size:13px;">ヒントはありません</p>'
+      : hints.map((h) => `
+        <div class="hint-row">
+          <span class="hint-en">${escapeHtml(h.english)}</span>
+          <span class="hint-ja">${escapeHtml(h.japanese)}</span>
+        </div>
+      `).join('')
+    }
+  `;
 }
 
 function iconFor(name: 'sun' | 'graduation' | 'moon'): string {
