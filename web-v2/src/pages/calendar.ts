@@ -90,10 +90,15 @@ export function renderCalendar(root: HTMLElement): void {
       grid.appendChild(empty);
     }
 
+    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+
     for (let d = 1; d <= lastDate; d++) {
       const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const dayEntries = entriesByDate.get(dateStr);
       const isToday = d === today.getDate() && viewMonth === today.getMonth() && viewYear === today.getFullYear();
+      const cellTime = new Date(viewYear, viewMonth, d).getTime();
+      const isFuture = cellTime > todayStart;
+      const writable = !isFuture;
 
       const cell = document.createElement('button');
       cell.style.cssText = `
@@ -107,10 +112,11 @@ export function renderCalendar(root: HTMLElement): void {
         border: none;
         border-bottom: 1px solid var(--border);
         border-right: 1px solid var(--border);
-        cursor: ${dayEntries ? 'pointer' : 'default'};
+        cursor: ${writable ? 'pointer' : 'default'};
         text-align: left;
         position: relative;
         transition: background 0.12s;
+        ${isFuture ? 'opacity: 0.5;' : ''}
       `;
 
       cell.innerHTML = `
@@ -122,10 +128,16 @@ export function renderCalendar(root: HTMLElement): void {
         ` : ''}
       `;
 
-      if (dayEntries) {
-        cell.addEventListener('click', () => navigate(`/entry/${dayEntries[0]!.id}`));
+      if (writable) {
+        cell.addEventListener('click', () => {
+          if (dayEntries) {
+            navigate(`/entry/${dayEntries[0]!.id}`);
+          } else {
+            navigate(`/editor?date=${dateStr}`);
+          }
+        });
         cell.addEventListener('mouseenter', () => { cell.style.background = 'var(--surface-warm)'; });
-        cell.addEventListener('mouseleave', () => { cell.style.background = 'var(--surface)'; });
+        cell.addEventListener('mouseleave', () => { cell.style.background = dayEntries ? 'var(--surface)' : 'transparent'; });
       }
 
       grid.appendChild(cell);
