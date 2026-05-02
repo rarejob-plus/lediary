@@ -45,6 +45,8 @@ export function renderEditor(root: HTMLElement): void {
   let currentMode: Mode = (initialMode === 'morning' || initialMode === 'lesson' || initialMode === 'diary') ? initialMode : 'diary';
   let stoic = localStorage.getItem(STOIC_KEY) === '1';
   let currentFeedback: FeedbackItem[] = [];
+  let rewrites: string[] = [];
+  let revealed: boolean[] = [];
   let submitting = false;
 
   const wrap = document.createElement('div');
@@ -133,7 +135,15 @@ export function renderEditor(root: HTMLElement): void {
   correctionSection.id = 'correction-section';
   wrap.appendChild(correctionSection);
 
+  function captureRewrites(): void {
+    correctionSection.querySelectorAll<HTMLTextAreaElement>('.correction-rewrite').forEach((ta) => {
+      const idx = Number(ta.dataset.idx);
+      if (Number.isInteger(idx)) rewrites[idx] = ta.value;
+    });
+  }
+
   function renderCorrection() {
+    captureRewrites(); // re-render 前に現在の入力を退避
     correctionSection.innerHTML = '';
 
     const label = document.createElement('div');
@@ -162,35 +172,41 @@ export function renderEditor(root: HTMLElement): void {
     }
 
     currentFeedback.forEach((fb, i) => {
+      const isRevealed = !stoic || revealed[i];
       const card = document.createElement('div');
       card.className = 'correction-card';
       card.innerHTML = `
         <div class="correction-step">${i + 1} / ${currentFeedback.length}</div>
         <div class="correction-original">${escapeHtml(fb.original)}</div>
-        ${stoic ? `
-          <div class="stoic-veil">
+        ${stoic && !isRevealed ? `
+          <div class="stoic-veil" data-idx="${i}">
             <div class="correction-corrected">${escapeHtml(fb.corrected)}</div>
             <div class="stoic-veil-hint">タップで答えを見る</div>
           </div>
           <div class="correction-explanation">${escapeHtml(fb.explanation)}</div>
           <div class="correction-rewrite-label">自分で書き直す</div>
-          <textarea class="correction-rewrite" placeholder="ヒントだけで書き直してみよう"></textarea>
+          <textarea class="correction-rewrite" data-idx="${i}" placeholder="ヒントだけで書き直してみよう">${escapeHtml(rewrites[i] || '')}</textarea>
         ` : `
           <div class="correction-corrected">${escapeHtml(fb.corrected)}</div>
           <div class="correction-explanation">${escapeHtml(fb.explanation)}</div>
           <div class="correction-rewrite-label">自分で書き直す</div>
-          <textarea class="correction-rewrite" placeholder="参考にして書き直してみよう"></textarea>
+          <textarea class="correction-rewrite" data-idx="${i}" placeholder="${stoic ? 'ヒントだけで書き直してみよう' : '参考にして書き直してみよう'}">${escapeHtml(rewrites[i] || '')}</textarea>
         `}
       `;
       const veil = card.querySelector('.stoic-veil') as HTMLElement | null;
       if (veil) {
         veil.addEventListener('click', () => {
+          revealed[i] = true;
           (veil.querySelector('.correction-corrected') as HTMLElement).style.filter = 'none';
           (veil.querySelector('.correction-corrected') as HTMLElement).style.userSelect = 'auto';
           (veil.querySelector('.stoic-veil-hint') as HTMLElement).style.display = 'none';
           veil.style.cursor = 'auto';
         });
       }
+      const ta = card.querySelector('.correction-rewrite') as HTMLTextAreaElement;
+      ta.addEventListener('input', () => {
+        rewrites[i] = ta.value;
+      });
       correctionSection.appendChild(card);
     });
 
@@ -223,6 +239,8 @@ export function renderEditor(root: HTMLElement): void {
     btn.textContent = '添削中…';
     try {
       currentFeedback = await loadFeedback(jp, en, dateStr, currentMode);
+      rewrites = [];     // 新規 feedback では旧 rewrites をクリア
+      revealed = [];
       renderCorrection();
       correctionSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (e) {
