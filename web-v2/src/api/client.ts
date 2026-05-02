@@ -5,12 +5,13 @@ const API_BASE = '/api';
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = await getIdToken();
   const res = await fetch(`${API_BASE}${path}`, {
+    cache: 'no-store',
+    ...options,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
-      ...options.headers,
+      ...(options.headers || {}),
     },
-    ...options,
   });
 
   if (!res.ok) {
