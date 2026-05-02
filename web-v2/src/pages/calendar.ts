@@ -1,6 +1,7 @@
 import { renderHeader, renderFab, renderMockBanner } from '../components/header';
 import { icons } from '../components/icons';
-import { MOCK_ENTRIES, MODE_META } from '../data/mock';
+import { MODE_META, type DiaryEntry } from '../data/mock';
+import { fetchEntries } from '../data/entries';
 import { navigate } from '../router';
 
 export function renderCalendar(root: HTMLElement): void {
@@ -9,10 +10,20 @@ export function renderCalendar(root: HTMLElement): void {
   const today = new Date();
   let viewYear = today.getFullYear();
   let viewMonth = today.getMonth();
+  let entries: DiaryEntry[] = [];
 
   const wrap = document.createElement('div');
   wrap.style.cssText = 'padding: 32px 24px 0;';
+  wrap.innerHTML = `<p style="color:var(--text-muted);text-align:center;padding:40px 0;font-size:13px;">読み込み中…</p>`;
   root.appendChild(wrap);
+
+  fetchEntries().then((es) => {
+    entries = es;
+    render();
+  }).catch((err) => {
+    console.error(err);
+    wrap.innerHTML = `<p style="color:var(--text-muted);text-align:center;padding:40px 0;">読み込みに失敗しました</p>`;
+  });
 
   function render() {
     wrap.innerHTML = '';
@@ -67,8 +78,8 @@ export function renderCalendar(root: HTMLElement): void {
     const firstDay = new Date(viewYear, viewMonth, 1).getDay();
     const lastDate = new Date(viewYear, viewMonth + 1, 0).getDate();
 
-    const entriesByDate = new Map<string, typeof MOCK_ENTRIES>();
-    for (const e of MOCK_ENTRIES) {
+    const entriesByDate = new Map<string, DiaryEntry[]>();
+    for (const e of entries) {
       if (!entriesByDate.has(e.date)) entriesByDate.set(e.date, []);
       entriesByDate.get(e.date)!.push(e);
     }
