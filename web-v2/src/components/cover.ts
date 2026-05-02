@@ -5,6 +5,7 @@ const HUE_BY_MODE: Record<Mode, number> = {
   morning: 28,
   lesson: 215,
   diary: 250,
+  story: 145,
 };
 
 // 時間帯で明度・彩度を変えてその日の "空気" をゆるく可視化する。

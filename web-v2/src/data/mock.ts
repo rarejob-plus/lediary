@@ -1,6 +1,6 @@
 // Hardcoded mock data — no Firestore.
 
-export type Mode = 'morning' | 'lesson' | 'diary';
+export type Mode = 'morning' | 'lesson' | 'diary' | 'story';
 
 export interface VocabItem {
   word: string;
@@ -152,8 +152,11 @@ export function findEntry(id: string): DiaryEntry | undefined {
   return MOCK_ENTRIES.find((e) => e.id === id);
 }
 
-export const MODE_META: Record<Mode, { label: string; icon: 'sun' | 'graduation' | 'moon'; color: string }> = {
+export type ModeIcon = 'sun' | 'graduation' | 'moon' | 'bookOpen';
+
+export const MODE_META: Record<Mode, { label: string; icon: ModeIcon; color: string }> = {
   morning: { label: 'Morning', icon: 'sun', color: '#c47832' },
   lesson: { label: 'Lesson', icon: 'graduation', color: '#3b6cb0' },
   diary: { label: 'Diary', icon: 'moon', color: '#3a4a6b' },
+  story: { label: 'Story', icon: 'bookOpen', color: '#5d8e6f' },
 };

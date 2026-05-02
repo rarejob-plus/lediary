@@ -42,7 +42,8 @@ export function renderEditor(root: HTMLElement): void {
   const initialMode = params.get('mode');
   const dateStr = params.get('date') || todayStr();
   const dateObj = new Date(dateStr + 'T00:00:00');
-  let currentMode: Mode = (initialMode === 'morning' || initialMode === 'lesson' || initialMode === 'diary') ? initialMode : 'diary';
+  const validModes: Mode[] = ['morning', 'lesson', 'diary', 'story'];
+  let currentMode: Mode = validModes.includes(initialMode as Mode) ? (initialMode as Mode) : 'diary';
   let stoic = localStorage.getItem(STOIC_KEY) === '1';
   let currentFeedback: FeedbackItem[] = [];
   let rewrites: string[] = [];
@@ -63,7 +64,7 @@ export function renderEditor(root: HTMLElement): void {
       </div>
     </div>
     <div class="mode-pills">
-      ${(['morning', 'lesson', 'diary'] as Mode[]).map((m) => `
+      ${(['morning', 'lesson', 'diary', 'story'] as Mode[]).map((m) => `
         <button class="mode-pill ${m === currentMode ? 'active' : ''}" data-mode="${m}">${iconFor(MODE_META[m].icon)} ${MODE_META[m].label}</button>
       `).join('')}
     </div>
@@ -323,9 +324,10 @@ function renderHintsInto(card: HTMLElement, hints: HintItem[]): void {
   `;
 }
 
-function iconFor(name: 'sun' | 'graduation' | 'moon'): string {
+function iconFor(name: 'sun' | 'graduation' | 'moon' | 'bookOpen'): string {
   if (name === 'sun') return icons.sun(12);
   if (name === 'graduation') return icons.graduation(12);
+  if (name === 'bookOpen') return icons.bookOpen(12);
   return icons.moon(12);
 }
 

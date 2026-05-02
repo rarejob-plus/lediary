@@ -145,7 +145,7 @@ export function renderCalendar(root: HTMLElement): void {
 
     const legend = document.createElement('div');
     legend.style.cssText = 'display:flex;gap:18px;margin-top:18px;font-size:12px;color:var(--text-muted);justify-content:center;flex-wrap:wrap;';
-    (['morning', 'lesson', 'diary'] as const).forEach((m) => {
+    (['morning', 'lesson', 'diary', 'story'] as const).forEach((m) => {
       const meta = MODE_META[m];
       legend.innerHTML += `
         <span style="display:inline-flex;align-items:center;gap:6px;">

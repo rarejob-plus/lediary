@@ -48,14 +48,14 @@ function renderBody(wrap: HTMLElement, entries: DiaryEntry[]): void {
   `;
   wrap.appendChild(topRow);
 
-  // Today's 3-mode cards
+  // Today's 4-mode cards
   const today = todayStr();
   const todayEntries = entries.filter((e) => e.date === today);
   const todayByMode = new Map(todayEntries.map((e) => [e.mode, e]));
 
   const todayRow = document.createElement('div');
   todayRow.className = 'today-row';
-  (['morning', 'lesson', 'diary'] as Mode[]).forEach((m) => {
+  (['morning', 'lesson', 'diary', 'story'] as Mode[]).forEach((m) => {
     const meta = MODE_META[m];
     const filled = todayByMode.get(m);
     const card = document.createElement('button');
@@ -142,9 +142,10 @@ function renderBody(wrap: HTMLElement, entries: DiaryEntry[]): void {
   }
 }
 
-function iconFor(name: 'sun' | 'graduation' | 'moon', size = 11): string {
+function iconFor(name: 'sun' | 'graduation' | 'moon' | 'bookOpen', size = 11): string {
   if (name === 'sun') return icons.sun(size);
   if (name === 'graduation') return icons.graduation(size);
+  if (name === 'bookOpen') return icons.bookOpen(size);
   return icons.moon(size);
 }
 

@@ -297,9 +297,10 @@ function renderExpansionSection(questions: { question: string; hintJa: string; h
   return wrap;
 }
 
-function iconFor(name: 'sun' | 'graduation' | 'moon'): string {
+function iconFor(name: 'sun' | 'graduation' | 'moon' | 'bookOpen'): string {
   if (name === 'sun') return icons.sun(11);
   if (name === 'graduation') return icons.graduation(11);
+  if (name === 'bookOpen') return icons.bookOpen(11);
   return icons.moon(11);
 }
 
