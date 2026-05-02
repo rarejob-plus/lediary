@@ -68,8 +68,16 @@ export function renderEditor(root: HTMLElement): void {
   `;
   wrap.appendChild(jpBlock);
 
+  // 英訳ヒントは明示的なボタン押下で生成
+  const hintToggleRow = document.createElement('div');
+  hintToggleRow.className = 'compose-action-row';
+  hintToggleRow.style.marginBottom = '24px';
+  hintToggleRow.innerHTML = `<button class="btn" id="show-hints">英訳ヒントを見る</button>`;
+  wrap.appendChild(hintToggleRow);
+
   const hintsCard = document.createElement('div');
   hintsCard.className = 'hints-card';
+  hintsCard.style.display = 'none';
   hintsCard.innerHTML = `
     <div class="hints-card-header">
       <span>英訳ヒント</span>
@@ -83,6 +91,16 @@ export function renderEditor(root: HTMLElement): void {
     `).join('')}
   `;
   wrap.appendChild(hintsCard);
+
+  hintToggleRow.querySelector('#show-hints')!.addEventListener('click', () => {
+    const btn = hintToggleRow.querySelector('#show-hints') as HTMLButtonElement;
+    btn.disabled = true;
+    btn.textContent = '生成中…';
+    setTimeout(() => {
+      hintsCard.style.display = '';
+      hintToggleRow.style.display = 'none';
+    }, 350);
+  });
 
   const enBlock = document.createElement('div');
   enBlock.className = 'compose-block';
