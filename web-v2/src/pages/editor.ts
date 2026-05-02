@@ -2,7 +2,7 @@ import { renderHeader, renderMockBanner } from '../components/header';
 import { icons } from '../components/icons';
 import type { Mode, FeedbackItem } from '../data/mock';
 import { MODE_META } from '../data/mock';
-import { fetchEntry } from '../data/entries';
+import { fetchEntry, invalidateEntriesCache } from '../data/entries';
 import { api } from '../api/client';
 import { getCurrentUser } from '../auth';
 import { navigate } from '../router';
@@ -283,6 +283,7 @@ async function loadFeedback(contentJp: string, userTranslation: string, date: st
     date,
     mode,
   });
+  invalidateEntriesCache();
   return res.feedback || [];
 }
 

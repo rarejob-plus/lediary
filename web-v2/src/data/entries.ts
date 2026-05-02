@@ -49,20 +49,30 @@ function toEntry(raw: RawPost): DiaryEntry {
   };
 }
 
-export async function fetchEntries(): Promise<DiaryEntry[]> {
+// セッション内一覧キャッシュ（個別 GET の 404 ノイズ回避 + 体感高速化）
+let cache: { fetchedAt: number; entries: DiaryEntry[] } | null = null;
+const CACHE_TTL_MS = 30_000;
+
+export function invalidateEntriesCache(): void {
+  cache = null;
+}
+
+export async function fetchEntries(force = false): Promise<DiaryEntry[]> {
   if (!getCurrentUser()) return MOCK_ENTRIES;
+  if (!force && cache && Date.now() - cache.fetchedAt < CACHE_TTL_MS) {
+    return cache.entries;
+  }
   const raws = await api.get<RawPost[]>('/diary/posts');
-  return raws
+  const entries = raws
     .filter((r) => typeof r.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.date))
     .map(toEntry);
+  cache = { fetchedAt: Date.now(), entries };
+  return entries;
 }
 
 export async function fetchEntry(id: string): Promise<DiaryEntry | undefined> {
   if (!getCurrentUser()) return MOCK_ENTRIES.find((e) => e.id === id);
-  try {
-    const raw = await api.get<RawPost>(`/diary/posts/${id}`);
-    return toEntry(raw);
-  } catch {
-    return undefined;
-  }
+  // 一覧から探すことで個別 GET の 404 を避ける
+  const entries = await fetchEntries();
+  return entries.find((e) => e.id === id);
 }
