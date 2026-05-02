@@ -166,7 +166,7 @@ export function editorHTML(): string {
       <div class="diary-tabs">
         <button class="diary-tab active" data-tab="tab-diary">覚えたいフレーズ</button>
         <button class="diary-tab" data-tab="tab-practice">シャドーイング</button>
-        <button class="diary-tab" data-tab="tab-lesson">レッスン準備</button>
+        <button class="diary-tab" data-tab="tab-lesson">日記を膨らませる</button>
       </div>
 
       <!-- Tab: 覚えたいフレーズ -->
@@ -756,6 +756,38 @@ function showCompletedView(post: DiaryPost, enInput: HTMLTextAreaElement): void 
     flowBtn.textContent = '流れを整える';
     btnRow.appendChild(flowBtn);
 
+    // レッスンシート作成（質問の有無に関係なく常に表示）
+    const lsBtn = document.createElement('button');
+    lsBtn.className = 'btn btn-ghost btn-retranslate btn-lesson-sheet';
+    lsBtn.textContent = post.lessonSheetId ? 'シートを開く' : 'レッスンシート';
+    btnRow.appendChild(lsBtn);
+
+    if (post.lessonSheetId) {
+      lsBtn.addEventListener('click', () => {
+        window.open(`/s/${post.lessonSheetId}`, '_blank');
+      });
+    } else {
+      lsBtn.addEventListener('click', async () => {
+        lsBtn.disabled = true;
+        lsBtn.textContent = '作成中…';
+        try {
+          const postId = `${post.userId}_${dateInput.value}_${currentMode}`;
+          const res = await api.post<{ shareId: string }>('/diary/lesson-sheet', { postId });
+          post.lessonSheetId = res.shareId;
+          lsBtn.textContent = 'シートを開く';
+          lsBtn.disabled = false;
+          lsBtn.onclick = () => window.open(`/s/${res.shareId}`, '_blank');
+          const url = `${location.origin}/s/${res.shareId}`;
+          await navigator.clipboard.writeText(url);
+          showToast('URLをコピーしました');
+        } catch {
+          showToast('作成に失敗しました');
+          lsBtn.disabled = false;
+          lsBtn.textContent = 'レッスンシート';
+        }
+      });
+    }
+
     flowBtn.addEventListener('click', async () => {
       flowBtn.disabled = true;
       flowBtn.textContent = '確認中…';
@@ -921,38 +953,8 @@ function renderExpansionQuestions(post: DiaryPost, enInput: HTMLTextAreaElement)
       moreWrap.className = 'expansion-actions-row';
       moreWrap.innerHTML = `
         <button class="btn btn-secondary btn-action-col expansion-more-btn">膨らませる</button>
-        <button class="btn btn-secondary btn-action-col lesson-sheet-btn">レッスンシート</button>
       `;
       section.appendChild(moreWrap);
-
-      const lsBtn = moreWrap.querySelector('.lesson-sheet-btn') as HTMLButtonElement;
-      if (post.lessonSheetId) {
-        lsBtn.textContent = 'シートを開く';
-        lsBtn.addEventListener('click', () => {
-          window.open(`/s/${post.lessonSheetId}`, '_blank');
-        });
-      } else {
-        lsBtn.addEventListener('click', async () => {
-          lsBtn.disabled = true;
-          lsBtn.textContent = '作成中…';
-          try {
-            const dateInput = document.getElementById('input-date') as HTMLInputElement;
-            const postId = `${post.userId}_${dateInput.value}_${currentMode}`;
-            const res = await api.post<{ shareId: string }>('/diary/lesson-sheet', { postId });
-            post.lessonSheetId = res.shareId;
-            lsBtn.textContent = 'シートを開く';
-            lsBtn.disabled = false;
-            lsBtn.onclick = () => window.open(`/s/${res.shareId}`, '_blank');
-            const url = `${location.origin}/s/${res.shareId}`;
-            await navigator.clipboard.writeText(url);
-            showToast('URLをコピーしました');
-          } catch {
-            showToast('作成に失敗しました');
-            lsBtn.disabled = false;
-            lsBtn.textContent = 'レッスンシート';
-          }
-        });
-      }
 
       moreWrap.querySelector('.expansion-more-btn')!.addEventListener('click', async () => {
         const btn = moreWrap!.querySelector('.expansion-more-btn') as HTMLButtonElement;
