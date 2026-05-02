@@ -2,6 +2,7 @@ import { renderHeader, renderMockBanner } from '../components/header';
 import { icons } from '../components/icons';
 import { coverFor } from '../components/cover';
 import { findEntry, MODE_META } from '../data/mock';
+import { solarTerm, dayOfYear, daysInYear } from '../data/dateInfo';
 import { navigate } from '../router';
 
 export function renderEntry(root: HTMLElement, id: string): void {
@@ -32,6 +33,9 @@ export function renderEntry(root: HTMLElement, id: string): void {
     <div class="entry-hero-fade"></div>
     <div class="entry-hero-meta">
       <span class="entry-hero-pill">${iconFor(meta.icon)} ${meta.label}</span>
+      <span class="entry-hero-pill">${solarTerm(entry.date)}</span>
+      <span class="entry-hero-pill">Day ${dayOfYear(entry.date)} / ${daysInYear(entry.date)}</span>
+      ${entry.mood ? `<span class="entry-hero-pill">${escapeHtml(entry.mood)}</span>` : ''}
     </div>
   `;
   root.appendChild(hero);

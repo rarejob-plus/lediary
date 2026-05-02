@@ -2,6 +2,7 @@ import { renderHeader, renderFab, renderMockBanner } from '../components/header'
 import { icons } from '../components/icons';
 import { coverFor } from '../components/cover';
 import { MOCK_ENTRIES, MODE_META, type DiaryEntry, type Mode } from '../data/mock';
+import { solarTerm, dayOfYear, daysInYear } from '../data/dateInfo';
 import { navigate } from '../router';
 
 function todayStr(): string {
@@ -102,6 +103,9 @@ export function renderTimeline(root: HTMLElement): void {
         <div class="entry-cover" style="background:${entry.cover ?? coverFor(entry.mode, entry.time)};">
           <div class="entry-cover-meta">
             <span class="entry-cover-pill">${iconFor(meta.icon)} ${meta.label}</span>
+            <span class="entry-cover-pill">${solarTerm(entry.date)}</span>
+            <span class="entry-cover-pill">Day ${dayOfYear(entry.date)} / ${daysInYear(entry.date)}</span>
+            ${entry.mood ? `<span class="entry-cover-pill">${escapeHtml(entry.mood)}</span>` : ''}
           </div>
         </div>
         <div class="entry-card-body">

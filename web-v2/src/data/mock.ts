@@ -27,9 +27,10 @@ export interface DiaryEntry {
   date: string; // YYYY-MM-DD
   time: string; // HH:MM (mock)
   mode: Mode;
-  location?: string; // mock metadata pill
-  weather?: string;
-  cover?: string; // CSS background string for hero placeholder
+  location?: string; // mock metadata pill (geo) — currently unused
+  weather?: string; // mock — currently unused
+  cover?: string; // CSS background string override for hero placeholder
+  mood?: string; // 感情語（AI feedback 解析結果想定）— "はずむ" "穏やか" 等
   contentJp: string;
   userTranslation: string;
   feedback: FeedbackItem[];
@@ -46,6 +47,7 @@ export const MOCK_ENTRIES: DiaryEntry[] = [
     mode: 'morning',
     location: 'Yokohama, Japan',
     weather: 'Sunny · 21°',
+    mood: 'はずむ',
     contentJp: '今日は家族でフラワーパークに行く！いよいよゴールデンウィーク開始！',
     userTranslation: "I'm heading to a flower park with my family today. Today is finally the start of Golden Week!",
     feedback: [
@@ -69,6 +71,7 @@ export const MOCK_ENTRIES: DiaryEntry[] = [
     mode: 'diary',
     location: 'Home',
     weather: 'Cloudy · 19°',
+    mood: '穏やか',
     contentJp: '今日は祝日でお休み。イベントはゆずなさん一家の来訪。子どもたちもう小2と年長か。昼はロピア。ちょっと食べすぎた。',
     userTranslation: "Today was a holiday. Yuzuna's family came over. Their kids are already in 2nd grade and kindergarten. We had lunch at Lopia. I ate a bit too much.",
     feedback: [],
@@ -92,6 +95,7 @@ export const MOCK_ENTRIES: DiaryEntry[] = [
     mode: 'lesson',
     location: 'Online',
     weather: 'Clear · 18°',
+    mood: '達成感',
     contentJp: 'レッスンでは新しい先生と話した。発音を直してくれたのが嬉しかった。次回は冠詞を意識する。',
     userTranslation: "I talked with a new teacher in my lesson. I was happy that she fixed my pronunciation. Next time I'll pay more attention to articles.",
     feedback: [
@@ -114,6 +118,7 @@ export const MOCK_ENTRIES: DiaryEntry[] = [
     mode: 'diary',
     location: 'Home',
     weather: 'Cloudy · 17°',
+    mood: 'もやもや',
     contentJp: '昨日のレッスン後、復習しようと思ったけど結局YouTube見て寝た。明日からはちゃんとやろう。',
     userTranslation: "After yesterday's lesson I wanted to review, but I ended up watching YouTube and went to sleep. From tomorrow I'll do it properly.",
     feedback: [],
@@ -130,6 +135,7 @@ export const MOCK_ENTRIES: DiaryEntry[] = [
     mode: 'morning',
     location: 'Home',
     weather: 'Sunny · 20°',
+    mood: '集中',
     contentJp: '今日は午後にレッスン。午前中は集中して仕事を片付ける。',
     userTranslation: "I have a lesson this afternoon. I'll focus and get my work done this morning.",
     feedback: [],
