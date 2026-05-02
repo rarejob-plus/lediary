@@ -1,5 +1,6 @@
 import { renderHeader, renderFab, renderMockBanner } from '../components/header';
 import { icons } from '../components/icons';
+import { coverFor } from '../components/cover';
 import { MOCK_ENTRIES, MODE_META, type DiaryEntry, type Mode } from '../data/mock';
 import { navigate } from '../router';
 
@@ -98,7 +99,7 @@ export function renderTimeline(root: HTMLElement): void {
       const card = document.createElement('button');
       card.className = 'entry-card';
       card.innerHTML = `
-        <div class="entry-cover" style="background:${entry.cover};">
+        <div class="entry-cover" style="background:${entry.cover ?? coverFor(entry.mode, entry.time)};">
           <div class="entry-cover-meta">
             <span class="entry-cover-pill">${iconFor(meta.icon)} ${meta.label}</span>
             ${entry.location ? `<span class="entry-cover-pill">${icons.mapPin(11)} ${escapeHtml(entry.location)}</span>` : ''}

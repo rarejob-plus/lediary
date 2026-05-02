@@ -1,5 +1,6 @@
 import { renderHeader, renderMockBanner } from '../components/header';
 import { icons } from '../components/icons';
+import { coverFor } from '../components/cover';
 import { findEntry, MODE_META } from '../data/mock';
 import { navigate } from '../router';
 
@@ -26,7 +27,7 @@ export function renderEntry(root: HTMLElement, id: string): void {
   // Hero
   const hero = document.createElement('div');
   hero.className = 'entry-hero';
-  hero.style.background = entry.cover || 'var(--surface-soft)';
+  hero.style.background = entry.cover ?? coverFor(entry.mode, entry.time);
   hero.innerHTML = `
     <div class="entry-hero-fade"></div>
     <div class="entry-hero-meta">
