@@ -102,7 +102,6 @@ export function renderTimeline(root: HTMLElement): void {
         <div class="entry-cover" style="background:${entry.cover ?? coverFor(entry.mode, entry.time)};">
           <div class="entry-cover-meta">
             <span class="entry-cover-pill">${iconFor(meta.icon)} ${meta.label}</span>
-            ${entry.location ? `<span class="entry-cover-pill">${icons.mapPin(11)} ${escapeHtml(entry.location)}</span>` : ''}
           </div>
         </div>
         <div class="entry-card-body">

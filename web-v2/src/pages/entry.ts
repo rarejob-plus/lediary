@@ -32,7 +32,6 @@ export function renderEntry(root: HTMLElement, id: string): void {
     <div class="entry-hero-fade"></div>
     <div class="entry-hero-meta">
       <span class="entry-hero-pill">${iconFor(meta.icon)} ${meta.label}</span>
-      ${entry.location ? `<span class="entry-hero-pill">${icons.mapPin(11)} ${escapeHtml(entry.location)}</span>` : ''}
     </div>
   `;
   root.appendChild(hero);
