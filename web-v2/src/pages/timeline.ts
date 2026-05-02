@@ -1,7 +1,12 @@
 import { renderHeader, renderFab, renderMockBanner } from '../components/header';
 import { icons } from '../components/icons';
-import { MOCK_ENTRIES, MODE_META, type DiaryEntry } from '../data/mock';
+import { MOCK_ENTRIES, MODE_META, type DiaryEntry, type Mode } from '../data/mock';
 import { navigate } from '../router';
+
+function todayStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 function dayKey(d: string): string {
   return d;
@@ -22,14 +27,51 @@ export function renderTimeline(root: HTMLElement): void {
   const wrap = document.createElement('div');
   wrap.className = 'timeline';
 
-  const streak = document.createElement('div');
-  streak.className = 'timeline-streak';
-  streak.innerHTML = `${icons.flame(13)} <span>4 day streak</span>`;
-  wrap.appendChild(streak);
+  // Top row: streak + today label
+  const topRow = document.createElement('div');
+  topRow.className = 'timeline-top-row';
+  topRow.innerHTML = `
+    <span class="timeline-today-label">今日 (${formatJpDate(new Date())})</span>
+    <div class="timeline-streak">${icons.flame(13)} <span>4 day streak</span></div>
+  `;
+  wrap.appendChild(topRow);
 
-  // Group entries by date
+  // Today's 3-mode cards
+  const today = todayStr();
+  const todayEntries = MOCK_ENTRIES.filter((e) => e.date === today);
+  const todayByMode = new Map(todayEntries.map((e) => [e.mode, e]));
+
+  const todayRow = document.createElement('div');
+  todayRow.className = 'today-row';
+  (['morning', 'lesson', 'diary'] as Mode[]).forEach((m) => {
+    const meta = MODE_META[m];
+    const filled = todayByMode.get(m);
+    const card = document.createElement('button');
+    card.className = `today-card ${filled ? 'filled' : ''}`;
+    card.innerHTML = `
+      <div class="today-card-mode" style="${filled ? `color:${meta.color};` : ''}">
+        ${iconFor(meta.icon, 14)} ${meta.label}
+      </div>
+      <div class="today-card-status ${filled ? '' : 'today-card-empty'}">
+        ${filled ? escapeHtml(filled.userTranslation || filled.contentJp) : 'まだ書いていない'}
+      </div>
+      ${filled ? '' : `<div class="today-card-check">${icons.pen(11)} 書く</div>`}
+    `;
+    card.addEventListener('click', () => {
+      if (filled) {
+        navigate(`/entry/${filled.id}`);
+      } else {
+        navigate(`/editor?mode=${m}`);
+      }
+    });
+    todayRow.appendChild(card);
+  });
+  wrap.appendChild(todayRow);
+
+  // Group past entries by date (excluding today)
   const groups = new Map<string, DiaryEntry[]>();
   for (const e of MOCK_ENTRIES) {
+    if (e.date === today) continue;
     const k = dayKey(e.date);
     if (!groups.has(k)) groups.set(k, []);
     groups.get(k)!.push(e);
@@ -84,10 +126,14 @@ export function renderTimeline(root: HTMLElement): void {
   root.appendChild(renderMockBanner());
 }
 
-function iconFor(name: 'sun' | 'graduation' | 'moon'): string {
-  if (name === 'sun') return icons.sun(11);
-  if (name === 'graduation') return icons.graduation(11);
-  return icons.moon(11);
+function iconFor(name: 'sun' | 'graduation' | 'moon', size = 11): string {
+  if (name === 'sun') return icons.sun(size);
+  if (name === 'graduation') return icons.graduation(size);
+  return icons.moon(size);
+}
+
+function formatJpDate(d: Date): string {
+  return d.toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' });
 }
 
 function escapeHtml(s: string): string {

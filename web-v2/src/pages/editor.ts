@@ -27,7 +27,9 @@ export function renderEditor(root: HTMLElement): void {
   root.appendChild(renderHeader('editor'));
 
   const today = new Date();
-  let currentMode: Mode = 'diary';
+  const params = new URLSearchParams(location.search);
+  const initialMode = params.get('mode') as Mode | null;
+  let currentMode: Mode = (initialMode === 'morning' || initialMode === 'lesson' || initialMode === 'diary') ? initialMode : 'diary';
   let stoic = false;
 
   const wrap = document.createElement('div');

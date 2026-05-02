@@ -3,6 +3,13 @@
   padding: 32px 24px 0;
 }
 
+.timeline-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
 .timeline-streak {
   display: inline-flex;
   align-items: center;
@@ -12,11 +19,117 @@
   background: var(--surface-soft);
   font-size: 12px;
   color: var(--text-secondary);
-  margin-bottom: 24px;
 }
 
 .timeline-streak svg {
   color: #d97757;
+}
+
+.timeline-today-label {
+  font-family: var(--serif);
+  font-size: 13px;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+/* Today's 3-mode cards */
+.today-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 36px;
+}
+
+.today-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.15s;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 96px;
+}
+
+.today-card:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+
+.today-card.filled {
+  background: var(--surface-warm);
+  border-color: transparent;
+}
+
+.today-card-mode {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+}
+
+.today-card.filled .today-card-mode {
+  color: var(--text-secondary);
+}
+
+.today-card-status {
+  font-family: var(--serif);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-faint);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  flex: 1;
+}
+
+.today-card.filled .today-card-status {
+  color: var(--text);
+}
+
+.today-card-empty {
+  font-style: italic;
+}
+
+.today-card-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: auto;
+}
+
+@media (max-width: 600px) {
+  .today-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .today-card {
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+    min-height: auto;
+    padding: 14px;
+  }
+  .today-card-mode {
+    flex-shrink: 0;
+    flex-direction: column;
+    gap: 2px;
+    align-items: flex-start;
+    width: 70px;
+  }
+  .today-card-status {
+    -webkit-line-clamp: 2;
+  }
 }
 
 .timeline-day {
