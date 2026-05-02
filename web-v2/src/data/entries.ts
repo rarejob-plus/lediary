@@ -32,12 +32,14 @@ function toEntry(raw: RawPost): DiaryEntry {
   const ms = typeof raw.createdAt === 'number'
     ? raw.createdAt
     : raw.createdAt?._seconds ? raw.createdAt._seconds * 1000 : Date.now();
+  const validModes: Mode[] = ['morning', 'lesson', 'diary'];
+  const mode: Mode = validModes.includes(raw.mode) ? raw.mode : 'diary';
   return {
     id: raw.id,
     date: raw.date,
     time: timeFromCreatedAt(raw.createdAt),
-    mode: raw.mode,
-    contentJp: raw.contentJp,
+    mode,
+    contentJp: raw.contentJp || '',
     userTranslation: raw.userTranslation || '',
     feedback: raw.feedback || [],
     vocabulary: raw.vocabulary || [],
@@ -50,7 +52,9 @@ function toEntry(raw: RawPost): DiaryEntry {
 export async function fetchEntries(): Promise<DiaryEntry[]> {
   if (!getCurrentUser()) return MOCK_ENTRIES;
   const raws = await api.get<RawPost[]>('/diary/posts');
-  return raws.map(toEntry);
+  return raws
+    .filter((r) => typeof r.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.date))
+    .map(toEntry);
 }
 
 export async function fetchEntry(id: string): Promise<DiaryEntry | undefined> {
