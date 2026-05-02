@@ -1,4 +1,5 @@
 import { renderHeader, renderMockBanner } from '../components/header';
+import { icons } from '../components/icons';
 import { findEntry, MODE_META } from '../data/mock';
 import { navigate } from '../router';
 
@@ -7,75 +8,86 @@ export function renderEntry(root: HTMLElement, id: string): void {
 
   const entry = findEntry(id);
   if (!entry) {
-    const back = document.createElement('button');
-    back.className = 'btn';
-    back.textContent = '← タイムラインに戻る';
-    back.addEventListener('click', () => navigate('/'));
-    root.appendChild(back);
-    const msg = document.createElement('p');
-    msg.style.marginTop = '20px';
-    msg.style.color = 'var(--text-muted)';
-    msg.textContent = 'エントリが見つかりませんでした';
-    root.appendChild(msg);
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'padding: 32px 24px;';
+    wrap.innerHTML = `
+      <button class="btn btn-sm" id="back">${icons.chevronLeft(14)} 戻る</button>
+      <p style="margin-top:18px;color:var(--text-muted);">エントリが見つかりませんでした</p>
+    `;
+    wrap.querySelector('#back')!.addEventListener('click', () => navigate('/'));
+    root.appendChild(wrap);
     root.appendChild(renderMockBanner());
     return;
   }
 
   const meta = MODE_META[entry.mode];
-  const dateLabel = new Date(entry.date + 'T00:00:00').toLocaleDateString('ja-JP', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    weekday: 'long',
-  });
+  const d = new Date(entry.date + 'T00:00:00');
 
-  const header = document.createElement('div');
-  header.className = 'entry-header';
-  header.innerHTML = `
-    <div class="entry-date">${dateLabel}</div>
-    <div class="entry-mode-meta">
-      <span style="color:${meta.color};">${meta.emoji} ${meta.label}</span>
-    </div>
-    <div class="entry-actions">
-      <button class="btn btn-sm" id="edit">編集</button>
-      <button class="btn btn-sm" id="redo">もう一度添削</button>
-      <button class="btn btn-sm" id="flow">流れを整える</button>
-      <button class="btn btn-sm" id="sheet">レッスンシート</button>
-      <button class="btn btn-sm btn-ghost" id="del" style="margin-left:auto;color:var(--accent);">削除</button>
+  // Hero
+  const hero = document.createElement('div');
+  hero.className = 'entry-hero';
+  hero.style.background = entry.cover || 'var(--surface-soft)';
+  hero.innerHTML = `
+    <div class="entry-hero-fade"></div>
+    <div class="entry-hero-meta">
+      <span class="entry-hero-pill">${iconFor(meta.icon)} ${meta.label}</span>
+      ${entry.location ? `<span class="entry-hero-pill">${icons.mapPin(11)} ${escapeHtml(entry.location)}</span>` : ''}
+      ${entry.weather ? `<span class="entry-hero-pill">${escapeHtml(entry.weather)}</span>` : ''}
     </div>
   `;
-  header.querySelector('#edit')!.addEventListener('click', () => alert('編集モック'));
-  header.querySelector('#redo')!.addEventListener('click', () => alert('もう一度添削モック'));
-  header.querySelector('#flow')!.addEventListener('click', () => alert('流れを整えるモック'));
-  header.querySelector('#sheet')!.addEventListener('click', () => alert('レッスンシート作成モック'));
-  header.querySelector('#del')!.addEventListener('click', () => {
+  root.appendChild(hero);
+
+  // Content
+  const content = document.createElement('div');
+  content.className = 'entry-content';
+
+  const dateBlock = document.createElement('div');
+  dateBlock.className = 'entry-date-block';
+  dateBlock.innerHTML = `
+    <div class="entry-date-num">${d.getDate()}</div>
+    <div class="entry-date-meta">
+      <strong>${d.toLocaleDateString('en-US', { weekday: 'long' })}</strong>
+      <span>${d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} · ${entry.time}</span>
+    </div>
+  `;
+  content.appendChild(dateBlock);
+
+  const actions = document.createElement('div');
+  actions.className = 'entry-actions';
+  actions.innerHTML = `
+    <button class="btn btn-sm" id="edit">${icons.pencil(14)} 編集</button>
+    <button class="btn btn-sm" id="redo">もう一度添削</button>
+    <button class="btn btn-sm" id="flow">流れを整える</button>
+    <button class="btn btn-sm" id="sheet">${icons.share(14)} レッスンシート</button>
+    <button class="btn btn-sm btn-ghost danger" id="del" title="削除">${icons.trash(14)}</button>
+  `;
+  actions.querySelector('#edit')!.addEventListener('click', () => alert('編集モック'));
+  actions.querySelector('#redo')!.addEventListener('click', () => alert('もう一度添削モック'));
+  actions.querySelector('#flow')!.addEventListener('click', () => alert('流れを整えるモック'));
+  actions.querySelector('#sheet')!.addEventListener('click', () => alert('レッスンシート作成モック'));
+  actions.querySelector('#del')!.addEventListener('click', () => {
     if (confirm('この日記を削除しますか？')) {
       alert('削除モック → タイムラインに戻ります');
       navigate('/');
     }
   });
-  root.appendChild(header);
+  content.appendChild(actions);
 
   const jp = document.createElement('div');
-  jp.className = 'entry-body-jp';
+  jp.className = 'entry-jp';
   jp.textContent = entry.contentJp;
-  root.appendChild(jp);
+  content.appendChild(jp);
 
   const body = document.createElement('div');
   body.className = 'entry-body';
   body.textContent = entry.userTranslation;
-  root.appendChild(body);
+  content.appendChild(body);
 
-  // Sections
-  appendSection(root, '覚えたいフレーズ', renderVocabSection(entry.vocabulary), true);
-  appendSection(root, 'シャドーイング', renderShadowingSection(entry.userTranslation), false);
-  appendSection(
-    root,
-    '日記を膨らませる',
-    renderExpansionSection(entry.expansionQuestions),
-    false,
-  );
+  appendSection(content, '覚えたいフレーズ', renderVocabSection(entry.vocabulary), true);
+  appendSection(content, 'シャドーイング', renderShadowingSection(entry.userTranslation), false);
+  appendSection(content, '日記を膨らませる', renderExpansionSection(entry.expansionQuestions), false);
 
+  root.appendChild(content);
   root.appendChild(renderMockBanner());
 }
 
@@ -86,7 +98,7 @@ function appendSection(parent: HTMLElement, title: string, body: HTMLElement, op
   header.className = 'section-header';
   header.innerHTML = `
     <span class="section-title">${title}</span>
-    <span class="section-chevron ${openByDefault ? 'open' : ''}">▼</span>
+    <span class="section-chevron ${openByDefault ? 'open' : ''}">${icons.chevronDown(16)}</span>
   `;
   sec.appendChild(header);
   body.classList.add('section-body');
@@ -110,8 +122,8 @@ function renderVocabSection(vocab: { word: string; definition: string; example: 
     row.className = 'vocab-row';
     row.innerHTML = `
       <span class="vocab-en">${escapeHtml(v.word)}</span>
-      <span class="vocab-ja">${escapeHtml(v.definition)}</span>
       <button class="vocab-flashcard-btn">Flashcard</button>
+      <span class="vocab-ja">${escapeHtml(v.definition)}</span>
       <span class="vocab-example">${escapeHtml(v.example)}</span>
     `;
     row.querySelector('.vocab-flashcard-btn')!.addEventListener('click', () => alert('Flashcard 保存モック'));
@@ -129,9 +141,8 @@ function renderShadowingSection(text: string): HTMLElement {
     </div>
   `;
   wrap.querySelector('#gen')!.addEventListener('click', () => {
-    const para = wrap.querySelector('#para')!;
-    para.classList.add('shown');
-    (wrap.querySelector('#gen') as HTMLButtonElement).textContent = '再生 ▶︎';
+    wrap.querySelector('#para')!.classList.add('shown');
+    (wrap.querySelector('#gen') as HTMLButtonElement).textContent = '再生';
   });
   return wrap;
 }
@@ -165,6 +176,12 @@ function renderExpansionSection(questions: { question: string; hintJa: string; h
     wrap.appendChild(card);
   });
   return wrap;
+}
+
+function iconFor(name: 'sun' | 'graduation' | 'moon'): string {
+  if (name === 'sun') return icons.sun(11);
+  if (name === 'graduation') return icons.graduation(11);
+  return icons.moon(11);
 }
 
 function escapeHtml(s: string): string {

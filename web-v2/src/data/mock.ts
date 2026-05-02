@@ -25,7 +25,11 @@ export interface FeedbackItem {
 export interface DiaryEntry {
   id: string;
   date: string; // YYYY-MM-DD
+  time: string; // HH:MM (mock)
   mode: Mode;
+  location?: string; // mock metadata pill
+  weather?: string;
+  cover?: string; // CSS background string for hero placeholder
   contentJp: string;
   userTranslation: string;
   feedback: FeedbackItem[];
@@ -38,19 +42,23 @@ export const MOCK_ENTRIES: DiaryEntry[] = [
   {
     id: 'mock_2026-05-02_morning',
     date: '2026-05-02',
+    time: '08:14',
     mode: 'morning',
+    location: 'Yokohama, Japan',
+    weather: 'Sunny · 21°',
+    cover: 'linear-gradient(135deg,#f6c27a 0%,#e8a05a 45%,#cf7547 100%)',
     contentJp: '今日は家族でフラワーパークに行く！いよいよゴールデンウィーク開始！',
-    userTranslation: "I'm heading to a flower park with my family today! Anyway, today marks the start of Golden Week!",
+    userTranslation: "I'm heading to a flower park with my family today. Today is finally the start of Golden Week!",
     feedback: [
       {
         original: 'Anyway, today marks the start of Golden Week!',
-        corrected: "And today is the start of Golden Week — finally!",
-        explanation: '"Anyway" は話題を変える時に使う。前文と文脈が続いているので "And ... finally" の方がワクワク感が伝わります。',
+        corrected: 'And today is finally the start of Golden Week!',
+        explanation: '"Anyway" は話題を変える時に使う。文脈が続いているので "And ... finally" の方がワクワク感が伝わります。',
       },
     ],
     vocabulary: [
       { word: 'head to', definition: '〜へ向かう', example: "I'm heading to the supermarket to buy some dinner." },
-      { word: 'mark the start of', definition: '〜の始まりを告げる、〜が始まる', example: 'Today marks the start of our summer vacation.' },
+      { word: 'mark the start of', definition: '〜の始まりを告げる', example: 'Today marks the start of our summer vacation.' },
     ],
     expansionQuestions: [],
     createdAt: Date.now(),
@@ -58,7 +66,11 @@ export const MOCK_ENTRIES: DiaryEntry[] = [
   {
     id: 'mock_2026-05-01_diary',
     date: '2026-05-01',
+    time: '22:47',
     mode: 'diary',
+    location: 'Home',
+    weather: 'Cloudy · 19°',
+    cover: 'linear-gradient(135deg,#3a4a6b 0%,#2c3a55 60%,#1d2538 100%)',
     contentJp: '今日は祝日でお休み。イベントはゆずなさん一家の来訪。子どもたちもう小2と年長か。昼はロピア。ちょっと食べすぎた。',
     userTranslation: "Today was a holiday. Yuzuna's family came over. Their kids are already in 2nd grade and kindergarten. We had lunch at Lopia. I ate a bit too much.",
     feedback: [],
@@ -78,14 +90,18 @@ export const MOCK_ENTRIES: DiaryEntry[] = [
   {
     id: 'mock_2026-04-30_lesson',
     date: '2026-04-30',
+    time: '07:32',
     mode: 'lesson',
+    location: 'Online',
+    weather: 'Clear · 18°',
+    cover: 'linear-gradient(135deg,#7ba6d9 0%,#3b6cb0 60%,#1f4684 100%)',
     contentJp: 'レッスンでは新しい先生と話した。発音を直してくれたのが嬉しかった。次回は冠詞を意識する。',
-    userTranslation: "I talked with a new teacher in my lesson. I was happy that she fixed my pronunciation. Next time I'll be conscious about articles.",
+    userTranslation: "I talked with a new teacher in my lesson. I was happy that she fixed my pronunciation. Next time I'll pay more attention to articles.",
     feedback: [
       {
         original: "Next time I'll be conscious about articles.",
         corrected: "Next time I'll pay more attention to articles.",
-        explanation: '"be conscious about" は不自然。"pay attention to" の方が自然な英語です。',
+        explanation: '"be conscious about" は不自然。"pay attention to" の方が自然な英語。',
       },
     ],
     vocabulary: [
@@ -97,9 +113,13 @@ export const MOCK_ENTRIES: DiaryEntry[] = [
   {
     id: 'mock_2026-04-29_diary',
     date: '2026-04-29',
+    time: '23:11',
     mode: 'diary',
+    location: 'Home',
+    weather: 'Cloudy · 17°',
+    cover: 'linear-gradient(135deg,#4d4453 0%,#2e2733 60%,#1c161e 100%)',
     contentJp: '昨日のレッスン後、復習しようと思ったけど結局YouTube見て寝た。明日からはちゃんとやろう。',
-    userTranslation: 'After yesterday\'s lesson I wanted to review, but I ended up watching YouTube and went to sleep. From tomorrow I\'ll do it properly.',
+    userTranslation: "After yesterday's lesson I wanted to review, but I ended up watching YouTube and went to sleep. From tomorrow I'll do it properly.",
     feedback: [],
     vocabulary: [
       { word: 'end up doing', definition: '結局〜する羽目になる', example: 'I ended up working until midnight.' },
@@ -110,7 +130,11 @@ export const MOCK_ENTRIES: DiaryEntry[] = [
   {
     id: 'mock_2026-04-28_morning',
     date: '2026-04-28',
+    time: '07:55',
     mode: 'morning',
+    location: 'Home',
+    weather: 'Sunny · 20°',
+    cover: 'linear-gradient(135deg,#f3d390 0%,#deb064 60%,#b78342 100%)',
     contentJp: '今日は午後にレッスン。午前中は集中して仕事を片付ける。',
     userTranslation: "I have a lesson this afternoon. I'll focus and get my work done this morning.",
     feedback: [],
@@ -126,8 +150,8 @@ export function findEntry(id: string): DiaryEntry | undefined {
   return MOCK_ENTRIES.find((e) => e.id === id);
 }
 
-export const MODE_META: Record<Mode, { label: string; emoji: string; color: string }> = {
-  morning: { label: 'Morning', emoji: '🌅', color: '#e9a450' },
-  lesson: { label: 'Lesson', emoji: '🎓', color: '#5b8def' },
-  diary: { label: 'Diary', emoji: '🌙', color: '#3a4a6b' },
+export const MODE_META: Record<Mode, { label: string; icon: 'sun' | 'graduation' | 'moon'; color: string }> = {
+  morning: { label: 'Morning', icon: 'sun', color: '#c47832' },
+  lesson: { label: 'Lesson', icon: 'graduation', color: '#3b6cb0' },
+  diary: { label: 'Diary', icon: 'moon', color: '#3a4a6b' },
 };

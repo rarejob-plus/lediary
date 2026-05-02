@@ -1,50 +1,57 @@
-.timeline-greeting {
-  font-family: var(--serif);
-  font-size: 18px;
-  color: var(--text-muted);
-  margin-bottom: 24px;
-  line-height: 1.5;
+/* ─── Timeline ─── */
+.timeline {
+  padding: 32px 24px 0;
 }
 
-.timeline-greeting-streak {
-  display: inline-block;
-  background: var(--primary-soft);
-  color: var(--primary);
-  padding: 2px 10px;
+.timeline-streak {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
   border-radius: 100px;
+  background: var(--surface-soft);
   font-size: 12px;
-  font-family: var(--sans);
-  margin-left: 8px;
-  vertical-align: middle;
+  color: var(--text-secondary);
+  margin-bottom: 24px;
+}
+
+.timeline-streak svg {
+  color: #d97757;
+}
+
+.timeline-day {
+  margin-bottom: 36px;
+}
+
+.timeline-day-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.timeline-day-num {
+  font-family: var(--serif);
+  font-size: 28px;
   font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
 }
 
-.write-cta {
-  display: block;
-  width: 100%;
-  background: var(--primary);
-  color: white;
-  border: none;
-  border-radius: var(--radius);
-  padding: 18px;
-  font-size: 16px;
-  font-weight: 500;
-  margin-bottom: 32px;
-  cursor: pointer;
-  transition: background 0.15s;
+.timeline-day-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
-.write-cta:hover {
-  background: #2c3a55;
-}
-
-.timeline-section-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--text-faint);
-  margin: 32px 0 12px;
+.timeline-day-meta strong {
   font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 .entry-card {
@@ -52,43 +59,71 @@
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 18px 20px;
-  margin-bottom: 12px;
+  overflow: hidden;
+  margin-bottom: 14px;
   cursor: pointer;
-  transition: border-color 0.15s, transform 0.15s;
-  box-shadow: var(--shadow);
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+  text-align: left;
+  width: 100%;
+  padding: 0;
 }
 
 .entry-card:hover {
-  border-color: var(--border-strong);
   transform: translateY(-1px);
+  box-shadow: var(--shadow-2);
 }
 
-.entry-card-meta {
+.entry-cover {
+  height: 140px;
+  background: var(--surface-soft);
+  position: relative;
+}
+
+.entry-cover-meta {
+  position: absolute;
+  bottom: 12px;
+  left: 16px;
+  right: 16px;
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
-  font-size: 12px;
-  color: var(--text-muted);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.92);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
 }
 
-.entry-mode-pill {
+.entry-cover-meta svg {
+  width: 12px;
+  height: 12px;
+}
+
+.entry-cover-pill {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 8px;
+  padding: 3px 9px;
+  background: rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border-radius: 100px;
-  background: var(--surface-soft);
+  font-weight: 500;
+}
+
+.entry-card-body {
+  padding: 14px 18px 16px;
+}
+
+.entry-card-time {
   font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  letter-spacing: 0.04em;
 }
 
 .entry-card-text {
   font-family: var(--serif);
   font-size: 15px;
-  line-height: 1.7;
+  line-height: 1.65;
   color: var(--text);
   display: -webkit-box;
   -webkit-line-clamp: 3;
@@ -96,25 +131,21 @@
   overflow: hidden;
 }
 
-.entry-card-vocab {
-  margin-top: 10px;
+.entry-card-tags {
   display: flex;
-  flex-wrap: wrap;
   gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 10px;
 }
 
-.entry-vocab-chip {
+.entry-tag {
   font-size: 11px;
-  background: var(--surface-soft);
-  padding: 2px 8px;
-  border-radius: 100px;
   color: var(--text-muted);
-}
-
-.timeline-empty {
-  text-align: center;
-  color: var(--text-faint);
-  padding: 48px 0;
   font-family: var(--serif);
   font-style: italic;
+}
+
+.entry-tag::before {
+  content: '#';
+  margin-right: 1px;
 }

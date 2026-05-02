@@ -1,25 +1,54 @@
+/* ─── Editor ─── */
+.editor {
+  padding: 32px 24px 0;
+}
+
 .editor-meta {
   display: flex;
-  align-items: center;
+  align-items: baseline;
+  justify-content: space-between;
   gap: 12px;
-  margin-bottom: 24px;
+  margin-bottom: 28px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
 }
 
 .editor-date {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.editor-date-num {
   font-family: var(--serif);
-  font-size: 16px;
+  font-size: 32px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.editor-date-meta {
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.editor-date-meta strong {
   color: var(--text);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .mode-pills {
   display: flex;
-  gap: 6px;
-  margin-left: auto;
+  gap: 4px;
 }
 
 .mode-pill {
-  padding: 4px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
   border: 1px solid var(--border);
   border-radius: 100px;
   background: transparent;
@@ -28,10 +57,15 @@
   transition: all 0.15s;
 }
 
+.mode-pill svg {
+  width: 12px;
+  height: 12px;
+}
+
 .mode-pill.active {
-  background: var(--primary);
+  background: var(--text);
   color: white;
-  border-color: var(--primary);
+  border-color: var(--text);
 }
 
 .compose-block {
@@ -41,32 +75,34 @@
 .compose-label {
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--text-faint);
-  margin-bottom: 8px;
+  letter-spacing: 0.14em;
+  color: var(--text-muted);
+  margin-bottom: 10px;
   font-weight: 600;
 }
 
 .compose-textarea {
   width: 100%;
-  min-height: 100px;
-  padding: 16px;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  min-height: 110px;
+  padding: 16px 18px;
+  background: var(--surface-warm);
+  border: 1px solid transparent;
   border-radius: var(--radius);
   font-size: 15px;
   line-height: 1.7;
   resize: vertical;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, background 0.15s;
 }
 
 .compose-textarea:focus {
-  border-color: var(--primary);
+  border-color: var(--border-strong);
+  background: var(--surface);
 }
 
 .compose-textarea.en {
   font-family: var(--serif);
-  font-size: 16px;
+  font-size: 17px;
+  min-height: 160px;
 }
 
 .compose-action-row {
@@ -80,10 +116,9 @@
 }
 
 .hints-card {
-  background: var(--surface-soft);
-  border: 1px solid var(--border);
+  background: var(--surface-warm);
   border-radius: var(--radius);
-  padding: 16px;
+  padding: 16px 18px;
   margin-bottom: 28px;
 }
 
@@ -91,17 +126,17 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
-  font-size: 12px;
+  margin-bottom: 10px;
+  font-size: 11px;
   color: var(--text-muted);
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
 }
 
 .hint-row {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   padding: 8px 0;
   border-bottom: 1px solid var(--border);
   align-items: baseline;
@@ -128,25 +163,29 @@
 .correction-mode-toggle {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
   margin-bottom: 16px;
-  font-size: 12px;
-  color: var(--text-muted);
+  padding: 12px 16px;
+  background: var(--surface-warm);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--text-secondary);
 }
 
 .toggle-switch {
   position: relative;
-  width: 36px;
-  height: 20px;
-  background: var(--border);
+  width: 38px;
+  height: 22px;
+  background: var(--border-strong);
   border-radius: 100px;
   border: none;
   cursor: pointer;
   transition: background 0.15s;
+  flex-shrink: 0;
 }
 
 .toggle-switch.on {
-  background: var(--primary);
+  background: var(--text);
 }
 
 .toggle-switch::after {
@@ -154,8 +193,8 @@
   position: absolute;
   top: 2px;
   left: 2px;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   background: white;
   border-radius: 50%;
   transition: transform 0.15s;
@@ -169,7 +208,7 @@
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 16px;
+  padding: 18px;
   margin-bottom: 12px;
 }
 
@@ -177,8 +216,9 @@
   font-size: 11px;
   color: var(--text-faint);
   font-weight: 600;
-  letter-spacing: 0.1em;
-  margin-bottom: 10px;
+  letter-spacing: 0.12em;
+  margin-bottom: 12px;
+  text-transform: uppercase;
 }
 
 .correction-original {
@@ -186,64 +226,76 @@
   font-size: 15px;
   color: var(--text-muted);
   text-decoration: line-through;
-  text-decoration-color: rgba(192, 57, 43, 0.5);
+  text-decoration-color: rgba(192, 57, 43, 0.55);
   margin-bottom: 8px;
 }
 
 .correction-corrected {
   font-family: var(--serif);
-  font-size: 15px;
-  color: var(--primary);
+  font-size: 16px;
+  color: var(--text);
   font-weight: 500;
-  margin-bottom: 10px;
-}
-
-.correction-corrected.hidden-mode {
-  background: var(--surface-soft);
-  color: var(--text-faint);
-  filter: blur(4px);
-  user-select: none;
-  cursor: pointer;
-  border-radius: 4px;
-}
-
-.correction-corrected.hidden-mode::after {
-  content: 'タップで答えを見る';
-  position: absolute;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: var(--surface-warm);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid #5cb27a;
 }
 
 .correction-explanation {
   font-size: 13px;
-  color: var(--text-muted);
-  background: var(--surface-soft);
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  margin-bottom: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 14px;
+  line-height: 1.7;
 }
 
 .correction-rewrite-label {
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--text-faint);
+  letter-spacing: 0.14em;
+  color: var(--text-muted);
   margin-bottom: 6px;
   font-weight: 600;
 }
 
 .correction-rewrite {
   width: 100%;
-  min-height: 60px;
+  min-height: 64px;
   padding: 10px 12px;
-  background: var(--surface-soft);
-  border: 1px solid var(--border);
+  background: var(--surface-warm);
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
   font-family: var(--serif);
   font-size: 15px;
-  line-height: 1.6;
+  line-height: 1.65;
   resize: vertical;
 }
 
 .correction-rewrite:focus {
-  border-color: var(--primary);
+  border-color: var(--border-strong);
   background: var(--surface);
+}
+
+.stoic-veil {
+  position: relative;
+  cursor: pointer;
+}
+
+.stoic-veil .correction-corrected {
+  filter: blur(8px);
+  user-select: none;
+}
+
+.stoic-veil-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 600;
+  pointer-events: none;
 }
