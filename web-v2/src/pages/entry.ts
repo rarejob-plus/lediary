@@ -185,7 +185,7 @@ function renderExpansionSection(questions: { question: string; hintJa: string; h
       <div class="expansion-q-text">${escapeHtml(q.question)}</div>
       <div class="expansion-q-hint">${escapeHtml(q.hintJa)}</div>
       <div class="expansion-q-phrases">
-        ${q.hintPhrases.map((p) => `<span class="expansion-q-phrase">${escapeHtml(p)}</span>`).join('')}
+        ${(q.hintPhrases || []).map((p) => `<span class="expansion-q-phrase">${escapeHtml(p)}</span>`).join('')}
       </div>
       <textarea class="expansion-q-input" placeholder="英語で答えてみよう"></textarea>
       <div style="display:flex;justify-content:flex-end;margin-top:8px;">
@@ -203,6 +203,6 @@ function iconFor(name: 'sun' | 'graduation' | 'moon'): string {
   return icons.moon(11);
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+function escapeHtml(s: string | undefined | null): string {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }
