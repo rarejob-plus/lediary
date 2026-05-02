@@ -106,7 +106,7 @@ export function renderTimeline(root: HTMLElement): void {
           </div>
         </div>
         <div class="entry-card-body">
-          <div class="entry-card-time">${entry.time}${entry.weather ? ` · ${escapeHtml(entry.weather)}` : ''}</div>
+          <div class="entry-card-time">${entry.time}</div>
           <p class="entry-card-text">${escapeHtml(entry.userTranslation || entry.contentJp)}</p>
           ${entry.vocabulary.length > 0 ? `
             <div class="entry-card-tags">
