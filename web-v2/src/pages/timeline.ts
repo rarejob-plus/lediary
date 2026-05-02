@@ -104,7 +104,7 @@ export function renderTimeline(root: HTMLElement): void {
           <div class="entry-cover-meta">
             <span class="entry-cover-pill">${iconFor(meta.icon)} ${meta.label}</span>
             <span class="entry-cover-pill">${solarTerm(entry.date)}</span>
-            <span class="entry-cover-pill">Day ${dayOfYear(entry.date)} / ${daysInYear(entry.date)}</span>
+            <span class="entry-cover-pill">${dayOfYear(entry.date)} / ${daysInYear(entry.date)}</span>
             ${entry.mood ? `<span class="entry-cover-pill">${escapeHtml(entry.mood)}</span>` : ''}
           </div>
         </div>

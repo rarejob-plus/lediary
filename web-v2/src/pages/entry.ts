@@ -34,7 +34,7 @@ export function renderEntry(root: HTMLElement, id: string): void {
     <div class="entry-hero-meta">
       <span class="entry-hero-pill">${iconFor(meta.icon)} ${meta.label}</span>
       <span class="entry-hero-pill">${solarTerm(entry.date)}</span>
-      <span class="entry-hero-pill">Day ${dayOfYear(entry.date)} / ${daysInYear(entry.date)}</span>
+      <span class="entry-hero-pill">${dayOfYear(entry.date)} / ${daysInYear(entry.date)}</span>
       ${entry.mood ? `<span class="entry-hero-pill">${escapeHtml(entry.mood)}</span>` : ''}
     </div>
   `;
