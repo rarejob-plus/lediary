@@ -1,4 +1,4 @@
-import { renderHeader, renderFab, renderMockBanner } from '../components/header';
+import { renderHeader, renderFab } from '../components/header';
 import { icons } from '../components/icons';
 import { coverFor } from '../components/cover';
 import { MODE_META, type DiaryEntry, type Mode } from '../data/mock';
@@ -28,7 +28,6 @@ export function renderTimeline(root: HTMLElement): void {
   wrap.innerHTML = `<p style="color:var(--text-muted);text-align:center;padding:40px 0;font-size:13px;">読み込み中…</p>`;
   root.appendChild(wrap);
   root.appendChild(renderFab());
-  root.appendChild(renderMockBanner());
 
   fetchEntries().then((entries) => renderBody(wrap, entries)).catch((err) => {
     console.error(err);

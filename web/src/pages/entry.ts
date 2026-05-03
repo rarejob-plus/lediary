@@ -1,4 +1,4 @@
-import { renderHeader, renderMockBanner } from '../components/header';
+import { renderHeader } from '../components/header';
 import { icons } from '../components/icons';
 import { coverFor } from '../components/cover';
 import { MODE_META, type DiaryEntry } from '../data/mock';
@@ -16,7 +16,6 @@ export function renderEntry(root: HTMLElement, id: string): void {
   placeholder.style.cssText = 'color:var(--text-muted);text-align:center;padding:60px 24px;font-size:13px;';
   placeholder.textContent = '読み込み中…';
   root.appendChild(placeholder);
-  root.appendChild(renderMockBanner());
 
   fetchEntry(id).then((entry) => {
     placeholder.remove();
@@ -28,7 +27,7 @@ export function renderEntry(root: HTMLElement, id: string): void {
         <p style="margin-top:18px;color:var(--text-muted);">エントリが見つかりませんでした</p>
       `;
       wrap.querySelector('#back')!.addEventListener('click', () => navigate('/'));
-      root.insertBefore(wrap, root.querySelector('.mock-banner'));
+      root.appendChild(wrap);
       return;
     }
     renderEntryBody(root, entry);
@@ -42,7 +41,6 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
   const meta = MODE_META[entry.mode];
   const d = new Date(entry.date + 'T00:00:00');
   // remove placeholder/banner so we can append in order, banner re-added at end
-  root.querySelector('.mock-banner')?.remove();
 
   // Hero
   const hero = document.createElement('div');
@@ -161,7 +159,6 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
   appendSection(content, '日記を膨らませる', renderExpansionSection(entry, body), false);
 
   root.appendChild(content);
-  root.appendChild(renderMockBanner());
 }
 
 function appendSection(parent: HTMLElement, title: string, body: HTMLElement, openByDefault: boolean): void {

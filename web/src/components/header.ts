@@ -58,13 +58,6 @@ export function renderFab(): HTMLElement {
   return a;
 }
 
-export function renderMockBanner(): HTMLElement {
-  const div = document.createElement('div');
-  div.className = 'mock-banner';
-  div.textContent = getCurrentUser() ? 'v2 (live)' : 'Mock';
-  return div;
-}
-
 function escapeAttr(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }

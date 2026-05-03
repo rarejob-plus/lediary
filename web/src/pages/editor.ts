@@ -1,4 +1,4 @@
-import { renderHeader, renderMockBanner } from '../components/header';
+import { renderHeader } from '../components/header';
 import { icons } from '../components/icons';
 import type { Mode, FeedbackItem } from '../data/mock';
 import { MODE_META } from '../data/mock';
@@ -313,7 +313,6 @@ export function renderEditor(root: HTMLElement): void {
   }
 
   root.appendChild(wrap);
-  root.appendChild(renderMockBanner());
 
   // Detail ページからの handoff があれば即時利用（fetch 待ちゼロ）。
   // 無ければ通常通り API から探す。

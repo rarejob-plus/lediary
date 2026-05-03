@@ -1,4 +1,4 @@
-import { renderHeader, renderFab, renderMockBanner } from '../components/header';
+import { renderHeader, renderFab } from '../components/header';
 import { icons } from '../components/icons';
 import { MODE_META, type DiaryEntry } from '../data/mock';
 import { fetchEntries } from '../data/entries';
@@ -163,7 +163,6 @@ export function renderCalendar(root: HTMLElement): void {
 
   render();
   root.appendChild(renderFab());
-  root.appendChild(renderMockBanner());
 }
 
 function monthLabel(y: number, m: number): string {
