@@ -83,24 +83,37 @@ export function renderEditor(root: HTMLElement): void {
   });
   wrap.appendChild(meta);
 
+  // 2 カラム grid: 左=JP+ヒント、右=EN+添削。モバイルでは縦積み。
+  const grid = document.createElement('div');
+  grid.className = 'compose-grid';
+  wrap.appendChild(grid);
+
+  const left = document.createElement('div');
+  left.className = 'compose-left';
+  grid.appendChild(left);
+
+  const right = document.createElement('div');
+  right.className = 'compose-right';
+  grid.appendChild(right);
+
   const jpBlock = document.createElement('div');
   jpBlock.className = 'compose-block';
   jpBlock.innerHTML = `
     <div class="compose-label">日本語で書く</div>
     <textarea id="jp-input" class="compose-textarea" placeholder="今日あったことを日本語で…"></textarea>
   `;
-  wrap.appendChild(jpBlock);
+  left.appendChild(jpBlock);
 
   const hintToggleRow = document.createElement('div');
   hintToggleRow.className = 'compose-action-row';
   hintToggleRow.style.marginBottom = '24px';
   hintToggleRow.innerHTML = `<button class="btn" id="show-hints">英訳ヒントを見る</button>`;
-  wrap.appendChild(hintToggleRow);
+  left.appendChild(hintToggleRow);
 
   const hintsCard = document.createElement('div');
   hintsCard.className = 'hints-card';
   hintsCard.style.display = 'none';
-  wrap.appendChild(hintsCard);
+  left.appendChild(hintsCard);
 
   hintToggleRow.querySelector('#show-hints')!.addEventListener('click', async () => {
     const btn = hintToggleRow.querySelector('#show-hints') as HTMLButtonElement;
@@ -130,16 +143,20 @@ export function renderEditor(root: HTMLElement): void {
     <div class="compose-label">英語にする</div>
     <textarea id="en-input" class="compose-textarea en" placeholder="Write in English…"></textarea>
   `;
-  wrap.appendChild(enBlock);
+  right.appendChild(enBlock);
+  // モバイルで EN フォーカス時にヒントを下部 sticky にするためのクラス制御
+  const enInputEl = enBlock.querySelector('#en-input') as HTMLTextAreaElement;
+  enInputEl.addEventListener('focus', () => document.body.classList.add('en-focused'));
+  enInputEl.addEventListener('blur', () => document.body.classList.remove('en-focused'));
 
   const actionRow = document.createElement('div');
   actionRow.className = 'compose-action-row';
   actionRow.innerHTML = `<button class="btn btn-primary" id="correct-btn">添削してもらう</button>`;
-  wrap.appendChild(actionRow);
+  right.appendChild(actionRow);
 
   const correctionSection = document.createElement('div');
   correctionSection.id = 'correction-section';
-  wrap.appendChild(correctionSection);
+  right.appendChild(correctionSection);
 
   function captureRewrites(): void {
     correctionSection.querySelectorAll<HTMLTextAreaElement>('.correction-rewrite').forEach((ta) => {

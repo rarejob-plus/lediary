@@ -299,3 +299,49 @@
   font-weight: 600;
   pointer-events: none;
 }
+
+/* ─── 2-column compose layout (desktop) ─── */
+.compose-grid {
+  display: block; /* mobile fallback: stacked */
+}
+
+@media (min-width: 720px) {
+  .compose-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+
+  .compose-left .hints-card {
+    position: sticky;
+    top: 72px; /* below sticky app-chrome */
+    max-height: calc(100vh - 96px);
+    overflow-y: auto;
+  }
+
+  .compose-right .compose-textarea.en {
+    min-height: 220px;
+  }
+}
+
+/* モバイル: EN テキストエリアにフォーカス中、ヒントを画面下部に sticky */
+@media (max-width: 719px) {
+  body.en-focused .hints-card {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 90;
+    max-height: 40vh;
+    overflow-y: auto;
+    margin: 0;
+    border-radius: var(--radius) var(--radius) 0 0;
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.12);
+  }
+
+  /* sticky ヒントが入力を隠さないよう EN 下に余白 */
+  body.en-focused .compose-right {
+    padding-bottom: 42vh;
+  }
+}
