@@ -2,18 +2,22 @@ import { renderTimeline } from './pages/timeline';
 import { renderEditor } from './pages/editor';
 import { renderEntry } from './pages/entry';
 import { renderCalendar } from './pages/calendar';
+import { renderSheet } from './pages/sheet';
 
 export type Route =
   | { name: 'timeline' }
   | { name: 'editor' }
   | { name: 'entry'; id: string }
-  | { name: 'calendar' };
+  | { name: 'calendar' }
+  | { name: 'sheet'; id: string };
 
 function parseRoute(): Route {
   const path = location.pathname;
   if (path === '/' || path === '') return { name: 'timeline' };
   if (path === '/editor') return { name: 'editor' };
   if (path === '/calendar') return { name: 'calendar' };
+  const sheetMatch = path.match(/^\/s\/(.+)$/);
+  if (sheetMatch) return { name: 'sheet', id: sheetMatch[1]! };
   const m = path.match(/^\/entry\/(.+)$/);
   if (m) return { name: 'entry', id: m[1]! };
   return { name: 'timeline' };
@@ -40,6 +44,9 @@ export function render(): void {
       break;
     case 'calendar':
       renderCalendar(root);
+      break;
+    case 'sheet':
+      renderSheet(root, route.id);
       break;
   }
   window.scrollTo({ top: 0, behavior: 'instant' });

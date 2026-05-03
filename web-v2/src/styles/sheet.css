@@ -1,0 +1,215 @@
+/* ─── Public lesson sheet ─── */
+.ls-page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 24px 80px;
+  font-family: var(--sans);
+  color: var(--text);
+}
+
+.ls-loading {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 80px 0;
+  font-size: 14px;
+}
+
+.ls-title-bar {
+  text-align: center;
+  margin-bottom: 32px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ls-category {
+  display: inline-block;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.ls-title {
+  font-family: var(--serif);
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  margin-bottom: 10px;
+}
+
+.ls-date {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.ls-nav {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  margin-bottom: 36px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px);
+  z-index: 10;
+}
+
+.ls-nav-item {
+  background: transparent;
+  border: none;
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 10px 16px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.ls-nav-item:hover {
+  background: var(--surface-warm);
+  color: var(--text);
+}
+
+.ls-section {
+  margin-bottom: 56px;
+}
+
+.ls-section-heading {
+  font-family: var(--serif);
+  font-size: 24px;
+  font-weight: 600;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--text);
+}
+
+/* Vocabulary */
+.ls-vocab-card {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.ls-vocab-card:last-child {
+  border-bottom: none;
+}
+
+.ls-vocab-word {
+  font-family: var(--serif);
+  font-size: 17px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.ls-vocab-def {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.ls-vocab-ex {
+  font-family: var(--serif);
+  font-size: 14px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Article */
+.ls-article-body {
+  margin-bottom: 18px;
+}
+
+.ls-article-p {
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 1.85;
+  color: var(--text);
+  margin-bottom: 14px;
+  letter-spacing: 0.005em;
+}
+
+.ls-instruction {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--surface-warm);
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--border-strong);
+  line-height: 1.6;
+}
+
+/* Discussion */
+.ls-discussion-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.ls-discussion-group {
+  background: var(--surface-warm);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+}
+
+.ls-topic-heading {
+  font-family: var(--serif);
+  font-size: 17px;
+  font-weight: 600;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.ls-topic-num {
+  font-family: var(--sans);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 600;
+  background: var(--surface);
+  padding: 2px 8px;
+  border-radius: 100px;
+}
+
+.ls-question {
+  display: flex;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.ls-question-num {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--text);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.ls-question-text {
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--text);
+}
+
+.ls-footer {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-faint);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-top: 56px;
+}
