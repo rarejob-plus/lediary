@@ -284,11 +284,28 @@ Return a JSON array (typically 2-8 items, no upper requirement — just enough t
   {"japanese": "日本語の部分/概念（必ずユーザー文中の言葉）", "english": "対応する英語表現", "note": "使い方の補足（日本語、1文）"}
 ]
 
-Return ONLY the JSON array, no markdown fences or extra text.`;
+Return ONLY the JSON array, no markdown fences or extra text.
+CRITICAL JSON FORMATTING:
+- Every string value MUST be enclosed in ASCII double quotes (").
+- Do NOT start a value with 「 or 」 — those are content, not delimiters.
+- If the Japanese content includes 「 」, they go INSIDE the "..." string.
+- Example: {"note": "「とっさに」のように…"} ✓ NOT {"note":「とっさに」のように…} ✗`;
 
-  const response = await callGemini(systemPrompt, contentJp);
-  const hints = parseJsonArray<HintItem[]>(response);
-  return hints || [];
+  let hints: HintItem[] = [];
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const response = await callGemini(systemPrompt, contentJp);
+      hints = parseJsonArray<HintItem[]>(response) || [];
+      break;
+    } catch (err) {
+      console.warn(`[generateHints] parse failure attempt ${attempt + 1}:`, err);
+      if (attempt === 1) {
+        // 2 回失敗したら諦めて空配列で返す（500 を出さない）
+        return [];
+      }
+    }
+  }
+  return hints;
 }
 
 // ─── Share ID ───
