@@ -217,6 +217,7 @@ Return a JSON object with exactly these fields:
 
 Rules:
 - feedback: Compare the user's translation sentence by sentence and suggest corrections appropriate to the CORRECTION LEVEL above. For each correction: "original" must be the user's FULL sentence, "corrected" must be the corrected FULL sentence, and "explanation" must explain in Japanese WHY the corrected version is better — specifically describe the nuance difference between the two expressions (e.g., when each would be used, what impression each gives, what subtle meaning differs). ALL alternatives MUST sound natural in casual spoken English — never use formal/written words like "therefore", "furthermore", "nevertheless". If the user's translation is empty, return an empty array [].
+- AT MOST ONE feedback item per sentence. Never produce two feedback items whose "original" overlaps (i.e., shares any substring of the user's text). If a sentence needs multiple changes, combine them into a single feedback item with one "corrected" that incorporates all the changes.
 - vocabulary: Extract 3-5 useful vocabulary items ONLY from expressions used in the "corrected" sentences above. These must be words/phrases that actually appear in your corrections. Do NOT include unrelated vocabulary.
 
 Return ONLY the JSON object, no markdown fences or extra text.`;
@@ -241,6 +242,18 @@ Return ONLY the JSON object, no markdown fences or extra text.`;
   if (!analysis.feedback) analysis.feedback = [];
   if (!analysis.vocabulary) analysis.vocabulary = [];
   if (!analysis.expansionQuestions) analysis.expansionQuestions = [];
+
+  // Backstop: drop feedback items whose "original" overlaps an earlier item
+  // so that final-text replace() never has to choose between competing edits.
+  const kept: FeedbackItem[] = [];
+  for (const fb of analysis.feedback) {
+    if (!fb.original) continue;
+    const overlap = kept.some(
+      (k) => k.original.includes(fb.original) || fb.original.includes(k.original),
+    );
+    if (!overlap) kept.push(fb);
+  }
+  analysis.feedback = kept;
 
   return analysis;
 }
