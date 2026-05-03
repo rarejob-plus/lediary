@@ -345,3 +345,19 @@
     padding-bottom: 42vh;
   }
 }
+
+/* モードバナー — 現在書いているモードを目立つ位置で表示 */
+.mode-banner {
+  background: var(--surface-warm);
+  border-left: 3px solid var(--text);
+  padding: 10px 14px;
+  margin-bottom: 24px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.mode-banner svg {
+  vertical-align: middle;
+  margin-right: 2px;
+}

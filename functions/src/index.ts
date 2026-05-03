@@ -426,6 +426,37 @@ export const api = onRequest(
       return;
     }
 
+    // POST /api/diary/posts/move — change an entry's mode (copy + delete)
+    if (path === "/api/diary/posts/move" && method === "POST") {
+      const { fromId, toMode } = req.body;
+      if (!fromId || !toMode) {
+        res.status(400).json({ error: "fromId and toMode required" });
+        return;
+      }
+      if (!["morning", "lesson", "diary", "story"].includes(toMode)) {
+        res.status(400).json({ error: "invalid toMode" });
+        return;
+      }
+      const fromDoc = await db.collection("lediary-posts").doc(fromId).get();
+      if (!fromDoc.exists || fromDoc.data()?.userId !== userId) {
+        res.status(404).json({ error: "source not found" });
+        return;
+      }
+      const fromData = fromDoc.data()!;
+      const date = fromData.date;
+      const newId = `${userId}_${date}_${toMode}`;
+      const targetDoc = await db.collection("lediary-posts").doc(newId).get();
+      if (targetDoc.exists && (targetDoc.data()?.contentJp || targetDoc.data()?.userTranslation)) {
+        res.status(409).json({ error: "target already has content" });
+        return;
+      }
+      const newData = { ...fromData, mode: toMode, updatedAt: Date.now() };
+      await db.collection("lediary-posts").doc(newId).set(newData);
+      await db.collection("lediary-posts").doc(fromId).delete();
+      res.json({ id: newId });
+      return;
+    }
+
     // GET /api/diary/posts/:id
     const postMatch = path.match(/^\/api\/diary\/posts\/(.+)$/);
     if (postMatch && method === "GET") {

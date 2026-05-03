@@ -72,6 +72,17 @@ export function renderEditor(root: HTMLElement): void {
       `).join('')}
     </div>
   `;
+
+  // モードバナー: 現在のモードを目立つ位置で確認できる
+  const banner = document.createElement('div');
+  banner.className = 'mode-banner';
+  function refreshBanner() {
+    const m = MODE_META[currentMode];
+    banner.style.borderLeftColor = m.color;
+    banner.innerHTML = `<span style="color:${m.color};font-weight:600;">${iconFor(m.icon)} ${m.label}</span> モードで書いています`;
+  }
+  refreshBanner();
+
   meta.querySelectorAll('.mode-pill').forEach((b) => {
     b.addEventListener('click', () => {
       const next = (b as HTMLElement).dataset.mode as Mode;
@@ -79,10 +90,12 @@ export function renderEditor(root: HTMLElement): void {
       currentMode = next;
       meta.querySelectorAll('.mode-pill').forEach((x) => x.classList.remove('active'));
       b.classList.add('active');
+      refreshBanner();
       loadForMode(currentMode);
     });
   });
   wrap.appendChild(meta);
+  wrap.appendChild(banner);
 
   // 2 カラム grid: 左=JP+ヒント、右=EN+添削。モバイルでは縦積み。
   const grid = document.createElement('div');

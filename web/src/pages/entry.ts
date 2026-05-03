@@ -79,6 +79,7 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
     <button class="btn btn-sm" id="redo">もう一度添削</button>
     <button class="btn btn-sm" id="flow">流れを整える</button>
     <button class="btn btn-sm" id="sheet">${icons.share(14)} レッスンシート</button>
+    <button class="btn btn-sm" id="movemode">モード変更</button>
     <button class="btn btn-sm btn-ghost danger" id="del" title="削除">${icons.trash(14)}</button>
   `;
   actions.querySelector('#edit')!.addEventListener('click', () => {
@@ -123,6 +124,47 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
       alert('レッスンシート作成に失敗しました');
       sheetBtn.disabled = false;
       sheetBtn.innerHTML = original;
+    }
+  });
+  actions.querySelector('#movemode')!.addEventListener('click', async () => {
+    const user = getCurrentUser();
+    if (!user) {
+      alert('ログインが必要です');
+      return;
+    }
+    const others = (['morning', 'lesson', 'diary', 'story'] as const).filter((m) => m !== entry.mode);
+    const labels = others.map((m) => MODE_META[m].label);
+    const choice = prompt(`どのモードに移しますか？\n${others.map((m, i) => `${i + 1}. ${labels[i]}`).join('\n')}\n\n番号を入力 (1-${others.length})`);
+    if (!choice) return;
+    const idx = parseInt(choice, 10) - 1;
+    if (!Number.isInteger(idx) || idx < 0 || idx >= others.length) {
+      alert('番号が正しくありません');
+      return;
+    }
+    const targetMode = others[idx]!;
+    const targetId = `${user.uid}_${entry.date}_${targetMode}`;
+    // 移動先に既にエントリがあれば中止
+    const existingTarget = await fetchEntry(targetId);
+    if (existingTarget && (existingTarget.contentJp || existingTarget.userTranslation)) {
+      alert(`${MODE_META[targetMode].label} には既にエントリがあります。先に削除してください。`);
+      return;
+    }
+    if (!confirm(`このエントリを ${MODE_META[entry.mode].label} → ${MODE_META[targetMode].label} に移しますか？`)) return;
+    const moveBtn = actions.querySelector('#movemode') as HTMLButtonElement;
+    moveBtn.disabled = true;
+    moveBtn.textContent = '移動中…';
+    try {
+      const res = await api.post<{ id: string }>('/diary/posts/move', {
+        fromId: entry.id,
+        toMode: targetMode,
+      });
+      invalidateEntriesCache();
+      navigate(`/entry/${res.id || targetId}`);
+    } catch (err) {
+      console.error(err);
+      alert('モード変更に失敗しました');
+      moveBtn.disabled = false;
+      moveBtn.textContent = 'モード変更';
     }
   });
   actions.querySelector('#del')!.addEventListener('click', async () => {
