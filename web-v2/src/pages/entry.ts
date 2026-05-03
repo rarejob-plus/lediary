@@ -7,6 +7,7 @@ import { solarTerm, dayOfYear, daysInYear } from '../data/dateInfo';
 import { api } from '../api/client';
 import { getCurrentUser, getIdToken } from '../auth';
 import { navigate } from '../router';
+import { enableTextSelectionBookmark, bookmarkPhrase } from '../components/text-selection-bookmark';
 
 export function renderEntry(root: HTMLElement, id: string): void {
   root.appendChild(renderHeader(null));
@@ -153,6 +154,7 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
   body.className = 'entry-body';
   body.textContent = entry.userTranslation;
   content.appendChild(body);
+  enableTextSelectionBookmark(body);
 
   appendSection(content, '覚えたいフレーズ', renderVocabSection(entry.vocabulary), true);
   appendSection(content, 'シャドーイング', renderShadowingSection(entry.userTranslation), false);
@@ -197,9 +199,16 @@ function renderVocabSection(vocab: { word: string; definition: string; example: 
       <span class="vocab-ja">${escapeHtml(v.definition)}</span>
       <span class="vocab-example">${escapeHtml(v.example)}</span>
     `;
-    row.querySelector('.vocab-flashcard-btn')!.addEventListener('click', () => alert('Flashcard 保存モック'));
+    const btn = row.querySelector('.vocab-flashcard-btn') as HTMLButtonElement;
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      btn.textContent = '...';
+      await bookmarkPhrase(v.word, v.definition);
+      btn.textContent = '✓ 保存済';
+    });
     wrap.appendChild(row);
   });
+  enableTextSelectionBookmark(wrap);
   return wrap;
 }
 
