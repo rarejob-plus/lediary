@@ -204,14 +204,155 @@ function renderShadowingSection(text: string): HTMLElement {
   const wrap = document.createElement('div');
   wrap.innerHTML = `
     <div class="shadow-card">
-      <button class="btn btn-primary" id="gen">音声を生成</button>
-      <p class="shadow-paragraph" id="para">${escapeHtml(text)}</p>
+      <div class="ra-generate-wrap">
+        <button class="btn btn-primary ra-generate-btn">音声を生成</button>
+      </div>
+      <div class="ra-controls" style="display:none;">
+        <div class="ra-controls-row">
+          <button class="btn ra-play-btn">再生</button>
+          <button class="btn ra-record-btn">録音</button>
+          <div class="ra-speed-control">
+            <span class="ra-speed-value">1.0x</span>
+            <input type="range" class="ra-speed-range" min="0.5" max="1.5" step="0.1" value="1.0" />
+          </div>
+        </div>
+        <div class="ra-recordings" style="display:none;">
+          <div class="ra-recordings-row">
+            <span class="ra-recordings-label">お手本</span>
+            <button class="btn btn-sm ra-play-model">再生</button>
+          </div>
+          <div class="ra-recordings-row">
+            <span class="ra-recordings-label">あなた</span>
+            <audio class="ra-recording-audio" controls></audio>
+          </div>
+        </div>
+      </div>
+      <p class="shadow-paragraph" style="display:none;">${escapeHtml(text)}</p>
     </div>
   `;
-  wrap.querySelector('#gen')!.addEventListener('click', () => {
-    wrap.querySelector('#para')!.classList.add('shown');
-    (wrap.querySelector('#gen') as HTMLButtonElement).textContent = '再生';
+
+  if (!getCurrentUser()) {
+    // 未ログイン: 旧モック挙動
+    const gen = wrap.querySelector('.ra-generate-btn') as HTMLButtonElement;
+    gen.addEventListener('click', () => {
+      (wrap.querySelector('.shadow-paragraph') as HTMLElement).style.display = '';
+      gen.textContent = '再生（mock）';
+    });
+    return wrap;
+  }
+
+  let audioCtx: AudioContext | null = null;
+  let audioBuffer: AudioBuffer | null = null;
+  let currentSource: AudioBufferSourceNode | null = null;
+  let isPlaying = false;
+  let playbackRate = 1.0;
+  let mediaRecorder: MediaRecorder | null = null;
+  let chunks: Blob[] = [];
+
+  const generateBtn = wrap.querySelector('.ra-generate-btn') as HTMLButtonElement;
+  const controls = wrap.querySelector('.ra-controls') as HTMLElement;
+  const generateWrap = wrap.querySelector('.ra-generate-wrap') as HTMLElement;
+  const paragraph = wrap.querySelector('.shadow-paragraph') as HTMLElement;
+  const playBtn = wrap.querySelector('.ra-play-btn') as HTMLButtonElement;
+  const playModelBtn = wrap.querySelector('.ra-play-model') as HTMLButtonElement;
+  const recordBtn = wrap.querySelector('.ra-record-btn') as HTMLButtonElement;
+  const recordingsArea = wrap.querySelector('.ra-recordings') as HTMLElement;
+  const recordingAudio = wrap.querySelector('.ra-recording-audio') as HTMLAudioElement;
+  const speedRange = wrap.querySelector('.ra-speed-range') as HTMLInputElement;
+  const speedValue = wrap.querySelector('.ra-speed-value') as HTMLElement;
+
+  function stopPlayback(): void {
+    if (currentSource) {
+      try { currentSource.stop(); } catch { /* */ }
+    }
+    currentSource = null;
+    isPlaying = false;
+    playBtn.textContent = '再生';
+  }
+
+  function startPlayback(): void {
+    if (!audioCtx || !audioBuffer) return;
+    stopPlayback();
+    const source = audioCtx.createBufferSource();
+    source.buffer = audioBuffer;
+    source.playbackRate.value = playbackRate;
+    source.connect(audioCtx.destination);
+    source.onended = () => {
+      isPlaying = false;
+      currentSource = null;
+      playBtn.textContent = '再生';
+    };
+    source.start();
+    currentSource = source;
+    isPlaying = true;
+    playBtn.textContent = '停止';
+  }
+
+  speedRange.addEventListener('input', () => {
+    playbackRate = parseFloat(speedRange.value);
+    speedValue.textContent = `${playbackRate.toFixed(1)}x`;
   });
+
+  generateBtn.addEventListener('click', async () => {
+    generateBtn.disabled = true;
+    generateBtn.textContent = '生成中…';
+    try {
+      audioCtx = audioCtx || new AudioContext();
+      const token = await getIdToken();
+      const voice = localStorage.getItem('lediary_v2_tts_voice') || 'Achird';
+      const res = await fetch(`/api/diary/tts?text=${encodeURIComponent(text)}&voice=${voice}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(`TTS ${res.status}`);
+      audioBuffer = await audioCtx.decodeAudioData(await res.arrayBuffer());
+      generateWrap.style.display = 'none';
+      controls.style.display = '';
+      paragraph.style.display = '';
+    } catch (err) {
+      console.error(err);
+      alert('音声の生成に失敗しました');
+      generateBtn.disabled = false;
+      generateBtn.textContent = '音声を生成';
+    }
+  });
+
+  playBtn.addEventListener('click', () => {
+    if (isPlaying) stopPlayback(); else startPlayback();
+  });
+
+  playModelBtn.addEventListener('click', () => startPlayback());
+
+  recordBtn.addEventListener('click', async () => {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.stop();
+      stopPlayback();
+      recordBtn.textContent = '録音';
+      recordBtn.classList.remove('ra-recording');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      chunks = [];
+      mediaRecorder = new MediaRecorder(stream);
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+      mediaRecorder.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        recordingAudio.src = URL.createObjectURL(blob);
+        recordingsArea.style.display = '';
+      };
+      mediaRecorder.start();
+      recordBtn.textContent = '停止';
+      recordBtn.classList.add('ra-recording');
+      startPlayback();
+    } catch (err) {
+      console.error(err);
+      alert('マイクへのアクセスが必要です');
+    }
+  });
+
   return wrap;
 }
 

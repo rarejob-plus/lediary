@@ -324,3 +324,61 @@
   font-style: italic;
   margin-top: 4px;
 }
+
+/* Shadowing controls */
+.ra-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ra-speed-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.ra-speed-range {
+  width: 100px;
+  accent-color: var(--text);
+}
+
+.ra-recording {
+  background: rgba(192, 57, 43, 0.1);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.ra-recordings {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ra-recordings-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ra-recordings-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  width: 60px;
+  flex-shrink: 0;
+}
+
+.ra-recording-audio {
+  flex: 1;
+  height: 32px;
+}
