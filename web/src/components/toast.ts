@@ -1,54 +1,40 @@
-/**
- * Simple toast notification with optional action button.
- */
-
-let toastEl: HTMLElement | null = null;
-let toastTextEl: HTMLElement | null = null;
-let toastActionEl: HTMLElement | null = null;
-let hideTimer: ReturnType<typeof setTimeout> | null = null;
-
-function ensureToastElement(): HTMLElement {
-  if (toastEl) return toastEl;
-  toastEl = document.createElement('div');
-  toastEl.className = 'toast';
-
-  toastTextEl = document.createElement('span');
-  toastTextEl.className = 'toast-text';
-
-  toastActionEl = document.createElement('button');
-  toastActionEl.className = 'toast-action';
-
-  toastEl.append(toastTextEl, toastActionEl);
-  document.body.appendChild(toastEl);
-  return toastEl;
+interface ToastAction {
+  label: string;
+  onClick: () => void | Promise<void>;
 }
 
-export function showToast(message: string, action?: { label: string; onClick: () => void }): void {
-  ensureToastElement();
-  toastTextEl!.textContent = message;
+let activeToast: HTMLElement | null = null;
+let activeTimer: number | null = null;
+
+export function showToast(message: string, action?: ToastAction): void {
+  if (activeToast) activeToast.remove();
+  if (activeTimer) clearTimeout(activeTimer);
+
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.innerHTML = `<span class="toast-msg"></span>`;
+  (toast.querySelector('.toast-msg') as HTMLElement).textContent = message;
 
   if (action) {
-    toastActionEl!.textContent = action.label;
-    toastActionEl!.style.display = '';
-    const handler = () => {
-      action.onClick();
-      toastEl!.classList.remove('visible');
-      if (hideTimer) clearTimeout(hideTimer);
-      toastActionEl!.removeEventListener('click', handler);
-    };
-    toastActionEl!.replaceWith(toastActionEl!.cloneNode(true));
-    toastActionEl = toastEl!.querySelector('.toast-action')!;
-    toastActionEl!.textContent = action.label;
-    toastActionEl!.style.display = '';
-    toastActionEl!.addEventListener('click', handler);
-  } else {
-    toastActionEl!.style.display = 'none';
+    const btn = document.createElement('button');
+    btn.className = 'toast-action';
+    btn.textContent = action.label;
+    btn.addEventListener('click', async () => {
+      try { await action.onClick(); } catch { /* noop */ }
+      toast.remove();
+      if (activeTimer) clearTimeout(activeTimer);
+      activeToast = null;
+    });
+    toast.appendChild(btn);
   }
 
-  toastEl!.classList.add('visible');
-
-  if (hideTimer) clearTimeout(hideTimer);
-  hideTimer = setTimeout(() => {
-    toastEl!.classList.remove('visible');
-  }, action ? 5000 : 3000);
+  document.body.appendChild(toast);
+  activeToast = toast;
+  activeTimer = window.setTimeout(() => {
+    toast.classList.add('toast-leaving');
+    setTimeout(() => {
+      toast.remove();
+      if (activeToast === toast) activeToast = null;
+    }, 200);
+  }, action ? 6000 : 3000);
 }

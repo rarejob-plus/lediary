@@ -23,7 +23,7 @@
     },
     {
       "target": "lediary-v2",
-      "public": "web-v2/dist",
+      "public": "web-legacy/dist",
       "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
       "headers": [
         {

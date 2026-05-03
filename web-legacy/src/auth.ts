@@ -1,3 +1,7 @@
+/**
+ * Auth module — Firebase Auth with Google provider.
+ */
+
 import { auth } from './firebase';
 import {
   signInWithPopup,
@@ -20,16 +24,16 @@ export async function getIdToken(): Promise<string> {
 }
 
 export function loginWithGoogle(): Promise<User> {
-  return signInWithPopup(auth, provider).then((r) => r.user);
+  return signInWithPopup(auth, provider).then((result) => result.user);
 }
 
 export function logout(): Promise<void> {
   return auth.signOut();
 }
 
-export function onAuth(cb: (user: User | null) => void): () => void {
-  return onAuthStateChanged(auth, (user) => {
+export function onAuth(callback: (user: User | null) => void): void {
+  onAuthStateChanged(auth, (user) => {
     currentUser = user;
-    cb(user);
+    callback(user);
   });
 }

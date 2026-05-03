@@ -105,7 +105,7 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
       return;
     }
     if (entry.lessonSheetId) {
-      window.open(`https://lediary-v2.web.app/s/${entry.lessonSheetId}`, '_blank');
+      window.open(`https://lediary.web.app/s/${entry.lessonSheetId}`, '_blank');
       return;
     }
     const original = sheetBtn.innerHTML;
@@ -117,7 +117,7 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
       sheetBtn.innerHTML = `${icons.share(14)} シートを開く`;
       sheetBtn.disabled = false;
       invalidateEntriesCache();
-      const url = `https://lediary-v2.web.app/s/${res.shareId}`;
+      const url = `https://lediary.web.app/s/${res.shareId}`;
       window.open(url, '_blank');
       navigator.clipboard?.writeText(url).catch(() => {});
     } catch (err) {

@@ -2,18 +2,10 @@ import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
-  server: {
-    port: 5174,
-    proxy: {
-      '/api': {
-        target: 'http://localhost:5001/otokichi-app/asia-northeast1/api',
-        rewrite: (path) => path,
-        changeOrigin: true,
-      },
-    },
-  },
+  base: '/',
   build: {
     outDir: 'dist',
+    emptyOutDir: true,
   },
   plugins: [
     VitePWA({
@@ -22,14 +14,15 @@ export default defineConfig({
         skipWaiting: true,
         clientsClaim: true,
         cleanupOutdatedCaches: true,
+        navigateFallbackDenylist: [/^\/api\//, /^\/s\//],
       },
       manifest: {
         name: 'Lediary',
         short_name: 'Lediary',
         start_url: '/',
         display: 'standalone',
-        background_color: '#faf8f5',
-        theme_color: '#4a9e7c',
+        background_color: '#ffffff',
+        theme_color: '#1d1d1f',
         icons: [
           { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
