@@ -122,22 +122,26 @@ export function renderCalendar(root: HTMLElement): void {
       cell.innerHTML = `
         <span style="font-size:13px;color:${isToday ? 'white' : 'var(--text)'};font-weight:${isToday ? '700' : '400'};${isToday ? 'background:var(--text);width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;' : ''}">${d}</span>
         ${dayEntries ? `
-          <div style="display:flex;gap:3px;">
-            ${dayEntries.map((e) => `<span style="width:5px;height:5px;border-radius:50%;background:${MODE_META[e.mode].color};display:inline-block;"></span>`).join('')}
+          <div class="cal-dots" style="display:flex;gap:3px;flex-wrap:wrap;">
+            ${dayEntries.map((e) => `<span class="cal-dot" data-id="${e.id}" title="${MODE_META[e.mode].label}" style="width:8px;height:8px;border-radius:50%;background:${MODE_META[e.mode].color};display:inline-block;cursor:pointer;"></span>`).join('')}
           </div>
         ` : ''}
       `;
 
       if (writable) {
-        cell.addEventListener('click', () => {
-          if (dayEntries) {
-            navigate(`/entry/${dayEntries[0]!.id}`);
-          } else {
-            navigate(`/editor?date=${dateStr}`);
-          }
-        });
+        // セル本体: 常にエディタへ（既存内容があれば pre-fill、無ければ新規）
+        cell.addEventListener('click', () => navigate(`/editor?date=${dateStr}`));
         cell.addEventListener('mouseenter', () => { cell.style.background = 'var(--surface-warm)'; });
         cell.addEventListener('mouseleave', () => { cell.style.background = dayEntries ? 'var(--surface)' : 'transparent'; });
+
+        // ドット: その個別エントリ詳細へ（バブリング止める）
+        cell.querySelectorAll('.cal-dot').forEach((dot) => {
+          dot.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const id = (dot as HTMLElement).dataset.id;
+            if (id) navigate(`/entry/${id}`);
+          });
+        });
       }
 
       grid.appendChild(cell);
