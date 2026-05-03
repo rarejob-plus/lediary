@@ -9,15 +9,11 @@ Lediary — English diary app. Pick a mode (Morning / Lesson / Diary / Story), w
 ## Commands
 
 ```bash
-# Frontend (the active app, ported from old vanilla TS in 2026-05)
+# Frontend
 cd web && npm install
 cd web && npm run dev          # Vite dev :5180
 cd web && npm run build        # tsc --noEmit + vite build → web/dist/
-cd web && npm run deploy       # build + firebase deploy --only hosting:lediary-v2  (legacy script name)
-
-# Legacy app (kept readable at lediary-v2.web.app for safety, will be retired)
-cd web-legacy && npm run dev
-cd web-legacy && npm run build
+cd web && npm run deploy       # build + firebase deploy --only hosting:lediary
 
 # Backend
 cd functions && npm run build
@@ -30,8 +26,7 @@ firebase deploy --only hosting:lediary,functions:api --project otokichi-app
 ## Architecture
 
 ### Layout
-- **`web/`** — Active frontend. Vanilla TypeScript + Vite, page-routed SPA, Firebase Auth, vite-plugin-pwa for installable PWA. Style: Day One-inspired timeline, Lora serif body, cover gradients computed from mode + time of day.
-- **`web-legacy/`** — Pre-2026-05 implementation, kept at `lediary-v2.web.app` until confidence in the new build is high. Same backend.
+- **`web/`** — Frontend. Vanilla TypeScript + Vite, page-routed SPA, Firebase Auth, vite-plugin-pwa for installable PWA. Style: Day One-inspired timeline, Lora serif body, cover gradients computed from mode + time of day.
 - **`functions/`** — Cloud Functions Node.js 22 2nd gen. `api` handles `/api/diary/*`, `sendDailyReminder` is a scheduled push notification job.
 
 ### Writing modes
@@ -98,7 +93,7 @@ Each cover is `linear-gradient(135deg, hsl(hue, S%, L1%) 0%, hsl(hue, S%, L2%) 1
 | Google Gemini | `gemini-3.1-flash-lite-preview` via v1beta API, key as Firebase secret |
 | Firebase Auth | Project: `otokichi-app`, Google provider |
 | Firestore | Native mode, `otokichi-app` |
-| Firebase Hosting | Targets: `lediary` (active, → `web/dist`) and `lediary-v2` (kept on `web-legacy/dist` for rollback safety) |
+| Firebase Hosting | Target: `lediary` → `web/dist`, served at https://lediary.web.app |
 | FCM | Push notification sender (`sendDailyReminder`) |
 
 ## Deployment
@@ -112,4 +107,3 @@ Each cover is `linear-gradient(135deg, hsl(hue, S%, L1%) 0%, hsl(hue, S%, L2%) 1
 ## Open follow-ups
 - Push token registration in `web/` (only flashcards writes to `push_tokens` today)
 - Lesson sheet structure: AI sometimes returns content that's loosely WNA-shaped; could tighten with a prompt rewrite pass + a more polished public sheet template
-- Once `web-legacy/` is no longer needed, the `lediary-v2` hosting target + directory can be dropped
