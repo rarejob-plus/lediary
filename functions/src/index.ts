@@ -528,9 +528,9 @@ Return a JSON object:
   "suggestions": [
     {
       "between": "Quote the end of sentence A and start of sentence B where the connection is weak",
-      "suggestion": "The specific connector or transition to add (e.g., 'Actually,', 'That's why', ', so')",
-      "revised": "Show the two sentences naturally connected",
-      "reason": "日本語で簡潔に理由"
+      "suggestion": "日本語で『何をどうするか』を簡潔に。挿入なら『〜の前に Actually を入れる』、置換なら『Anyway を Since に置き換える』、削除なら『Anyway を取り除く』のように、英単語/句以外は日本語で書く",
+      "revised": "Show the two sentences naturally connected (English)",
+      "reason": "日本語で『なぜそうすべきか』を簡潔に"
     }
   ],
   "overall": "日本語で全体の流れについて一言コメント（良い場合は褒める）"
@@ -540,6 +540,7 @@ Rules:
 - Return 0-3 suggestions. If the text flows well, return empty suggestions array with a positive overall comment.
 - Keep suggestions practical and specific.
 - "between" should quote enough text to identify the location (5-10 words from each sentence).
+- "suggestion" must be a Japanese description of the change. English words inside (Anyway, Since, etc.) should remain in English, but the verb must be Japanese (置き換える/入れる/取り除く).
 - Return ONLY JSON.`;
 
       const response = await callGemini(systemPrompt, `Diary entry:\n${text}`);

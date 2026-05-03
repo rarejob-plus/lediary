@@ -385,7 +385,7 @@ async function loadFlowCheck(text: string): Promise<FeedbackItem[]> {
   return (res.suggestions || []).map((s) => ({
     original: s.between,
     corrected: s.revised,
-    explanation: `「${s.suggestion}」を入れると自然になります — ${s.reason}`,
+    explanation: `${s.suggestion} — ${s.reason}`,
   }));
 }
 
