@@ -178,6 +178,7 @@ interface DiaryAnalysis {
   feedback: FeedbackItem[];
   vocabulary: VocabItem[];
   expansionQuestions: ExpansionQuestion[];
+  mood?: string;
 }
 
 async function analyzeDiary(contentJp: string, userTranslation: string, previousFeedback: FeedbackItem[], attemptCount: number): Promise<DiaryAnalysis> {
@@ -212,13 +213,15 @@ Return a JSON object with exactly these fields:
       "definition": "concise definition in Japanese",
       "example": "a natural example sentence using the word"
     }
-  ]
+  ],
+  "mood": "日本語の感情語 1 語（例: はずむ、穏やか、達成感、もやもや、集中、内省、わくわく、ほっこり、いら立ち、など）"
 }
 
 Rules:
 - feedback: Compare the user's translation sentence by sentence and suggest corrections appropriate to the CORRECTION LEVEL above. For each correction: "original" must be the user's FULL sentence, "corrected" must be the corrected FULL sentence, and "explanation" must explain in Japanese WHY the corrected version is better — specifically describe the nuance difference between the two expressions (e.g., when each would be used, what impression each gives, what subtle meaning differs). ALL alternatives MUST sound natural in casual spoken English — never use formal/written words like "therefore", "furthermore", "nevertheless". If the user's translation is empty, return an empty array [].
 - AT MOST ONE feedback item per sentence. Never produce two feedback items whose "original" overlaps (i.e., shares any substring of the user's text). If a sentence needs multiple changes, combine them into a single feedback item with one "corrected" that incorporates all the changes.
 - vocabulary: Extract 3-5 useful vocabulary items ONLY from expressions used in the "corrected" sentences above. These must be words/phrases that actually appear in your corrections. Do NOT include unrelated vocabulary.
+- mood: Pick ONE Japanese word that captures the dominant feeling of the diary content (not of the writing quality). Prefer evocative words from above (はずむ／穏やか／達成感／もやもや／集中／内省／わくわく／ほっこり／いら立ち／焦り／安らぎ／ふわふわ／じわじわ／さっぱり／ぐったり／前向き) but feel free to suggest others. ONE word only, no quotes, no punctuation. Even when contentJp is short, always return one mood.
 
 Return ONLY the JSON object, no markdown fences or extra text.`;
 
@@ -381,6 +384,7 @@ export const api = onRequest(
         feedback: analysis.feedback,
         vocabulary: analysis.vocabulary,
         expansionQuestions: analysis.expansionQuestions,
+        mood: analysis.mood || "",
         attemptCount: attempt,
         mode,
         date,
