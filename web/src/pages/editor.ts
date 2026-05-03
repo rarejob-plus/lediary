@@ -6,6 +6,7 @@ import { fetchEntry, invalidateEntriesCache, takeStashedEntry } from '../data/en
 import { api } from '../api/client';
 import { getCurrentUser } from '../auth';
 import { navigate } from '../router';
+import { enableTextSelectionBookmark } from '../components/text-selection-bookmark';
 
 interface HintItem { english: string; japanese: string; note?: string; }
 
@@ -277,6 +278,10 @@ export function renderEditor(root: HTMLElement): void {
       }
     });
     correctionSection.appendChild(doneBtn);
+
+    // 添削結果の英文（original / corrected / explanation 内の英文）からも
+    // テキスト選択で Flashcard 保存できるように
+    enableTextSelectionBookmark(correctionSection);
   }
 
   actionRow.querySelector('#correct-btn')!.addEventListener('click', async () => {
@@ -455,6 +460,7 @@ function renderHintsInto(card: HTMLElement, hints: HintItem[]): void {
       `).join('')
     }
   `;
+  enableTextSelectionBookmark(card);
 }
 
 function iconFor(name: 'sun' | 'graduation' | 'moon' | 'bookOpen'): string {
