@@ -1,13 +1,13 @@
 {
-  "name": "lediary-v2-mock",
+  "name": "lediary-web",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port 5180",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "deploy": "npm run build && firebase deploy --only hosting:lediary-v2 --project otokichi-app"
+    "deploy": "npm run build && firebase deploy --only hosting:lediary --project otokichi-app"
   },
   "dependencies": {
     "firebase": "^11.10.0"
