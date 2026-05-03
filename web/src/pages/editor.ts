@@ -73,9 +73,12 @@ export function renderEditor(root: HTMLElement): void {
   `;
   meta.querySelectorAll('.mode-pill').forEach((b) => {
     b.addEventListener('click', () => {
-      currentMode = (b as HTMLElement).dataset.mode as Mode;
+      const next = (b as HTMLElement).dataset.mode as Mode;
+      if (next === currentMode) return;
+      currentMode = next;
       meta.querySelectorAll('.mode-pill').forEach((x) => x.classList.remove('active'));
       b.classList.add('active');
+      loadForMode(currentMode);
     });
   });
   wrap.appendChild(meta);
@@ -314,29 +317,53 @@ export function renderEditor(root: HTMLElement): void {
 
   root.appendChild(wrap);
 
-  // Detail ページからの handoff があれば即時利用（fetch 待ちゼロ）。
-  // 無ければ通常通り API から探す。
-  const applyEntry = (entry: ReturnType<typeof takeStashedEntry> | Awaited<ReturnType<typeof loadExisting>>): void => {
-    if (!entry) return;
+  // initial mount だけ ?action= を消費する。モード切替の再ロードでは無視。
+  let initialLoad = true;
+
+  function applyEntry(entry: ReturnType<typeof takeStashedEntry> | Awaited<ReturnType<typeof loadExisting>>): void {
+    // モードに紐づく既存エントリがなければ全部リセット
+    if (!entry) {
+      (jpBlock.querySelector('#jp-input') as HTMLTextAreaElement).value = '';
+      (enBlock.querySelector('#en-input') as HTMLTextAreaElement).value = '';
+      currentFeedback = [];
+      rewrites = [];
+      revealed = [];
+      correctionSection.innerHTML = '';
+      return;
+    }
     (jpBlock.querySelector('#jp-input') as HTMLTextAreaElement).value = entry.contentJp;
     (enBlock.querySelector('#en-input') as HTMLTextAreaElement).value = entry.userTranslation;
     if (entry.feedback?.length) {
       feedbackKind = 'correct';
       currentFeedback = entry.feedback;
+      rewrites = [];
+      revealed = [];
       renderCorrection();
+    } else {
+      currentFeedback = [];
+      rewrites = [];
+      revealed = [];
+      correctionSection.innerHTML = '';
     }
-    if (action === 'flow' && entry.userTranslation) {
-      triggerFlow(entry.userTranslation);
-    } else if (action === 'correct') {
-      (actionRow.querySelector('#correct-btn') as HTMLButtonElement).click();
+    if (initialLoad) {
+      initialLoad = false;
+      if (action === 'flow' && entry.userTranslation) {
+        triggerFlow(entry.userTranslation);
+      } else if (action === 'correct') {
+        (actionRow.querySelector('#correct-btn') as HTMLButtonElement).click();
+      }
     }
-  };
+  }
+
+  function loadForMode(mode: Mode): void {
+    loadExisting(dateStr, mode).then(applyEntry).catch(() => applyEntry(undefined));
+  }
 
   const stashed = takeStashedEntry();
   if (stashed && stashed.date === dateStr && stashed.mode === currentMode) {
     applyEntry(stashed);
   } else {
-    loadExisting(dateStr, currentMode).then(applyEntry).catch(() => {});
+    loadForMode(currentMode);
   }
 }
 
