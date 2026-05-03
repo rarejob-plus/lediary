@@ -5,7 +5,7 @@ import { MODE_META, type DiaryEntry } from '../data/mock';
 import { fetchEntry, invalidateEntriesCache } from '../data/entries';
 import { solarTerm, dayOfYear, daysInYear } from '../data/dateInfo';
 import { api } from '../api/client';
-import { getCurrentUser } from '../auth';
+import { getCurrentUser, getIdToken } from '../auth';
 import { navigate } from '../router';
 
 export function renderEntry(root: HTMLElement, id: string): void {
