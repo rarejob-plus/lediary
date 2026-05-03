@@ -78,3 +78,22 @@ export async function fetchEntry(id: string): Promise<DiaryEntry | undefined> {
   const entries = await fetchEntries();
   return entries.find((e) => e.id === id);
 }
+
+// エントリ詳細から editor に遷移する際のハンドオフ用バッファ。
+// 詳細ページが持っている最新テキストを editor が即時利用できるようにする。
+const HANDOFF_KEY = 'lediary_v2_editor_handoff';
+
+export function stashForEditor(entry: DiaryEntry): void {
+  sessionStorage.setItem(HANDOFF_KEY, JSON.stringify(entry));
+}
+
+export function takeStashedEntry(): DiaryEntry | null {
+  const raw = sessionStorage.getItem(HANDOFF_KEY);
+  if (!raw) return null;
+  sessionStorage.removeItem(HANDOFF_KEY);
+  try {
+    return JSON.parse(raw) as DiaryEntry;
+  } catch {
+    return null;
+  }
+}

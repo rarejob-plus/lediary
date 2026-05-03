@@ -2,7 +2,7 @@ import { renderHeader, renderMockBanner } from '../components/header';
 import { icons } from '../components/icons';
 import type { Mode, FeedbackItem } from '../data/mock';
 import { MODE_META } from '../data/mock';
-import { fetchEntry, invalidateEntriesCache } from '../data/entries';
+import { fetchEntry, invalidateEntriesCache, takeStashedEntry } from '../data/entries';
 import { api } from '../api/client';
 import { getCurrentUser } from '../auth';
 import { navigate } from '../router';
@@ -315,23 +315,30 @@ export function renderEditor(root: HTMLElement): void {
   root.appendChild(wrap);
   root.appendChild(renderMockBanner());
 
-  // Pre-fill if existing entry for this date+mode, then optionally auto-trigger
-  loadExisting(dateStr, currentMode).then((entry) => {
-    if (entry) {
-      (jpBlock.querySelector('#jp-input') as HTMLTextAreaElement).value = entry.contentJp;
-      (enBlock.querySelector('#en-input') as HTMLTextAreaElement).value = entry.userTranslation;
-      if (entry.feedback?.length) {
-        feedbackKind = 'correct';
-        currentFeedback = entry.feedback;
-        renderCorrection();
-      }
+  // Detail ページからの handoff があれば即時利用（fetch 待ちゼロ）。
+  // 無ければ通常通り API から探す。
+  const applyEntry = (entry: ReturnType<typeof takeStashedEntry> | Awaited<ReturnType<typeof loadExisting>>): void => {
+    if (!entry) return;
+    (jpBlock.querySelector('#jp-input') as HTMLTextAreaElement).value = entry.contentJp;
+    (enBlock.querySelector('#en-input') as HTMLTextAreaElement).value = entry.userTranslation;
+    if (entry.feedback?.length) {
+      feedbackKind = 'correct';
+      currentFeedback = entry.feedback;
+      renderCorrection();
     }
-    if (action === 'flow' && entry?.userTranslation) {
+    if (action === 'flow' && entry.userTranslation) {
       triggerFlow(entry.userTranslation);
-    } else if (action === 'correct' && entry) {
+    } else if (action === 'correct') {
       (actionRow.querySelector('#correct-btn') as HTMLButtonElement).click();
     }
-  }).catch(() => {});
+  };
+
+  const stashed = takeStashedEntry();
+  if (stashed && stashed.date === dateStr && stashed.mode === currentMode) {
+    applyEntry(stashed);
+  } else {
+    loadExisting(dateStr, currentMode).then(applyEntry).catch(() => {});
+  }
 }
 
 async function loadExisting(date: string, mode: Mode) {

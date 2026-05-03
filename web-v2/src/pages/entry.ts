@@ -2,7 +2,7 @@ import { renderHeader, renderMockBanner } from '../components/header';
 import { icons } from '../components/icons';
 import { coverFor } from '../components/cover';
 import { MODE_META, type DiaryEntry } from '../data/mock';
-import { fetchEntry, invalidateEntriesCache } from '../data/entries';
+import { fetchEntry, invalidateEntriesCache, stashForEditor } from '../data/entries';
 import { solarTerm, dayOfYear, daysInYear } from '../data/dateInfo';
 import { api } from '../api/client';
 import { getCurrentUser, getIdToken } from '../auth';
@@ -83,12 +83,15 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
     <button class="btn btn-sm btn-ghost danger" id="del" title="削除">${icons.trash(14)}</button>
   `;
   actions.querySelector('#edit')!.addEventListener('click', () => {
+    stashForEditor(entry);
     navigate(`/editor?date=${entry.date}&mode=${entry.mode}`);
   });
   actions.querySelector('#redo')!.addEventListener('click', () => {
+    stashForEditor(entry);
     navigate(`/editor?date=${entry.date}&mode=${entry.mode}&action=correct`);
   });
   actions.querySelector('#flow')!.addEventListener('click', () => {
+    stashForEditor(entry);
     navigate(`/editor?date=${entry.date}&mode=${entry.mode}&action=flow`);
   });
   const sheetBtn = actions.querySelector('#sheet') as HTMLButtonElement;
