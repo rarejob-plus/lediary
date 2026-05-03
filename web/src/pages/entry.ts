@@ -133,8 +133,7 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
       return;
     }
     const others = (['morning', 'lesson', 'diary', 'story'] as const).filter((m) => m !== entry.mode);
-    const labels = others.map((m) => MODE_META[m].label);
-    const choice = prompt(`どのモードに移しますか？\n${others.map((m, i) => `${i + 1}. ${labels[i]}`).join('\n')}\n\n番号を入力 (1-${others.length})`);
+    const choice = prompt(`どのモードに移しますか？\n${others.map((m, i) => `${i + 1}. ${MODE_META[m].label}`).join('\n')}\n\n番号を入力 (1-${others.length})`);
     if (!choice) return;
     const idx = parseInt(choice, 10) - 1;
     if (!Number.isInteger(idx) || idx < 0 || idx >= others.length) {
