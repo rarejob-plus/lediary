@@ -153,7 +153,7 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
 
   appendSection(content, '覚えたいフレーズ', renderVocabSection(entry.vocabulary), true);
   appendSection(content, 'シャドーイング', renderShadowingSection(entry.userTranslation), false);
-  appendSection(content, '日記を膨らませる', renderExpansionSection(entry.expansionQuestions), false);
+  appendSection(content, '日記を膨らませる', renderExpansionSection(entry, body), false);
 
   root.appendChild(content);
   root.appendChild(renderMockBanner());
@@ -356,21 +356,154 @@ function renderShadowingSection(text: string): HTMLElement {
   return wrap;
 }
 
-function renderExpansionSection(questions: { question: string; hintJa: string; hintPhrases: string[] }[]): HTMLElement {
-  const wrap = document.createElement('div');
-  if (questions.length === 0) {
-    wrap.innerHTML = `
-      <div style="text-align:center;padding:8px 0 4px;">
-        <p class="expansion-empty" style="margin-bottom:12px;">添削が一段落したら 5W1H で深掘り質問を作れます</p>
-        <button class="btn">質問を生成</button>
-      </div>
-    `;
-    wrap.querySelector('button')!.addEventListener('click', () => alert('質問生成モック'));
-    return wrap;
+interface ExpansionQ {
+  question: string;
+  hintJa: string;
+  hintPhrases: string[];
+  reflected?: boolean;
+  answer?: string;
+}
+
+function splitSentences(text: string): { text: string; end: number }[] {
+  const out: { text: string; end: number }[] = [];
+  const re = /[^.!?]*[.!?]+\s*/g;
+  let m: RegExpExecArray | null;
+  let last = 0;
+  while ((m = re.exec(text)) !== null) {
+    out.push({ text: m[0].trim(), end: m.index + m[0].length });
+    last = m.index + m[0].length;
   }
-  questions.forEach((q) => {
+  const rest = text.slice(last).trim();
+  if (rest) out.push({ text: rest, end: text.length });
+  return out;
+}
+
+function showInsertionPicker(currentText: string, textToInsert: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const sentences = splitSentences(currentText);
+    const overlay = document.createElement('div');
+    overlay.className = 'insertion-picker-overlay';
+    const panel = document.createElement('div');
+    panel.className = 'insertion-picker';
+    panel.innerHTML = `
+      <div class="insertion-picker-title">挿入する場所を選択</div>
+      <div class="insertion-picker-preview"></div>
+    `;
+    const preview = panel.querySelector('.insertion-picker-preview') as HTMLElement;
+
+    function insertAt(pos: number) {
+      const before = currentText.slice(0, pos).trimEnd();
+      const after = currentText.slice(pos).trimStart();
+      const newText = before + (before ? ' ' : '') + textToInsert + (after ? ' ' + after : '');
+      cleanup();
+      resolve(newText);
+    }
+
+    function cleanup() {
+      overlay.remove();
+      panel.remove();
+    }
+
+    const top = document.createElement('button');
+    top.className = 'insertion-slot';
+    top.textContent = '▼ ここに挿入';
+    top.addEventListener('click', () => insertAt(0));
+    preview.appendChild(top);
+
+    for (const s of sentences) {
+      const sentEl = document.createElement('div');
+      sentEl.className = 'insertion-sentence';
+      sentEl.textContent = s.text;
+      preview.appendChild(sentEl);
+      const slot = document.createElement('button');
+      slot.className = 'insertion-slot';
+      slot.textContent = '▼ ここに挿入';
+      slot.addEventListener('click', () => insertAt(s.end));
+      preview.appendChild(slot);
+    }
+
+    overlay.addEventListener('click', () => {
+      cleanup();
+      resolve(null);
+    });
+    document.body.appendChild(overlay);
+    document.body.appendChild(panel);
+  });
+}
+
+function renderExpansionSection(entry: DiaryEntry, bodyEl: HTMLElement): HTMLElement {
+  const wrap = document.createElement('div');
+  let questions: ExpansionQ[] = (entry.expansionQuestions || []) as ExpansionQ[];
+
+  function rerender() {
+    wrap.innerHTML = '';
+
+    if (questions.length === 0) {
+      const empty = document.createElement('div');
+      empty.style.cssText = 'text-align:center;padding:8px 0 4px;';
+      empty.innerHTML = `
+        <p class="expansion-empty" style="margin-bottom:12px;">添削が一段落したら 5W1H で深掘り質問を作れます</p>
+        <button class="btn" id="gen-q">質問を生成</button>
+      `;
+      empty.querySelector('#gen-q')!.addEventListener('click', () => generate(empty));
+      wrap.appendChild(empty);
+      return;
+    }
+
+    questions.forEach((q, idx) => wrap.appendChild(renderCard(q, idx)));
+
+    if (questions.every((q) => q.reflected)) {
+      const moreWrap = document.createElement('div');
+      moreWrap.style.cssText = 'text-align:center;margin-top:12px;';
+      moreWrap.innerHTML = `<button class="btn" id="more-q">もっと膨らませる</button>`;
+      moreWrap.querySelector('#more-q')!.addEventListener('click', () => generate(moreWrap));
+      wrap.appendChild(moreWrap);
+    }
+  }
+
+  async function generate(triggerEl: HTMLElement) {
+    if (!getCurrentUser()) {
+      alert('ログインが必要です');
+      return;
+    }
+    const btn = triggerEl.querySelector('button') as HTMLButtonElement;
+    btn.disabled = true;
+    btn.textContent = '生成中…';
+    try {
+      const res = await api.post<{ expansionQuestions: ExpansionQ[] }>('/diary/expand', {
+        contentJp: entry.contentJp,
+        userTranslation: entry.userTranslation,
+        date: entry.date,
+        mode: entry.mode,
+      });
+      if (res.expansionQuestions && res.expansionQuestions.length > 0) {
+        questions = res.expansionQuestions;
+        entry.expansionQuestions = questions;
+        invalidateEntriesCache();
+        rerender();
+      } else {
+        alert('質問を生成できませんでした');
+        btn.disabled = false;
+        btn.textContent = '質問を生成';
+      }
+    } catch (err) {
+      console.error(err);
+      alert('生成に失敗しました');
+      btn.disabled = false;
+      btn.textContent = '質問を生成';
+    }
+  }
+
+  function renderCard(q: ExpansionQ, idx: number): HTMLElement {
     const card = document.createElement('div');
-    card.className = 'expansion-q';
+    card.className = `expansion-q ${q.reflected ? 'reflected' : ''}`;
+    if (q.reflected) {
+      card.innerHTML = `
+        <div class="expansion-q-text">${escapeHtml(q.question)}</div>
+        <div class="expansion-reflected">✓ 追記しました</div>
+      `;
+      return card;
+    }
     card.innerHTML = `
       <div class="expansion-q-text">${escapeHtml(q.question)}</div>
       <div class="expansion-q-hint">${escapeHtml(q.hintJa)}</div>
@@ -378,12 +511,82 @@ function renderExpansionSection(questions: { question: string; hintJa: string; h
         ${(q.hintPhrases || []).map((p) => `<span class="expansion-q-phrase">${escapeHtml(p)}</span>`).join('')}
       </div>
       <textarea class="expansion-q-input" placeholder="英語で答えてみよう"></textarea>
+      <div class="expansion-q-result" style="display:none;"></div>
       <div style="display:flex;justify-content:flex-end;margin-top:8px;">
-        <button class="btn btn-sm">添削</button>
+        <button class="btn btn-sm expansion-q-submit">添削</button>
       </div>
     `;
-    wrap.appendChild(card);
-  });
+
+    const input = card.querySelector('.expansion-q-input') as HTMLTextAreaElement;
+    const result = card.querySelector('.expansion-q-result') as HTMLElement;
+    let submitBtn = card.querySelector('.expansion-q-submit') as HTMLButtonElement;
+
+    submitBtn.addEventListener('click', async () => {
+      const answer = input.value.trim();
+      if (!answer) return;
+      submitBtn.disabled = true;
+      submitBtn.textContent = '添削中…';
+      try {
+        const res = await api.post<{ corrected: string; explanation: string }>('/diary/correct-answer', {
+          question: q.question,
+          answer,
+          diaryContext: entry.userTranslation,
+        });
+        const corrected = res.corrected || answer;
+        const explanation = res.explanation || '';
+        result.innerHTML = `
+          <div class="expansion-corrected">${escapeHtml(corrected)}</div>
+          ${explanation ? `<div class="expansion-explanation">${escapeHtml(explanation)}</div>` : ''}
+        `;
+        result.style.display = '';
+        submitBtn.textContent = '日記に追記';
+        submitBtn.disabled = false;
+
+        // Replace handler with insertion flow
+        const newBtn = submitBtn.cloneNode(true) as HTMLButtonElement;
+        submitBtn.replaceWith(newBtn);
+        submitBtn = newBtn;
+        newBtn.addEventListener('click', async () => {
+          const finalText = input.value.trim();
+          if (!finalText) return;
+          newBtn.disabled = true;
+          const inserted = await showInsertionPicker(entry.userTranslation, finalText);
+          if (inserted == null) {
+            newBtn.disabled = false;
+            return;
+          }
+          entry.userTranslation = inserted;
+          bodyEl.textContent = inserted;
+          questions[idx] = { ...q, reflected: true, answer: finalText };
+          entry.expansionQuestions = questions;
+          try {
+            await api.post('/diary/posts', {
+              contentJp: entry.contentJp,
+              userTranslation: inserted,
+              date: entry.date,
+              mode: entry.mode,
+              textOnly: true,
+              expansionQuestions: questions,
+            });
+            invalidateEntriesCache();
+          } catch (err) {
+            console.error(err);
+            alert('保存に失敗しました（表示は更新されています）');
+          }
+          rerender();
+        });
+      } catch (err) {
+        console.error(err);
+        alert('添削に失敗しました');
+        submitBtn.disabled = false;
+        submitBtn.textContent = '添削';
+      }
+    });
+
+    return card;
+  }
+
+  rerender();
   return wrap;
 }
 
