@@ -73,16 +73,6 @@ export function renderEditor(root: HTMLElement): void {
     </div>
   `;
 
-  // モードバナー: 現在のモードを目立つ位置で確認できる
-  const banner = document.createElement('div');
-  banner.className = 'mode-banner';
-  function refreshBanner() {
-    const m = MODE_META[currentMode];
-    banner.style.borderLeftColor = m.color;
-    banner.innerHTML = `<span style="color:${m.color};font-weight:600;">${iconFor(m.icon)} ${m.label}</span> モードで書いています`;
-  }
-  refreshBanner();
-
   meta.querySelectorAll('.mode-pill').forEach((b) => {
     b.addEventListener('click', () => {
       const next = (b as HTMLElement).dataset.mode as Mode;
@@ -90,14 +80,13 @@ export function renderEditor(root: HTMLElement): void {
       currentMode = next;
       meta.querySelectorAll('.mode-pill').forEach((x) => x.classList.remove('active'));
       b.classList.add('active');
-      refreshBanner();
       loadForMode(currentMode);
     });
   });
   wrap.appendChild(meta);
-  wrap.appendChild(banner);
 
-  // 2 カラム grid: 左=JP+ヒント、右=EN+添削。モバイルでは縦積み。
+  // 3 カラム grid (PC): 左=JP+ヒント、中=EN+ボタン、右=添削結果。
+  // 中幅 (≥720px <1100px) は 2 カラム (JP+ヒント | EN+添削)。モバイルは縦積み。
   const grid = document.createElement('div');
   grid.className = 'compose-grid';
   wrap.appendChild(grid);
@@ -110,11 +99,15 @@ export function renderEditor(root: HTMLElement): void {
   right.className = 'compose-right';
   grid.appendChild(right);
 
+  const third = document.createElement('div');
+  third.className = 'compose-third';
+  grid.appendChild(third);
+
   const jpBlock = document.createElement('div');
   jpBlock.className = 'compose-block';
   jpBlock.innerHTML = `
     <div class="compose-label">日本語で書く</div>
-    <textarea id="jp-input" class="compose-textarea" placeholder="今日あったことを日本語で…"></textarea>
+    <textarea id="jp-input" class="compose-textarea" placeholder=""></textarea>
   `;
   left.appendChild(jpBlock);
 
@@ -155,7 +148,7 @@ export function renderEditor(root: HTMLElement): void {
   enBlock.className = 'compose-block';
   enBlock.innerHTML = `
     <div class="compose-label">英語にする</div>
-    <textarea id="en-input" class="compose-textarea en" placeholder="Write in English…"></textarea>
+    <textarea id="en-input" class="compose-textarea en" placeholder=""></textarea>
   `;
   right.appendChild(enBlock);
   // モバイルで EN フォーカス時にヒントを下部 sticky にするためのクラス制御
@@ -170,7 +163,7 @@ export function renderEditor(root: HTMLElement): void {
 
   const correctionSection = document.createElement('div');
   correctionSection.id = 'correction-section';
-  right.appendChild(correctionSection);
+  third.appendChild(correctionSection);
 
   function captureRewrites(): void {
     correctionSection.querySelectorAll<HTMLTextAreaElement>('.correction-rewrite').forEach((ta) => {
@@ -390,10 +383,18 @@ export function renderEditor(root: HTMLElement): void {
     }
   }
 
+  function refreshPlaceholders(mode: Mode): void {
+    const m = MODE_META[mode];
+    (jpBlock.querySelector('#jp-input') as HTMLTextAreaElement).placeholder = m.jpPlaceholder;
+    (enBlock.querySelector('#en-input') as HTMLTextAreaElement).placeholder = m.enPlaceholder;
+  }
+
   function loadForMode(mode: Mode): void {
+    refreshPlaceholders(mode);
     loadExisting(dateStr, mode).then(applyEntry).catch(() => applyEntry(undefined));
   }
 
+  refreshPlaceholders(currentMode);
   const stashed = takeStashedEntry();
   if (stashed && stashed.date === dateStr && stashed.mode === currentMode) {
     applyEntry(stashed);
@@ -461,7 +462,6 @@ function renderHintsInto(card: HTMLElement, hints: HintItem[]): void {
   card.innerHTML = `
     <div class="hints-card-header">
       <span>英訳ヒント</span>
-      <span style="text-transform:none;letter-spacing:0;color:var(--text-faint);font-weight:400;">日本語に対応する語のみ</span>
     </div>
     ${hints.length === 0
       ? '<p style="color:var(--text-muted);text-align:center;padding:8px 0;font-size:13px;">ヒントはありません</p>'

@@ -3,7 +3,7 @@ import { icons } from '../components/icons';
 import { coverFor } from '../components/cover';
 import { MODE_META, type DiaryEntry, type Mode } from '../data/mock';
 import { fetchEntries } from '../data/entries';
-import { solarTerm, dayOfYear, daysInYear } from '../data/dateInfo';
+import { renderSekkiPill, dayOfYear, daysInYear } from '../data/dateInfo';
 import { navigate } from '../router';
 
 function todayStr(): string {
@@ -111,7 +111,7 @@ function renderBody(wrap: HTMLElement, entries: DiaryEntry[]): void {
         <div class="entry-cover" style="background:${entry.cover ?? coverFor(entry.mode, entry.time)};">
           <div class="entry-cover-meta">
             <span class="entry-cover-pill">${iconFor(meta.icon)} ${meta.label}</span>
-            <span class="entry-cover-pill">${solarTerm(entry.date)}</span>
+            ${renderSekkiPill(entry.date, 'entry-cover-pill')}
             <span class="entry-cover-pill">${dayOfYear(entry.date)} / ${daysInYear(entry.date)}</span>
             ${entry.mood ? `<span class="entry-cover-pill">${escapeHtml(entry.mood)}</span>` : ''}
           </div>

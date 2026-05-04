@@ -54,9 +54,16 @@ Each cover is `linear-gradient(135deg, hsl(hue, S%, L1%) 0%, hsl(hue, S%, L2%) 1
 
 ### Pills shown on each entry's cover
 - Mode (e.g. "Morning")
-- 節気 (24 sekki — 立夏 / 穀雨 / 夏至 …) computed from the date
+- 節気 (24 sekki — 立夏 / 穀雨 / 夏至 …) computed from the date. Hover shows a tooltip with season / period / description (data hardcoded from Wikipedia 二十四節気; `renderSekkiPill` in `data/dateInfo.ts`)
 - Day-of-year (`122 / 365`)
 - Mood (if `analyzeDiary` produced one)
+
+### Editor layout
+- 1-column on mobile (<720px)
+- 2-column on tablet/narrow desktop (720-1099px): `JP+ヒント | EN+添削`
+- 3-column on wide PC (≥1100px): `JP+ヒント | EN | 添削結果`
+- Editor route expands `#app` and `.app-chrome-inner` from 720px → 1200px via `body.route-editor` (toggled by `router.ts`)
+- JP/EN textarea placeholders are mode-aware (`MODE_META.jpPlaceholder` / `enPlaceholder`); refreshed on mode pill switch
 
 ### Backend endpoints (`functions/src/index.ts`)
 - `POST /api/diary/posts` — create / update; runs `analyzeDiary` unless `textOnly: true`. AT MOST one feedback item per sentence (prompt + post-processing dedup).

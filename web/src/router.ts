@@ -32,6 +32,7 @@ export function render(): void {
   const route = parseRoute();
   const root = document.getElementById('app')!;
   root.innerHTML = '';
+  document.body.classList.toggle('route-editor', route.name === 'editor');
   switch (route.name) {
     case 'timeline':
       renderTimeline(root);

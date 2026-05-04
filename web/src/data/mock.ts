@@ -154,9 +154,36 @@ export function findEntry(id: string): DiaryEntry | undefined {
 
 export type ModeIcon = 'sun' | 'graduation' | 'moon' | 'bookOpen';
 
-export const MODE_META: Record<Mode, { label: string; icon: ModeIcon; color: string }> = {
-  morning: { label: 'Morning', icon: 'sun', color: '#c47832' },
-  lesson: { label: 'Lesson', icon: 'graduation', color: '#3b6cb0' },
-  diary: { label: 'Diary', icon: 'moon', color: '#3a4a6b' },
-  story: { label: 'Story', icon: 'bookOpen', color: '#5d8e6f' },
+export const MODE_META: Record<
+  Mode,
+  { label: string; icon: ModeIcon; color: string; jpPlaceholder: string; enPlaceholder: string }
+> = {
+  morning: {
+    label: 'Morning',
+    icon: 'sun',
+    color: '#c47832',
+    jpPlaceholder: '今日の予定や意気込みを日本語で…',
+    enPlaceholder: 'Write your plan or intention for today…',
+  },
+  lesson: {
+    label: 'Lesson',
+    icon: 'graduation',
+    color: '#3b6cb0',
+    jpPlaceholder: 'レッスンで学んだこと・気づきを日本語で…',
+    enPlaceholder: 'Write what you learned in the lesson…',
+  },
+  diary: {
+    label: 'Diary',
+    icon: 'moon',
+    color: '#3a4a6b',
+    jpPlaceholder: '今日あったことを日本語で…',
+    enPlaceholder: 'Write about your day…',
+  },
+  story: {
+    label: 'Story',
+    icon: 'bookOpen',
+    color: '#5d8e6f',
+    jpPlaceholder: 'ちょっとしたエピソードや小話を日本語で…',
+    enPlaceholder: 'Tell a short story or anecdote…',
+  },
 };

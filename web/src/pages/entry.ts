@@ -3,7 +3,7 @@ import { icons } from '../components/icons';
 import { coverFor } from '../components/cover';
 import { MODE_META, type DiaryEntry } from '../data/mock';
 import { fetchEntry, invalidateEntriesCache, stashForEditor } from '../data/entries';
-import { solarTerm, dayOfYear, daysInYear } from '../data/dateInfo';
+import { renderSekkiPill, dayOfYear, daysInYear } from '../data/dateInfo';
 import { api } from '../api/client';
 import { getCurrentUser, getIdToken } from '../auth';
 import { navigate } from '../router';
@@ -50,7 +50,7 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
     <div class="entry-hero-fade"></div>
     <div class="entry-hero-meta">
       <span class="entry-hero-pill">${iconFor(meta.icon)} ${meta.label}</span>
-      <span class="entry-hero-pill">${solarTerm(entry.date)}</span>
+      ${renderSekkiPill(entry.date, 'entry-hero-pill')}
       <span class="entry-hero-pill">${dayOfYear(entry.date)} / ${daysInYear(entry.date)}</span>
       ${entry.mood ? `<span class="entry-hero-pill">${escapeHtml(entry.mood)}</span>` : ''}
     </div>

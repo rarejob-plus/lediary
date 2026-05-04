@@ -33,7 +33,7 @@ function toEntry(raw: RawPost): DiaryEntry {
   const ms = typeof raw.createdAt === 'number'
     ? raw.createdAt
     : raw.createdAt?._seconds ? raw.createdAt._seconds * 1000 : Date.now();
-  const validModes: Mode[] = ['morning', 'lesson', 'diary'];
+  const validModes: Mode[] = ['morning', 'lesson', 'diary', 'story'];
   const mode: Mode = validModes.includes(raw.mode) ? raw.mode : 'diary';
   return {
     id: raw.id,
