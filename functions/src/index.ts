@@ -10,6 +10,22 @@ initializeApp();
 const db = getFirestore();
 const auth = getAuth();
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
+const unsplashAccessKey = defineSecret("UNSPLASH_ACCESS_KEY");
+
+// 使用モデル — 環境変数 GEMINI_MODEL で上書き可能
+// 切替例: firebase deploy 時に --set-env-vars=GEMINI_MODEL=gemini-2.5-flash-lite
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-3.1-flash-lite";
+
+// ─── 共通: トーン規約 — lediary 全体で堅い英語を避けるための共有ルール ───
+// プロンプト全体に inline 注入。token を抑えるため簡潔に。
+const CASUAL_TONE_RULE = `TONE (English output ONLY): Casual spoken English of a 20-something native texting a friend. Never textbook/news/business style.
+AVOID and replace:
+- formal connectors: therefore→so, furthermore/moreover→also, nevertheless→but, thus/hence→so, consequently→so
+- Latinate single words: acquaintance→someone I know/a friend, individual→person, purchase→buy, residence→home, vehicle→car, commence→start, utilize→use, obtain→get, consume→eat/drink, assist→help, inquire→ask, depart→leave, endeavor→try, sufficient→enough
+- bookish phrases: I would like to→I wanna/I want to, due to the fact that/in order to→to, prior to→before, subsequently→then, approximately→about, regarding→about
+SELF-CHECK: would a friend actually say this casually? Don't trade a natural phrase for a fancier single word.
+
+JAPANESE TEXT RULE: This casual rule applies ONLY to generated English. For ALL Japanese fields (explanation / suggestion / reason / overall / mood / definition / note 等), use polite ですます調 (e.g. 「〜です」「〜ます」「〜でしょう」「〜ましょう」). Never use 〜だ／〜だよ／〜だね／〜じゃん／〜かも (informal sentence-final particles). Maintain a respectful coaching tone — like a knowledgeable English teacher, not a casual friend.`;
 
 // ─── Auth helper ───
 
@@ -35,7 +51,7 @@ async function callGemini(systemPrompt: string, userMessage: string): Promise<st
   };
 
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": key },
@@ -179,9 +195,117 @@ interface DiaryAnalysis {
   vocabulary: VocabItem[];
   expansionQuestions: ExpansionQuestion[];
   mood?: string;
+  coverKeyword?: string;
 }
 
-async function analyzeDiary(contentJp: string, userTranslation: string, previousFeedback: FeedbackItem[], attemptCount: number): Promise<DiaryAnalysis> {
+interface UnsplashCover {
+  url: string;
+  photographer: string;
+  photographerUrl: string;
+  downloadLocation: string;
+}
+
+// hex (#rrggbb) → 知覚輝度 0-255。基準: ITU-R BT.601。
+function brightnessFromHex(hex: string): number {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || "");
+  if (!m) return 128; // 不明なら中間扱いで除外しない
+  const n = parseInt(m[1]!, 16);
+  const r = (n >> 16) & 0xff;
+  const g = (n >> 8) & 0xff;
+  const b = n & 0xff;
+  return 0.299 * r + 0.587 * g + 0.114 * b;
+}
+
+async function fetchUnsplashCover(keyword: string): Promise<UnsplashCover | null> {
+  if (!keyword) return null;
+  const key = unsplashAccessKey.value();
+  if (!key) return null;
+
+  type Photo = { urls: { regular: string }; user: { name: string; links: { html: string } }; links: { download_location: string }; color?: string };
+
+  // featured=true でキュレーション済み写真のみ。content_filter=high で過激なものを排除。
+  // 0 件のときは featured を外して再検索する。
+  async function searchPhotos(query: string): Promise<Photo[]> {
+    const params = new URLSearchParams({
+      query,
+      per_page: "20",
+      orientation: "landscape",
+      content_filter: "high",
+      featured: "true",
+    });
+    let r = await fetch(`https://api.unsplash.com/search/photos?${params}`, {
+      headers: { Authorization: `Client-ID ${key}`, "Accept-Version": "v1" },
+    });
+    if (!r.ok) {
+      console.warn("Unsplash search failed:", r.status, query, await r.text());
+      return [];
+    }
+    let data: { results: Photo[] } = await r.json();
+    if (!data.results?.length) {
+      params.delete("featured");
+      r = await fetch(`https://api.unsplash.com/search/photos?${params}`, {
+        headers: { Authorization: `Client-ID ${key}`, "Accept-Version": "v1" },
+      });
+      if (!r.ok) return [];
+      data = await r.json();
+    }
+    return data.results || [];
+  }
+
+  // Gemini が "tokyo movie theater" のような複合語を返すと Unsplash で 0 件になることがある。
+  // 0 件のときは左から 1 語ずつ落として再検索（"tokyo movie theater" → "movie theater" → "theater"）。
+  // 修飾語（"japanese" / "tokyo"）は前置されがちなので末尾側を残す方がヒットしやすい。
+  try {
+    const tokens = keyword.trim().split(/\s+/);
+    let results: Photo[] = [];
+    for (let i = 0; i < tokens.length; i++) {
+      const q = tokens.slice(i).join(" ");
+      results = await searchPhotos(q);
+      if (results.length) {
+        if (i > 0) console.warn(`Unsplash fallback: "${keyword}" → "${q}"`);
+        break;
+      }
+    }
+    if (!results.length) {
+      console.warn("Unsplash 0 results across all fallbacks:", keyword);
+      return null;
+    }
+
+    // dominant color から明度を見て暗い・モノトーン気味のものを除外
+    // 閾値 110 (0-255) より上を "暗くない" 扱い。それでも 0 件なら閾値を下げて再フィルタ。
+    const scored = results.map((p) => ({ p, b: brightnessFromHex(p.color || "") }));
+    let bright = scored.filter((x) => x.b >= 110);
+    if (bright.length === 0) bright = scored.filter((x) => x.b >= 80);
+    if (bright.length === 0) bright = scored;
+
+    // 明るい順 → 上位 5 からランダムに選ぶ（同じ写真ばかりにならない & 一定の明るさ確保）
+    bright.sort((a, b) => b.b - a.b);
+    const pool = bright.slice(0, 5);
+    const pick = pool[Math.floor(Math.random() * pool.length)]!.p;
+    return {
+      url: pick.urls.regular,
+      photographer: pick.user.name,
+      photographerUrl: pick.user.links.html,
+      downloadLocation: pick.links.download_location,
+    };
+  } catch (e) {
+    console.warn("Unsplash fetch error:", e);
+    return null;
+  }
+}
+
+// Unsplash API ガイドライン: 画像が実際に使用されたとき download エンドポイントを叩く
+async function notifyUnsplashDownload(downloadLocation: string): Promise<void> {
+  const key = unsplashAccessKey.value();
+  if (!key || !downloadLocation) return;
+  try {
+    await fetch(downloadLocation, { headers: { Authorization: `Client-ID ${key}` } });
+  } catch (e) {
+    console.warn("Unsplash download notify failed:", e);
+  }
+}
+
+async function analyzeDiary(contentJp: string, userTranslation: string, previousFeedback: FeedbackItem[], attemptCount: number, skipMoodAndCover: boolean = false): Promise<DiaryAnalysis> {
   // Progressive correction levels
   let levelInstruction: string;
   if (attemptCount <= 1) {
@@ -198,6 +322,8 @@ Your task is to analyze a short Japanese diary entry (typically 3 lines) and the
 
 ${levelInstruction}
 
+${CASUAL_TONE_RULE}
+
 Return a JSON object with exactly these fields:
 {
   "feedback": [
@@ -213,15 +339,41 @@ Return a JSON object with exactly these fields:
       "definition": "concise definition in Japanese",
       "example": "a natural example sentence using the word"
     }
-  ],
-  "mood": "日本語の感情語 1 語（例: はずむ、穏やか、達成感、もやもや、集中、内省、わくわく、ほっこり、いら立ち、など）"
+  ]${skipMoodAndCover ? "" : `,
+  "mood": "ONE evocative English word capturing the dominant feeling of the day (e.g., 'buoyant', 'calm', 'accomplished', 'restless', 'focused', 'introspective', 'excited', 'cozy', 'frustrated', 'hopeful', 'grateful', 'peaceful', 'nostalgic', 'energized')",
+  "coverKeyword": "1-3 English words describing a CONCRETE VISUAL SUBJECT from the diary, suitable for a stock-photo search (e.g., 'cherry blossoms', 'morning coffee', 'jogging park', 'rainy window'). Prefer concrete physical things over abstract concepts."`}
 }
 
 Rules:
-- feedback: Compare the user's translation sentence by sentence and suggest corrections appropriate to the CORRECTION LEVEL above. For each correction: "original" must be the user's FULL sentence, "corrected" must be the corrected FULL sentence, and "explanation" must explain in Japanese WHY the corrected version is better — specifically describe the nuance difference between the two expressions (e.g., when each would be used, what impression each gives, what subtle meaning differs). ALL alternatives MUST sound natural in casual spoken English — never use formal/written words like "therefore", "furthermore", "nevertheless". If the user's translation is empty, return an empty array [].
+- feedback: Compare the user's English translation sentence by sentence against natural English standards and suggest corrections appropriate to the CORRECTION LEVEL above.
+
+  CRITICAL — what "original" and "corrected" mean:
+  * "original" MUST be a verbatim English sentence taken from the user's English translation (the "User's English translation attempt" section in the user message). NEVER take "original" from the Japanese diary. NEVER use Japanese text (ひらがな・カタカナ・漢字 dominant) as "original".
+  * "corrected" MUST be an improved English version of that exact "original" English sentence. It is NOT an English translation of the Japanese diary.
+  * If the user's English translation is empty or doesn't contain English sentences, return an empty feedback array [].
+  * If a sentence in the user's English translation is itself written in Japanese (i.e., the user left a placeholder), SKIP it — do NOT include it in feedback, do NOT translate it.
+
+  For each valid feedback item:
+  - "original": the FULL English sentence from the user's translation, exactly as they wrote it.
+  - "corrected": the FULL improved English sentence.
+  - "explanation": Japanese text explaining WHY the corrected version is better — specifically describe the nuance difference between the two expressions (e.g., when each would be used, what impression each gives, what subtle meaning differs).
+
+  All "corrected" sentences MUST follow the TONE RULES above.
+  SELF-CHECK PER ITEM:
+  (1) Is "original" actually a quote from the user's English translation? If not, DROP it.
+  (2) Is "original" written in English (not Japanese)? If it contains Japanese characters as the core of the sentence, DROP it.
+  (3) Is "corrected" MORE casual than "original"? If it became stiffer (e.g., "someone I know" → "acquaintance"), DROP it.
+  (4) Is "corrected" actually DIFFERENT from "original"? If the only differences are whitespace, punctuation, or capitalization (i.e., the words are identical), DROP it. NEVER produce a feedback item where the user's sentence is already correct — only return items where there is a real, meaningful change.
+- If a sentence is already correct and natural, omit it from feedback entirely. An empty feedback array [] is preferred over filler items. Quality > quantity. Do NOT pad the feedback array with no-op items just to "show work".
 - AT MOST ONE feedback item per sentence. Never produce two feedback items whose "original" overlaps (i.e., shares any substring of the user's text). If a sentence needs multiple changes, combine them into a single feedback item with one "corrected" that incorporates all the changes.
-- vocabulary: Extract 3-5 useful vocabulary items ONLY from expressions used in the "corrected" sentences above. These must be words/phrases that actually appear in your corrections. Do NOT include unrelated vocabulary.
-- mood: Pick ONE Japanese word that captures the dominant feeling of the diary content (not of the writing quality). Prefer evocative words from above (はずむ／穏やか／達成感／もやもや／集中／内省／わくわく／ほっこり／いら立ち／焦り／安らぎ／ふわふわ／じわじわ／さっぱり／ぐったり／前向き) but feel free to suggest others. ONE word only, no quotes, no punctuation. Even when contentJp is short, always return one mood.
+- vocabulary: Extract 3-5 useful vocabulary items ONLY from expressions used in the "corrected" sentences above. These must be words/phrases that actually appear in your corrections. Do NOT include unrelated vocabulary.${skipMoodAndCover ? "" : `
+- mood: Pick ONE English word that captures the dominant feeling of the diary content (not of the writing quality). Prefer evocative single-word adjectives a learner can actually use in conversation (buoyant / calm / accomplished / restless / focused / introspective / excited / cozy / frustrated / hopeful / grateful / peaceful / nostalgic / energized / wistful / playful / drained / content). ONE single English word only — no phrases, no quotes, no punctuation. lowercase. Even when contentJp is short, always return one mood word.
+- coverKeyword: Pick a SHORT English search phrase (1-3 words) for a stock photo that visually captures the diary's scene.
+  PRIORITIZE PHOTOS WITH A JAPANESE LOOK & FEEL. The user is writing in Japanese about their daily life in Japan, so cover photos should preferably feel grounded in Japan — Japanese homes / streets / food / parks / people / objects — not generic Western stock. To bias the search toward Japanese photos:
+  * When natural, prepend a Japan-specific qualifier or replace generic nouns with Japan-rooted ones: "japanese", "tokyo", "kyoto" / "ramen", "izakaya", "konbini", "sento", "koban", "tatami", "shrine", "sakura", "obento", "washoku", "tonkatsu", "matcha", "soba", "futon", "japanese house" 等.
+  * Generic activity is fine if a Japan-specific term doesn't fit naturally — but lean Japan whenever there's a reasonable choice. E.g. "lunch" → "obento" or "ramen" if that fits; "coffee shop" → "tokyo cafe"; "park" → "japanese park" or "sakura park"; "cinema" → leave as "popcorn cinema" (no natural JP term).
+  Prefer concrete nouns (places, objects, activities) over emotions. AVOID dark, scary, gloomy, horror, or moody subjects — favor bright, warm, daylight, cheerful subjects suitable as a journal cover. If the diary scene is genuinely dark (e.g., night), still pick the most positive concrete element (e.g., "tokyo lights" instead of "dark street").
+  Examples: 「家族でフラワーパークに行く」→ "japanese flower park"; 「朝ジョギングしている」→ "tokyo jogging"; 「カフェで本を読んだ」→ "tokyo cafe book"; 「ラーメン食べた」→ "ramen shop"; 「コンビニ寄った」→ "konbini night"; 「映画を観に行った」→ "popcorn cinema". Always return one keyword.`}
 
 Return ONLY the JSON object, no markdown fences or extra text.`;
 
@@ -245,6 +397,12 @@ Return ONLY the JSON object, no markdown fences or extra text.`;
   if (!analysis.feedback) analysis.feedback = [];
   if (!analysis.vocabulary) analysis.vocabulary = [];
   if (!analysis.expansionQuestions) analysis.expansionQuestions = [];
+
+  // No-op フィルタ: original と corrected が同じ（空白/句読点/大小文字差のみ含む）アイテムは捨てる
+  const norm = (s: string) => s.toLowerCase().replace(/[\s.,!?;:'"`]+/g, " ").trim();
+  analysis.feedback = analysis.feedback.filter((fb) =>
+    fb.original && fb.corrected && norm(fb.original) !== norm(fb.corrected),
+  );
 
   // Backstop: drop feedback items whose "original" overlaps an earlier item
   // so that final-text replace() never has to choose between competing edits.
@@ -275,9 +433,9 @@ Critical rules — stay strictly within the user's text:
 
 Style:
 - Match the tone and casualness of the original Japanese diary.
-- All suggestions must sound like casual spoken English. NEVER suggest formal/written expressions like "furthermore", "therefore", "nevertheless", "in addition", "regarding", "approximately", "I would like to", "due to the fact that", "in order to", "prior to", "subsequently". Prefer short everyday phrases: "also", "so", "about", "I wanna", "because", "before", "then".
-- Think of how a 20-something native speaker would text a friend.
 - Always show expressions in their base/dictionary form (e.g. "feel under the weather" not "feeling under the weather", "hit up" not "hit up a restaurant").
+
+${CASUAL_TONE_RULE}
 
 Return a JSON array (typically 2-8 items, no upper requirement — just enough to cover the parts the learner might struggle with):
 [
@@ -324,7 +482,7 @@ function generateShareId(): string {
 // ─── API handler ───
 
 export const api = onRequest(
-  { region: "asia-northeast1", secrets: [geminiApiKey] },
+  { region: "asia-northeast1", secrets: [geminiApiKey, unsplashAccessKey] },
   async (req, res) => {
     const path = req.path;
     const method = req.method;
@@ -361,12 +519,16 @@ export const api = onRequest(
       const mode = modeParam || "diary";
       const docID = `${userId}_${date}_${mode}`;
 
-      // textOnly: update translation text without re-running analysis
+      // textOnly: 添削を再走させずにテキスト系フィールドだけ更新する高速パス
       if (textOnly) {
         const updates: Record<string, unknown> = {
           userTranslation: userTranslation || "",
           updatedAt: Date.now(),
         };
+        // 完成 / 編集経由で日本語原文を直接更新したい場合に備え、contentJp も受け付ける
+        if (typeof contentJp === "string" && contentJp.length > 0) {
+          updates.contentJp = contentJp;
+        }
         if (req.body.expansionQuestions) {
           updates.expansionQuestions = req.body.expansionQuestions;
         }
@@ -381,18 +543,41 @@ export const api = onRequest(
       const prevFb: FeedbackItem[] = previousFeedback || [];
       const attempt: number = attemptCount || 1;
 
+      // 既存 doc を先に取得 — contentJp が同じなら mood/coverKeyword の再生成をスキップしてコスト節約
+      const existingDoc = await db.collection("lediary-posts").doc(docID).get();
+      const existing = existingDoc.exists ? existingDoc.data() : null;
+      const createdAt = existing?.createdAt || Date.now();
+
+      const existingMood = (existing?.mood as string | undefined) || "";
+      let coverImageUrl = (existing?.coverImageUrl as string | undefined) || "";
+      let coverPhotographer = (existing?.coverPhotographer as string | undefined) || "";
+      let coverPhotographerUrl = (existing?.coverPhotographerUrl as string | undefined) || "";
+      let coverKeyword = (existing?.coverKeyword as string | undefined) || "";
+
+      // contentJp が変わってない & 既に mood/coverKeyword 両方ある → Gemini に再抽出を依頼しない
+      const skipMoodAndCover = existing?.contentJp === contentJp && !!existingMood && !!coverKeyword;
+
       let analysis: DiaryAnalysis;
       try {
-        analysis = await analyzeDiary(contentJp, userTranslation || "", prevFb, attempt);
+        analysis = await analyzeDiary(contentJp, userTranslation || "", prevFb, attempt, skipMoodAndCover);
       } catch (err) {
-        // Retry once on JSON parse failure
         console.warn("analyzeDiary failed, retrying:", err);
-        analysis = await analyzeDiary(contentJp, userTranslation || "", prevFb, attempt);
+        analysis = await analyzeDiary(contentJp, userTranslation || "", prevFb, attempt, skipMoodAndCover);
       }
 
-      // Preserve createdAt from existing doc
-      const existingDoc = await db.collection("lediary-posts").doc(docID).get();
-      const createdAt = existingDoc.exists ? existingDoc.data()?.createdAt || Date.now() : Date.now();
+      // skip 時は既存値を引き継ぐ（プロンプトから外しているので analysis には来ない）
+      const finalMood = skipMoodAndCover ? existingMood : (analysis.mood || "");
+      const newKeyword = skipMoodAndCover ? coverKeyword : (analysis.coverKeyword?.trim() || "");
+      if (!skipMoodAndCover && newKeyword && newKeyword !== coverKeyword) {
+        const cover = await fetchUnsplashCover(newKeyword);
+        if (cover) {
+          coverImageUrl = cover.url;
+          coverPhotographer = cover.photographer;
+          coverPhotographerUrl = cover.photographerUrl;
+          coverKeyword = newKeyword;
+          notifyUnsplashDownload(cover.downloadLocation);
+        }
+      }
 
       const post: Record<string, unknown> = {
         userId,
@@ -401,7 +586,11 @@ export const api = onRequest(
         feedback: analysis.feedback,
         vocabulary: analysis.vocabulary,
         expansionQuestions: analysis.expansionQuestions,
-        mood: analysis.mood || "",
+        mood: finalMood,
+        coverImageUrl,
+        coverPhotographer,
+        coverPhotographerUrl,
+        coverKeyword,
         attemptCount: attempt,
         mode,
         date,
@@ -537,6 +726,9 @@ Rules:
 - "afterSentence" must exactly match one of the user's sentences.
 - "hintPhrases" should contain 2-3 useful English phrases/collocations the learner can use to answer.
 - Questions should be different from what might have been asked before — look for unexplored angles.
+
+${CASUAL_TONE_RULE}
+
 Return ONLY the JSON object, no markdown fences or extra text.`;
 
       const userMessage = `Japanese diary:\n${contentJp || ""}\n\nUser's English translation:\n${userTranslation}`;
@@ -565,12 +757,26 @@ Return ONLY the JSON object, no markdown fences or extra text.`;
         return;
       }
 
-      const systemPrompt = `You are an English writing coach. The user is answering a follow-up question about their diary entry.
-Correct their English answer to be natural casual spoken English. Return a JSON object:
-{"corrected": "the corrected sentence", "explanation": "日本語で簡潔に修正理由（修正なしなら空文字）"}
-If the answer is already correct, return it as-is with empty explanation. Return ONLY JSON.`;
+      const { afterSentence } = req.body;
 
-      const userMessage = `Diary context: ${diaryContext || ""}\nQuestion: ${question || ""}\nUser's answer: ${answer}`;
+      const systemPrompt = `You are an English writing coach. The user is answering a follow-up question about their diary entry. The corrected answer will be INSERTED into the diary RIGHT AFTER the sentence "${afterSentence || "(unknown)"}".
+
+Your job: produce a "corrected" version that (1) is natural casual spoken English, (2) preserves the user's meaning and content, and (3) flows naturally from the preceding sentence — adding a minimal connector ONLY when the raw sentence would feel abrupt.
+
+CONNECTOR POLICY (critical):
+- If the user's answer already starts with words that flow from the preceding sentence (e.g., it has its own pronoun referring to the previous topic, or starts with "It" / "We" / "That" referencing context), DO NOT add a connector. Leave the start untouched.
+- If the answer is a bare standalone sentence that would sound abrupt next to the previous one, prepend ONE short, natural connector that fits the relationship: "Actually," / "Plus," / "Honestly," / "What I loved was" / "The thing is," / "On top of that," / "Especially since" / "Because" / "And" — choose based on the LOGICAL relationship between the previous sentence and this answer.
+- NEVER add formal connectors like "Furthermore", "Moreover", "Additionally", "Therefore". Use the casual list above.
+- The connector must feel light, not forced. If you can't think of one that adds genuine flow, just leave it without one.
+
+Return a JSON object:
+{"corrected": "the corrected sentence (with connector if needed)", "explanation": "日本語で簡潔に修正理由（修正なしなら空文字、接続詞を足した場合はその意図も書く）"}
+
+${CASUAL_TONE_RULE}
+
+Return ONLY JSON.`;
+
+      const userMessage = `Preceding sentence (the answer will go right after this):\n${afterSentence || "(no preceding sentence)"}\n\nFull diary context: ${diaryContext || ""}\n\nQuestion that prompted the answer: ${question || ""}\n\nUser's answer: ${answer}`;
       const response = await callGemini(systemPrompt, userMessage);
       const result = parseJsonObject<{ corrected: string; explanation: string }>(response);
       res.json(result);
@@ -606,6 +812,9 @@ Rules:
 - Keep suggestions practical and specific.
 - "between" should quote enough text to identify the location (5-10 words from each sentence).
 - "suggestion" must be a Japanese description of the change. English words inside (Anyway, Since, etc.) should remain in English, but the verb must be Japanese (置き換える/入れる/取り除く).
+
+${CASUAL_TONE_RULE}
+
 - Return ONLY JSON.`;
 
       const response = await callGemini(systemPrompt, `Diary entry:\n${text}`);
@@ -662,6 +871,9 @@ Rules:
 - All content must be in English only (the tutor does not speak Japanese)
 - Discussion questions should feel natural for a 25-minute conversation lesson
 - The diary text itself will be shown as the "Article" section, so do NOT include it in the JSON
+
+${CASUAL_TONE_RULE}
+
 Return ONLY the JSON object.`;
 
       const userMessage = `Student's diary (Japanese):\n${contentJp}\n\nStudent's English text (corrected):\n${correctedText}\n\nVocabulary learned:\n${vocabulary.map((v) => `${v.word}: ${v.definition}`).join("\n")}`;
