@@ -615,6 +615,53 @@ export const api = onRequest(
       return;
     }
 
+    // GET /api/diary/days — fulfillment スコアの一覧
+    if (path === "/api/diary/days" && method === "GET") {
+      const snap = await db.collection("lediary-days")
+        .where("userId", "==", userId)
+        .get();
+      const days = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      res.json(days);
+      return;
+    }
+
+    // POST /api/diary/days — fulfillment スコア + note の upsert
+    // body: { date: "YYYY-MM-DD", score: 1-10, note?: string }
+    if (path === "/api/diary/days" && method === "POST") {
+      const { date: dateParam, score, note } = req.body;
+      if (!dateParam || typeof dateParam !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+        res.status(400).json({ error: "valid date (YYYY-MM-DD) is required" });
+        return;
+      }
+      if (typeof score !== "number" || !Number.isInteger(score) || score < 1 || score > 10) {
+        res.status(400).json({ error: "score must be integer 1-10" });
+        return;
+      }
+      const docID = `${userId}_${dateParam}`;
+      const existing = await db.collection("lediary-days").doc(docID).get();
+      const now = Date.now();
+      const data: Record<string, unknown> = {
+        userId,
+        date: dateParam,
+        score,
+        note: typeof note === "string" ? note : (existing.data()?.note || ""),
+        updatedAt: now,
+        createdAt: existing.exists ? (existing.data()?.createdAt || now) : now,
+      };
+      await db.collection("lediary-days").doc(docID).set(data);
+      res.json({ id: docID, ...data });
+      return;
+    }
+
+    // DELETE /api/diary/days/:date — スコアを取り消す
+    const dayMatch = path.match(/^\/api\/diary\/days\/(\d{4}-\d{2}-\d{2})$/);
+    if (dayMatch && method === "DELETE") {
+      const docID = `${userId}_${dayMatch[1]}`;
+      await db.collection("lediary-days").doc(docID).delete();
+      res.json({ success: true });
+      return;
+    }
+
     // POST /api/diary/posts/move — change an entry's mode (copy + delete)
     if (path === "/api/diary/posts/move" && method === "POST") {
       const { fromId, toMode } = req.body;

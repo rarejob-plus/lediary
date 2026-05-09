@@ -1,14 +1,34 @@
 import { renderHeader, renderFab } from '../components/header';
 import { icons } from '../components/icons';
 import { coverFor } from '../components/cover';
+import { openDayRatingModal } from '../components/day-rating-modal';
 import { MODE_META, type DiaryEntry, type Mode } from '../data/mock';
 import { fetchEntries } from '../data/entries';
+import { fetchDays, type DayRating } from '../data/days';
 import { renderSekkiPill, dayOfYear, daysInYear } from '../data/dateInfo';
 import { navigate } from '../router';
 
 function todayStr(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function dateToStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// 連続して書いた日数。今日まだ書いていない場合は昨日を起点（書くまで途切れさせない）
+function computeStreak(entries: DiaryEntry[]): number {
+  if (entries.length === 0) return 0;
+  const dates = new Set(entries.map((e) => e.date));
+  const cursor = new Date();
+  if (!dates.has(dateToStr(cursor))) cursor.setDate(cursor.getDate() - 1);
+  let count = 0;
+  while (dates.has(dateToStr(cursor))) {
+    count += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return count;
 }
 
 function dayHeaderParts(dateStr: string): { num: string; weekday: string; monthYear: string } {
@@ -29,21 +49,24 @@ export function renderTimeline(root: HTMLElement): void {
   root.appendChild(wrap);
   root.appendChild(renderFab());
 
-  fetchEntries().then((entries) => renderBody(wrap, entries)).catch((err) => {
-    console.error(err);
-    wrap.innerHTML = `<p style="color:var(--text-muted);text-align:center;padding:40px 0;">読み込みに失敗しました</p>`;
-  });
+  Promise.all([fetchEntries(), fetchDays()])
+    .then(([entries, days]) => renderBody(wrap, entries, days))
+    .catch((err) => {
+      console.error(err);
+      wrap.innerHTML = `<p style="color:var(--text-muted);text-align:center;padding:40px 0;">読み込みに失敗しました</p>`;
+    });
 }
 
-function renderBody(wrap: HTMLElement, entries: DiaryEntry[]): void {
+function renderBody(wrap: HTMLElement, entries: DiaryEntry[], days: Map<string, DayRating>): void {
   wrap.innerHTML = '';
 
   // Top row: streak + today label
+  const streak = computeStreak(entries);
   const topRow = document.createElement('div');
   topRow.className = 'timeline-top-row';
   topRow.innerHTML = `
     <span class="timeline-today-label">${formatYmd(new Date())}</span>
-    <div class="timeline-streak">${icons.flame(13)} <span>4 day streak</span></div>
+    ${streak > 0 ? `<div class="timeline-streak">${icons.flame(13)} <span>${streak} day streak</span></div>` : ''}
   `;
   wrap.appendChild(topRow);
 
@@ -59,15 +82,20 @@ function renderBody(wrap: HTMLElement, entries: DiaryEntry[]): void {
     const filled = todayByMode.get(m);
     const card = document.createElement('button');
     card.className = `today-card ${filled ? 'filled' : ''}`;
-    card.innerHTML = `
-      <div class="today-card-mode" style="${filled ? `color:${meta.color};` : ''}">
-        ${iconFor(meta.icon, 14)} ${meta.label}
-      </div>
-      <div class="today-card-status ${filled ? '' : 'today-card-empty'}">
-        ${filled ? escapeHtml(filled.userTranslation || filled.contentJp) : 'まだ書いていない'}
-      </div>
-      ${filled ? '' : `<div class="today-card-check">${icons.pen(11)} 書く</div>`}
-    `;
+    card.innerHTML = filled
+      ? `
+        <div class="today-card-mode" style="color:${meta.color};">
+          ${iconFor(meta.icon, 14)} ${meta.label}
+        </div>
+        <div class="today-card-check-mark" style="color:${meta.color};">${icons.check(16)}</div>
+      `
+      : `
+        <div class="today-card-mode">
+          ${iconFor(meta.icon, 14)} ${meta.label}
+        </div>
+        <div class="today-card-status today-card-empty">まだ書いていない</div>
+        <div class="today-card-check">${icons.pen(11)} 書く</div>
+      `;
     card.addEventListener('click', () => {
       if (filled) {
         navigate(`/entry/${filled.id}`);
@@ -79,10 +107,15 @@ function renderBody(wrap: HTMLElement, entries: DiaryEntry[]): void {
   });
   wrap.appendChild(todayRow);
 
-  // Group past entries by date (excluding today)
+  // 今日の充実度: today-row の下に独立した行を出す（その日記の有無に関わらずタップ可）
+  const todayRating = document.createElement('div');
+  todayRating.className = 'today-rating';
+  wrap.appendChild(todayRating);
+  paintRatingRow(todayRating, today, days, true);
+
+  // Group entries by date (今日も含めて履歴に表示する — Today 行はステータス、履歴は内容)
   const groups = new Map<string, DiaryEntry[]>();
   for (const e of entries) {
-    if (e.date === today) continue;
     if (!groups.has(e.date)) groups.set(e.date, []);
     groups.get(e.date)!.push(e);
   }
@@ -100,15 +133,19 @@ function renderBody(wrap: HTMLElement, entries: DiaryEntry[]): void {
         <strong>${parts.weekday}</strong>
         <span>${parts.monthYear}</span>
       </div>
+      <div class="timeline-day-rating"></div>
     `;
     day.appendChild(header);
+
+    const ratingEl = header.querySelector('.timeline-day-rating') as HTMLElement;
+    paintRatingRow(ratingEl, date, days, false);
 
     for (const entry of dayEntries) {
       const meta = MODE_META[entry.mode];
       const card = document.createElement('button');
       card.className = 'entry-card';
       card.innerHTML = `
-        <div class="entry-cover" style="background:${entry.cover ?? coverFor(entry.mode, entry.time)};">
+        <div class="entry-cover" style="background:${entry.cover ?? coverFor(entry.mode, entry.time, entry.coverImageUrl)};">
           <div class="entry-cover-meta">
             <span class="entry-cover-pill">${iconFor(meta.icon)} ${meta.label}</span>
             ${renderSekkiPill(entry.date, 'entry-cover-pill')}
@@ -139,6 +176,53 @@ function renderBody(wrap: HTMLElement, entries: DiaryEntry[]): void {
     empty.textContent = 'まだエントリがありません。今日のひとことから始めましょう。';
     wrap.appendChild(empty);
   }
+}
+
+// 充実度 1-10 のドット列。tap で modal を開き、保存後は再描画する。
+function paintRatingRow(
+  el: HTMLElement,
+  date: string,
+  days: Map<string, DayRating>,
+  expanded: boolean,
+): void {
+  const rating = days.get(date);
+  const score = rating?.score ?? 0;
+  const note = rating?.note ?? '';
+
+  const cls = expanded ? 'rating-dots rating-dots-lg' : 'rating-dots';
+  const noteHtml = expanded && note
+    ? `<span class="rating-note">${escapeHtml(note)}</span>`
+    : !expanded && note
+      ? `<span class="rating-note-icon" title="${escapeHtml(note)}">${icons.pen(10)}</span>`
+      : '';
+
+  el.innerHTML = `
+    ${expanded ? `<div class="rating-label">${score > 0 ? `今日の充実度 <strong>${score}/10</strong>` : '今日の充実度'}</div>` : ''}
+    <div class="${cls}">
+      ${Array.from({ length: 10 }, (_, i) => {
+        const n = i + 1;
+        return `<button class="rating-dot${n <= score ? ' filled' : ''}" data-score="${n}" aria-label="${n}点"></button>`;
+      }).join('')}
+      ${noteHtml}
+    </div>
+  `;
+
+  el.querySelectorAll('.rating-dot').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const tapped = Number((btn as HTMLElement).dataset.score);
+      const initialScore = score > 0 ? score : tapped;
+      openDayRatingModal({
+        date,
+        score: tapped > 0 ? tapped : initialScore,
+        initialNote: note,
+        onSaved: (saved) => {
+          if (saved) days.set(date, saved); else days.delete(date);
+          paintRatingRow(el, date, days, expanded);
+        },
+      });
+    });
+  });
 }
 
 function iconFor(name: 'sun' | 'graduation' | 'moon' | 'bookOpen', size = 11): string {
