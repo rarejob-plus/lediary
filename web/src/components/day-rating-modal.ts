@@ -4,6 +4,7 @@
 
 import { saveDayRating, deleteDayRating, type DayRating } from '../data/days';
 import { showToast } from './toast';
+import { icons } from './icons';
 
 interface OpenOptions {
   date: string;
@@ -63,10 +64,12 @@ export function openDayRatingModal(opts: OpenOptions): void {
     dotsEl.innerHTML = '';
     for (let i = 1; i <= 10; i++) {
       const b = document.createElement('button');
-      b.className = 'day-rating-dot' + (i <= score ? ' filled' : '');
-      b.style.setProperty('--dot-level', String(i));
+      const filled = i <= score;
+      b.className = 'day-rating-dot' + (filled ? ' filled' : '');
       b.dataset.score = String(i);
+      b.dataset.level = String(i);
       b.setAttribute('aria-label', `${i} 点`);
+      b.innerHTML = filled ? icons.circleSolid(22) : icons.circle(22);
       b.addEventListener('click', () => {
         score = i;
         paintDots();

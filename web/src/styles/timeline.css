@@ -299,35 +299,35 @@
 .rating-dots {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 .rating-dots-lg {
-  gap: 8px;
+  gap: 6px;
 }
 
 .rating-dot {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
   background: transparent;
-  border: 1.5px solid var(--border-strong);
-  padding: 0;
+  border: 0;
+  padding: 2px;
   cursor: pointer;
-  transition: background 0.12s, transform 0.12s, border-color 0.12s;
-}
-.rating-dots-lg .rating-dot {
-  width: 18px;
-  height: 18px;
-  border-width: 2px;
+  line-height: 0;
+  color: var(--border-strong);
+  transition: color 0.14s ease, transform 0.14s ease;
 }
 .rating-dot:hover {
   transform: scale(1.18);
-  border-color: #d97757;
+  color: #d97757;
 }
-.rating-dot.filled {
-  background: #d97757;
-  border-color: #d97757;
-}
+.rating-dot[data-level="1"].filled  { color: hsl(18, 60%, 78%); }
+.rating-dot[data-level="2"].filled  { color: hsl(18, 60%, 74%); }
+.rating-dot[data-level="3"].filled  { color: hsl(18, 60%, 70%); }
+.rating-dot[data-level="4"].filled  { color: hsl(18, 60%, 66%); }
+.rating-dot[data-level="5"].filled  { color: hsl(18, 60%, 62%); }
+.rating-dot[data-level="6"].filled  { color: hsl(18, 60%, 58%); }
+.rating-dot[data-level="7"].filled  { color: hsl(18, 60%, 54%); }
+.rating-dot[data-level="8"].filled  { color: hsl(18, 60%, 50%); }
+.rating-dot[data-level="9"].filled  { color: hsl(18, 60%, 47%); }
+.rating-dot[data-level="10"].filled { color: hsl(18, 60%, 44%); }
 
 .rating-note {
   font-size: 12px;
@@ -424,29 +424,35 @@ body.day-rating-modal-open {
 .day-rating-modal-dots {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 0;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 8px 2px 12px;
 }
 .day-rating-dot {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
   background: transparent;
-  border: 2px solid var(--border-strong);
-  padding: 0;
+  border: 0;
+  padding: 4px;
   cursor: pointer;
-  flex: 1;
-  max-width: 30px;
-  transition: background 0.12s, transform 0.12s, border-color 0.12s;
+  line-height: 0;
+  color: var(--border-strong); /* 空ドットの outline 色 */
+  transition: color 0.14s ease, transform 0.14s ease;
 }
 .day-rating-dot:hover {
-  transform: scale(1.12);
-  border-color: #d97757;
+  transform: scale(1.18);
+  color: #d97757;
 }
-.day-rating-dot.filled {
-  background: #d97757;
-  border-color: #d97757;
-}
+/* filled 時は level に応じて色を変える: 1=淡い→10=濃いオレンジ。
+   hsl(18, 60%, L%) で L を 78%(level 1) → 44%(level 10) に線形に下げる。 */
+.day-rating-dot[data-level="1"].filled  { color: hsl(18, 60%, 78%); }
+.day-rating-dot[data-level="2"].filled  { color: hsl(18, 60%, 74%); }
+.day-rating-dot[data-level="3"].filled  { color: hsl(18, 60%, 70%); }
+.day-rating-dot[data-level="4"].filled  { color: hsl(18, 60%, 66%); }
+.day-rating-dot[data-level="5"].filled  { color: hsl(18, 60%, 62%); }
+.day-rating-dot[data-level="6"].filled  { color: hsl(18, 60%, 58%); }
+.day-rating-dot[data-level="7"].filled  { color: hsl(18, 60%, 54%); }
+.day-rating-dot[data-level="8"].filled  { color: hsl(18, 60%, 50%); }
+.day-rating-dot[data-level="9"].filled  { color: hsl(18, 60%, 47%); }
+.day-rating-dot[data-level="10"].filled { color: hsl(18, 60%, 44%); }
 
 .day-rating-modal-note {
   width: 100%;

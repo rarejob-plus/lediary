@@ -196,12 +196,14 @@ function paintRatingRow(
       ? `<span class="rating-note-icon" title="${escapeHtml(note)}">${icons.pen(10)}</span>`
       : '';
 
+  const dotSize = expanded ? 18 : 12;
   el.innerHTML = `
     ${expanded ? `<div class="rating-label">${score > 0 ? `今日の充実度 <strong>${score}/10</strong>` : '今日の充実度'}</div>` : ''}
     <div class="${cls}">
       ${Array.from({ length: 10 }, (_, i) => {
         const n = i + 1;
-        return `<button class="rating-dot${n <= score ? ' filled' : ''}" data-score="${n}" aria-label="${n}点"></button>`;
+        const filled = n <= score;
+        return `<button class="rating-dot${filled ? ' filled' : ''}" data-score="${n}" data-level="${n}" aria-label="${n}点">${filled ? icons.circleSolid(dotSize) : icons.circle(dotSize)}</button>`;
       }).join('')}
       ${noteHtml}
     </div>
