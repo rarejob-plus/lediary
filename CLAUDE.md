@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Audience
+
+Personal service — the owner is the sole user. Scope, safety, and rollback decisions can reflect that (no other consumers to coordinate with).
+
 ## Project Overview
 
 Lediary — English diary app. Pick a mode (Morning / Lesson / Diary / Story), write in Japanese, then in English; the AI corrects your translation with progressive difficulty, suggests vocabulary, and offers 5W1H expansion questions to deepen the entry. Day One-inspired timeline + cover gradients computed from mode × time of day.
