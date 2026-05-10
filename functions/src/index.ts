@@ -11,6 +11,11 @@ const db = getFirestore();
 const auth = getAuth();
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
 const unsplashAccessKey = defineSecret("UNSPLASH_ACCESS_KEY");
+// Self-hosted Claude Code API (Pi behind Cloudflare Tunnel). Optional —
+// only consulted when LLM_BACKEND=claude_code. Kept as Secrets so they're
+// never required at deploy time when sticking with Gemini.
+const claudeCodeApiUrl = defineSecret("CLAUDE_CODE_API_URL");
+const claudeCodeApiKey = defineSecret("CLAUDE_CODE_API_KEY");
 
 // 使用モデル — 環境変数 GEMINI_MODEL で上書き可能
 // 切替例: firebase deploy 時に --set-env-vars=GEMINI_MODEL=gemini-2.5-flash-lite
@@ -40,7 +45,37 @@ async function verifyToken(req: { headers: { authorization?: string } }): Promis
   }
 }
 
-// ─── Gemini ───
+// ─── LLM dispatcher ───
+//
+// Default backend is Gemini. Set LLM_BACKEND=claude_code to route through
+// the self-hosted Claude Code API (Pi via Cloudflare Tunnel). On a
+// transient claude_code failure (network / 5xx / timeout) we fall back
+// to Gemini so the user-facing flow stays up.
+
+type LLMOptions = { jsonSchema?: unknown };
+
+class ClaudeCodePermanentError extends Error {}
+
+async function callLLM(
+  systemPrompt: string,
+  userMessage: string,
+  opts: LLMOptions = {},
+): Promise<string> {
+  const backend = process.env.LLM_BACKEND || "gemini";
+  if (backend !== "claude_code") {
+    return callGemini(systemPrompt, userMessage);
+  }
+  try {
+    return await callClaudeCode(systemPrompt, userMessage, opts);
+  } catch (err) {
+    if (err instanceof ClaudeCodePermanentError) throw err;
+    console.warn(
+      `[LLM] claude_code transient failure, falling back to Gemini:`,
+      err instanceof Error ? err.message : err,
+    );
+    return callGemini(systemPrompt, userMessage);
+  }
+}
 
 async function callGemini(systemPrompt: string, userMessage: string): Promise<string> {
   const key = geminiApiKey.value();
@@ -70,6 +105,69 @@ async function callGemini(systemPrompt: string, userMessage: string): Promise<st
     throw new Error("Empty response from Gemini");
   }
   return candidates[0].content.parts[0].text;
+}
+
+async function callClaudeCode(
+  systemPrompt: string,
+  userMessage: string,
+  opts: LLMOptions,
+): Promise<string> {
+  const url = claudeCodeApiUrl.value();
+  const apiKey = claudeCodeApiKey.value();
+  if (!url || !apiKey) {
+    throw new ClaudeCodePermanentError(
+      "CLAUDE_CODE_API_URL or CLAUDE_CODE_API_KEY secret is not set",
+    );
+  }
+
+  const body: Record<string, unknown> = { prompt: userMessage };
+  if (systemPrompt) body.system_prompt = systemPrompt;
+  if (opts.jsonSchema !== undefined) body.json_schema = opts.jsonSchema;
+  if (process.env.CLAUDE_CODE_MODEL) body.model = process.env.CLAUDE_CODE_MODEL;
+
+  const res = await fetch(`${url.replace(/\/$/, "")}/v1/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
+    body: JSON.stringify(body),
+  });
+
+  const text = await res.text();
+  if (res.status === 401 || res.status === 403) {
+    throw new ClaudeCodePermanentError(
+      `claude_code auth error ${res.status}: ${text}`,
+    );
+  }
+  if (res.status === 400 || res.status === 422) {
+    throw new ClaudeCodePermanentError(
+      `claude_code request rejected ${res.status}: ${text}`,
+    );
+  }
+  if (!res.ok) {
+    throw new Error(`claude_code API error ${res.status}: ${text}`);
+  }
+
+  let data: {
+    result?: string;
+    is_error?: boolean;
+    usage?: {
+      input_tokens?: number;
+      output_tokens?: number;
+      cache_read_input_tokens?: number;
+      cache_creation_input_tokens?: number;
+    };
+  };
+  try {
+    data = JSON.parse(text);
+  } catch (e) {
+    throw new Error(`claude_code response parse error: ${(e as Error).message}`);
+  }
+  if (data.is_error) {
+    throw new Error(`claude_code reported is_error=true: ${data.result}`);
+  }
+  if (!data.result) {
+    throw new Error("claude_code returned empty result");
+  }
+  return data.result;
 }
 
 const ALLOWED_VOICES = new Set([
@@ -396,7 +494,7 @@ Return ONLY the JSON object, no markdown fences or extra text.`;
     }
   }
 
-  const response = await callGemini(systemPrompt, userMessage);
+  const response = await callLLM(systemPrompt, userMessage);
   const analysis = parseJsonObject<DiaryAnalysis>(response);
 
   if (!userTranslation) analysis.feedback = [];
@@ -481,7 +579,7 @@ CRITICAL JSON FORMATTING:
   let hints: HintItem[] = [];
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const response = await callGemini(systemPrompt, contentJp);
+      const response = await callLLM(systemPrompt, contentJp);
       hints = parseJsonArray<HintItem[]>(response) || [];
       break;
     } catch (err) {
@@ -511,7 +609,10 @@ function generateShareId(): string {
 // ─── API handler ───
 
 export const api = onRequest(
-  { region: "asia-northeast1", secrets: [geminiApiKey, unsplashAccessKey] },
+  {
+    region: "asia-northeast1",
+    secrets: [geminiApiKey, unsplashAccessKey, claudeCodeApiUrl, claudeCodeApiKey],
+  },
   async (req, res) => {
     const path = req.path;
     const method = req.method;
@@ -808,7 +909,7 @@ ${CASUAL_TONE_RULE}
 Return ONLY the JSON object, no markdown fences or extra text.`;
 
       const userMessage = `Japanese diary:\n${contentJp || ""}\n\nUser's English translation:\n${userTranslation}`;
-      const response = await callGemini(systemPrompt, userMessage);
+      const response = await callLLM(systemPrompt, userMessage);
       const result = parseJsonObject<{ expansionQuestions: ExpansionQuestion[] }>(response);
       const questions = result.expansionQuestions || [];
 
@@ -853,7 +954,7 @@ ${CASUAL_TONE_RULE}
 Return ONLY JSON.`;
 
       const userMessage = `Preceding sentence (the answer will go right after this):\n${afterSentence || "(no preceding sentence)"}\n\nFull diary context: ${diaryContext || ""}\n\nQuestion that prompted the answer: ${question || ""}\n\nUser's answer: ${answer}`;
-      const response = await callGemini(systemPrompt, userMessage);
+      const response = await callLLM(systemPrompt, userMessage);
       const result = parseJsonObject<{ corrected: string; explanation: string }>(response);
       res.json(result);
       return;
@@ -893,7 +994,7 @@ ${CASUAL_TONE_RULE}
 
 - Return ONLY JSON.`;
 
-      const response = await callGemini(systemPrompt, `Diary entry:\n${text}`);
+      const response = await callLLM(systemPrompt, `Diary entry:\n${text}`);
       const result = parseJsonObject<{ suggestions: Array<{ between: string; suggestion: string; revised: string; reason: string }>; overall: string }>(response);
       res.json(result);
       return;
@@ -954,7 +1055,7 @@ Return ONLY the JSON object.`;
 
       const userMessage = `Student's diary (Japanese):\n${contentJp}\n\nStudent's English text (corrected):\n${correctedText}\n\nVocabulary learned:\n${vocabulary.map((v) => `${v.word}: ${v.definition}`).join("\n")}`;
 
-      const response = await callGemini(systemPrompt, userMessage);
+      const response = await callLLM(systemPrompt, userMessage);
       const sheet = parseJsonObject<LessonSheet>(response);
 
       // Generate share ID
