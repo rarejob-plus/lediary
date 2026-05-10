@@ -27,8 +27,10 @@ export function renderRatingRow(el: HTMLElement, opts: Options): void {
       ? `<span class="rating-note-icon" title="${escapeHtml(note)}">${icons.pen(10)}</span>`
       : '';
 
+  // 空のときは問いかけ、入ったらスコアだけ — ラベルで「点数を付けるところ」と
+  // 説明しすぎず、ドット列と組み合わせて意味が伝わるようにする
   el.innerHTML = `
-    ${showLabel ? `<div class="rating-label">${score > 0 ? `今日の充実度 <strong>${score}/10</strong>` : '今日の充実度'}</div>` : ''}
+    ${showLabel ? `<div class="rating-label">${score > 0 ? `<strong>${score}</strong> / 10` : 'How was today?'}</div>` : ''}
     <div class="${cls}">
       ${Array.from({ length: 10 }, (_, i) => {
         const n = i + 1;
