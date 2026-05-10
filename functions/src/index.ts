@@ -349,21 +349,27 @@ Rules:
 
   CRITICAL — what "original" and "corrected" mean:
   * "original" MUST be a verbatim English sentence taken from the user's English translation (the "User's English translation attempt" section in the user message). NEVER take "original" from the Japanese diary. NEVER use Japanese text (ひらがな・カタカナ・漢字 dominant) as "original".
+  * "original" MUST be a COMPLETE sentence — start at the sentence's beginning (capital letter / start of text or the character right after .!?), end at .!?). NEVER take a fragment that crosses sentence boundaries (e.g. "...sprint. Anyway, I don't have" — half of one sentence + start of the next is FORBIDDEN). If the change spans two sentences, pick the ONE sentence the change actually lives in, not a chunk straddling both.
   * "corrected" MUST be an improved English version of that exact "original" English sentence. It is NOT an English translation of the Japanese diary.
+  * "corrected" MUST contain the SAME number of sentences as "original" (almost always 1). NEVER add surrounding sentences from the user's translation that aren't in "original". If "original" is 1 sentence, "corrected" MUST be 1 sentence. NEVER expand a one-sentence "original" into a multi-sentence "corrected" by pulling in adjacent context.
+  * "corrected" length MUST be roughly comparable to "original" — within ~1.5x in characters. If your "corrected" is more than twice as long as "original", you are over-rewriting; trim it to just the actual change.
   * If the user's English translation is empty or doesn't contain English sentences, return an empty feedback array [].
   * If a sentence in the user's English translation is itself written in Japanese (i.e., the user left a placeholder), SKIP it — do NOT include it in feedback, do NOT translate it.
 
   For each valid feedback item:
   - "original": the FULL English sentence from the user's translation, exactly as they wrote it.
-  - "corrected": the FULL improved English sentence.
+  - "corrected": the FULL improved English sentence — same scope, same sentence count.
   - "explanation": Japanese text explaining WHY the corrected version is better — specifically describe the nuance difference between the two expressions (e.g., when each would be used, what impression each gives, what subtle meaning differs).
 
   All "corrected" sentences MUST follow the TONE RULES above.
   SELF-CHECK PER ITEM:
   (1) Is "original" actually a quote from the user's English translation? If not, DROP it.
-  (2) Is "original" written in English (not Japanese)? If it contains Japanese characters as the core of the sentence, DROP it.
-  (3) Is "corrected" MORE casual than "original"? If it became stiffer (e.g., "someone I know" → "acquaintance"), DROP it.
-  (4) Is "corrected" actually DIFFERENT from "original"? If the only differences are whitespace, punctuation, or capitalization (i.e., the words are identical), DROP it. NEVER produce a feedback item where the user's sentence is already correct — only return items where there is a real, meaningful change.
+  (2) Does "original" start at a sentence boundary AND end at .!? (a complete sentence, not a fragment that crosses into another sentence)? If not, DROP it.
+  (3) Does "corrected" have the SAME sentence count as "original" (count of .!?)? If "corrected" has more sentences (i.e. it pulled in adjacent context), DROP it.
+  (4) Is "corrected" within ~1.5x the character length of "original"? If "corrected" is much longer, you over-rewrote — DROP it or trim back.
+  (5) Is "original" written in English (not Japanese)? If it contains Japanese characters as the core of the sentence, DROP it.
+  (6) Is "corrected" MORE casual than "original"? If it became stiffer (e.g., "someone I know" → "acquaintance"), DROP it.
+  (7) Is "corrected" actually DIFFERENT from "original"? If the only differences are whitespace, punctuation, or capitalization (i.e., the words are identical), DROP it. NEVER produce a feedback item where the user's sentence is already correct — only return items where there is a real, meaningful change.
 - If a sentence is already correct and natural, omit it from feedback entirely. An empty feedback array [] is preferred over filler items. Quality > quantity. Do NOT pad the feedback array with no-op items just to "show work".
 - AT MOST ONE feedback item per sentence. Never produce two feedback items whose "original" overlaps (i.e., shares any substring of the user's text). If a sentence needs multiple changes, combine them into a single feedback item with one "corrected" that incorporates all the changes.
 - vocabulary: Extract 3-5 useful vocabulary items ONLY from expressions used in the "corrected" sentences above. These must be words/phrases that actually appear in your corrections. Do NOT include unrelated vocabulary.${skipMoodAndCover ? "" : `
@@ -403,6 +409,29 @@ Return ONLY the JSON object, no markdown fences or extra text.`;
   analysis.feedback = analysis.feedback.filter((fb) =>
     fb.original && fb.corrected && norm(fb.original) !== norm(fb.corrected),
   );
+
+  // Scope バックストップ: corrected が original より大幅に長い／文数が増えているアイテムは
+  // 「Gemini が周辺の文まで巻き込んで書き換えた」サインなので捨てる。
+  // 例: original "...sprints. Anyway, I don't have" → corrected が 2 文以上の長文
+  const sentenceCount = (s: string): number => (s.match(/[.!?]+/g) || []).length || 1;
+  analysis.feedback = analysis.feedback.filter((fb) => {
+    const oLen = fb.original.length;
+    const cLen = fb.corrected.length;
+    const oS = sentenceCount(fb.original);
+    const cS = sentenceCount(fb.corrected);
+    // 文字数比は 2.5x までを許容（短文に対する自然な言い回し変化を考慮）。
+    // 文数は original より多くて +1 まで（句読点の付け忘れ修正で 1→2 になるケースだけ救う）。
+    if (cLen > oLen * 2.5 + 20) return false;
+    if (cS > oS + 1) return false;
+    return true;
+  });
+
+  // 検証: original が userTranslation の中に substring として実在するか。
+  // 句読点／空白／大小文字を無視した正規化で比較する。
+  if (userTranslation) {
+    const haystack = norm(userTranslation);
+    analysis.feedback = analysis.feedback.filter((fb) => haystack.includes(norm(fb.original)));
+  }
 
   // Backstop: drop feedback items whose "original" overlaps an earlier item
   // so that final-text replace() never has to choose between competing edits.
