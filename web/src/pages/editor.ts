@@ -3,6 +3,8 @@ import { icons } from '../components/icons';
 import type { Mode, FeedbackItem } from '../data/mock';
 import { MODE_META } from '../data/mock';
 import { fetchEntry, invalidateEntriesCache, takeStashedEntry } from '../data/entries';
+import { fetchDays, type DayRating } from '../data/days';
+import { renderRatingRow } from '../components/day-rating-row';
 import { api } from '../api/client';
 import { getCurrentUser } from '../auth';
 import { navigate } from '../router';
@@ -80,10 +82,37 @@ export function renderEditor(root: HTMLElement): void {
       currentMode = next;
       meta.querySelectorAll('.mode-pill').forEach((x) => x.classList.remove('active'));
       b.classList.add('active');
+      refreshRating();
       loadForMode(currentMode);
     });
   });
   wrap.appendChild(meta);
+
+  // 充実度: diary モードのときだけ表示。modal で点数 + 一言を入力。
+  const ratingHost = document.createElement('div');
+  ratingHost.className = 'editor-rating';
+  wrap.appendChild(ratingHost);
+  let cachedDays: Map<string, DayRating> | null = null;
+  function refreshRating(): void {
+    if (currentMode !== 'diary') {
+      ratingHost.innerHTML = '';
+      ratingHost.style.display = 'none';
+      return;
+    }
+    ratingHost.style.display = '';
+    if (cachedDays) {
+      renderRatingRow(ratingHost, { date: dateStr, days: cachedDays, size: 'md', showLabel: true });
+    } else {
+      ratingHost.innerHTML = '';
+      fetchDays().then((days) => {
+        cachedDays = days;
+        if (currentMode === 'diary') {
+          renderRatingRow(ratingHost, { date: dateStr, days, size: 'md', showLabel: true });
+        }
+      }).catch(() => { /* noop */ });
+    }
+  }
+  refreshRating();
 
   // 3 カラム grid (PC): 左=JP+ヒント、中=EN+ボタン、右=添削結果。
   // 中幅 (≥720px <1100px) は 2 カラム (JP+ヒント | EN+添削)。モバイルは縦積み。

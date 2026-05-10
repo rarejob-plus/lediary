@@ -275,14 +275,18 @@
 }
 
 /* ─── Day rating (1-10 dots) ─── */
-.today-rating {
-  margin: -22px 0 32px;
-  padding: 16px 18px;
+/* editor の diary モード時に表示。timeline では使わない（per-day の小ドットのみ） */
+.editor-rating {
+  margin: 0 0 24px;
+  padding: 12px 14px;
   background: var(--surface-soft);
   border-radius: var(--radius);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
+}
+.editor-rating:empty {
+  display: none;
 }
 
 .rating-label {

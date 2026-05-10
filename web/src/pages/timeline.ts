@@ -1,7 +1,7 @@
 import { renderHeader, renderFab } from '../components/header';
 import { icons } from '../components/icons';
 import { coverFor } from '../components/cover';
-import { openDayRatingModal } from '../components/day-rating-modal';
+import { renderRatingRow } from '../components/day-rating-row';
 import { MODE_META, type DiaryEntry, type Mode } from '../data/mock';
 import { fetchEntries } from '../data/entries';
 import { fetchDays, type DayRating } from '../data/days';
@@ -107,12 +107,6 @@ function renderBody(wrap: HTMLElement, entries: DiaryEntry[], days: Map<string, 
   });
   wrap.appendChild(todayRow);
 
-  // 今日の充実度: today-row の下に独立した行を出す（その日記の有無に関わらずタップ可）
-  const todayRating = document.createElement('div');
-  todayRating.className = 'today-rating';
-  wrap.appendChild(todayRating);
-  paintRatingRow(todayRating, today, days, true);
-
   // Group entries by date (今日も含めて履歴に表示する — Today 行はステータス、履歴は内容)
   const groups = new Map<string, DiaryEntry[]>();
   for (const e of entries) {
@@ -138,7 +132,7 @@ function renderBody(wrap: HTMLElement, entries: DiaryEntry[], days: Map<string, 
     day.appendChild(header);
 
     const ratingEl = header.querySelector('.timeline-day-rating') as HTMLElement;
-    paintRatingRow(ratingEl, date, days, false);
+    renderRatingRow(ratingEl, { date, days, size: 'sm' });
 
     for (const entry of dayEntries) {
       const meta = MODE_META[entry.mode];
@@ -176,55 +170,6 @@ function renderBody(wrap: HTMLElement, entries: DiaryEntry[], days: Map<string, 
     empty.textContent = 'まだエントリがありません。今日のひとことから始めましょう。';
     wrap.appendChild(empty);
   }
-}
-
-// 充実度 1-10 のドット列。tap で modal を開き、保存後は再描画する。
-function paintRatingRow(
-  el: HTMLElement,
-  date: string,
-  days: Map<string, DayRating>,
-  expanded: boolean,
-): void {
-  const rating = days.get(date);
-  const score = rating?.score ?? 0;
-  const note = rating?.note ?? '';
-
-  const cls = expanded ? 'rating-dots rating-dots-lg' : 'rating-dots';
-  const noteHtml = expanded && note
-    ? `<span class="rating-note">${escapeHtml(note)}</span>`
-    : !expanded && note
-      ? `<span class="rating-note-icon" title="${escapeHtml(note)}">${icons.pen(10)}</span>`
-      : '';
-
-  const dotSize = expanded ? 18 : 12;
-  el.innerHTML = `
-    ${expanded ? `<div class="rating-label">${score > 0 ? `今日の充実度 <strong>${score}/10</strong>` : '今日の充実度'}</div>` : ''}
-    <div class="${cls}">
-      ${Array.from({ length: 10 }, (_, i) => {
-        const n = i + 1;
-        const filled = n <= score;
-        return `<button class="rating-dot${filled ? ' filled' : ''}" data-score="${n}" data-level="${n}" aria-label="${n}点">${filled ? icons.circleSolid(dotSize) : icons.circle(dotSize)}</button>`;
-      }).join('')}
-      ${noteHtml}
-    </div>
-  `;
-
-  el.querySelectorAll('.rating-dot').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const tapped = Number((btn as HTMLElement).dataset.score);
-      const initialScore = score > 0 ? score : tapped;
-      openDayRatingModal({
-        date,
-        score: tapped > 0 ? tapped : initialScore,
-        initialNote: note,
-        onSaved: (saved) => {
-          if (saved) days.set(date, saved); else days.delete(date);
-          paintRatingRow(el, date, days, expanded);
-        },
-      });
-    });
-  });
 }
 
 function iconFor(name: 'sun' | 'graduation' | 'moon' | 'bookOpen', size = 11): string {
