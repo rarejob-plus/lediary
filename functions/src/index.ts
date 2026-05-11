@@ -1,10 +1,18 @@
-import { onRequest } from "firebase-functions/v2/https";
+import { onRequest, Request as FbRequest } from "firebase-functions/v2/https";
+import type { Response as ExpressResponse } from "express";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
 import { getMessaging } from "firebase-admin/messaging";
 import { defineSecret } from "firebase-functions/params";
+import { AsyncLocalStorage } from "async_hooks";
+
+// リクエスト単位で「最後に使われた LLM backend」を保持する store。
+// callLLM が書き込み、レスポンス送信前に res.setHeader('X-LLM-Backend') で外に出す。
+// AsyncLocalStorage を使うことで Cloud Run の並列リクエストでも干渉しない。
+type LLMRequestStore = { backend?: string };
+const llmStore = new AsyncLocalStorage<LLMRequestStore>();
 
 initializeApp();
 const db = getFirestore();
@@ -94,6 +102,12 @@ function markClaudeCodeUnhealthy(): void {
   claudeHealthCheckedAt = Date.now();
 }
 
+function markBackend(used: string): void {
+  const store = llmStore.getStore();
+  if (store) store.backend = used;
+  console.log(`[LLM] used=${used}`);
+}
+
 async function callLLM(
   systemPrompt: string,
   userMessage: string,
@@ -101,14 +115,18 @@ async function callLLM(
 ): Promise<string> {
   const backend = process.env.LLM_BACKEND || "gemini";
   if (backend !== "claude_code") {
+    markBackend("gemini");
     return callGemini(systemPrompt, userMessage);
   }
   if (!(await claudeCodeHealthy())) {
     console.warn(`[LLM] claude_code unhealthy, using Gemini directly`);
+    markBackend("gemini_fallback");
     return callGemini(systemPrompt, userMessage);
   }
   try {
-    return await callClaudeCode(systemPrompt, userMessage, opts);
+    const result = await callClaudeCode(systemPrompt, userMessage, opts);
+    markBackend("claude_code");
+    return result;
   } catch (err) {
     if (err instanceof ClaudeCodePermanentError) throw err;
     markClaudeCodeUnhealthy();
@@ -116,6 +134,7 @@ async function callLLM(
       `[LLM] claude_code transient failure, falling back to Gemini:`,
       err instanceof Error ? err.message : err,
     );
+    markBackend("gemini_fallback");
     return callGemini(systemPrompt, userMessage);
   }
 }
@@ -688,6 +707,30 @@ export const api = onRequest(
     secrets: [geminiApiKey, unsplashAccessKey, claudeCodeApiUrl, claudeCodeApiKey],
   },
   async (req, res) => {
+    // リクエスト単位の LLM backend tracking を有効化。
+    // res.json / res.send の直前で X-LLM-Backend ヘッダを自動付与する。
+    const store: LLMRequestStore = {};
+    await llmStore.run(store, async () => {
+      // CORS / Access-Control-Expose-Headers — フロントからカスタムヘッダを読めるように
+      res.setHeader("Access-Control-Expose-Headers", "X-LLM-Backend");
+
+      const origJson = res.json.bind(res);
+      res.json = (body: unknown) => {
+        if (store.backend && !res.headersSent) res.setHeader("X-LLM-Backend", store.backend);
+        return origJson(body);
+      };
+      const origSend = res.send.bind(res);
+      res.send = (body: unknown) => {
+        if (store.backend && !res.headersSent) res.setHeader("X-LLM-Backend", store.backend);
+        return origSend(body);
+      };
+
+      await handleRequest(req, res);
+    });
+  }
+);
+
+async function handleRequest(req: FbRequest, res: ExpressResponse): Promise<void> {
     const path = req.path;
     const method = req.method;
 
@@ -1212,8 +1255,7 @@ Return ONLY the JSON object.`;
     }
 
     res.status(404).json({ error: "Not found" });
-  }
-);
+}
 
 // ─── Push notification scheduler ───
 // Runs daily at 7:00 AM JST (22:00 UTC previous day)

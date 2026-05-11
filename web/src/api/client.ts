@@ -14,6 +14,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     },
   });
 
+  // どの LLM backend で処理されたかを DevTools で見える形でログ。
+  // backend は claude_code / gemini / gemini_fallback のいずれか。
+  const backend = res.headers.get('X-LLM-Backend');
+  if (backend) console.log(`[LLM] ${backend} · ${(options.method || 'GET')} ${path}`);
+
   if (!res.ok) {
     throw new Error(`API error ${res.status}: ${await res.text()}`);
   }
