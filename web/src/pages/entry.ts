@@ -5,7 +5,7 @@ import { MODE_META, type DiaryEntry } from '../data/mock';
 import { fetchEntry, invalidateEntriesCache, stashForEditor } from '../data/entries';
 import { renderSekkiPill, dayOfYear, daysInYear } from '../data/dateInfo';
 import { api } from '../api/client';
-import { getCurrentUser, getIdToken } from '../auth';
+import { getCurrentUser } from '../auth';
 import { navigate } from '../router';
 import { enableTextSelectionBookmark, bookmarkPhrase } from '../components/text-selection-bookmark';
 
@@ -45,7 +45,7 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
   // Hero
   const hero = document.createElement('div');
   hero.className = 'entry-hero';
-  hero.style.background = entry.cover ?? coverFor(entry.mode, entry.time);
+  hero.style.background = entry.cover ?? coverFor(entry.mode, entry.time, entry.coverImageUrl);
   hero.innerHTML = `
     <div class="entry-hero-fade"></div>
     <div class="entry-hero-meta">
@@ -54,6 +54,12 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
       <span class="entry-hero-pill">${dayOfYear(entry.date)} / ${daysInYear(entry.date)}</span>
       ${entry.mood ? `<span class="entry-hero-pill">${escapeHtml(entry.mood)}</span>` : ''}
     </div>
+    ${entry.coverImageUrl && entry.coverPhotographer ? `
+      <div class="entry-hero-credit">
+        Photo by <a href="${escapeHtml(entry.coverPhotographerUrl || '#')}?utm_source=lediary&utm_medium=referral" target="_blank" rel="noopener">${escapeHtml(entry.coverPhotographer)}</a>
+        on <a href="https://unsplash.com/?utm_source=lediary&utm_medium=referral" target="_blank" rel="noopener">Unsplash</a>
+      </div>
+    ` : ''}
   `;
   root.appendChild(hero);
 
@@ -196,7 +202,6 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
   enableTextSelectionBookmark(body);
 
   appendSection(content, '覚えたいフレーズ', renderVocabSection(entry.vocabulary), true);
-  appendSection(content, 'シャドーイング', renderShadowingSection(entry.userTranslation), false);
   appendSection(content, '日記を膨らませる', renderExpansionSection(entry, body), false);
 
   root.appendChild(content);
@@ -250,166 +255,12 @@ function renderVocabSection(vocab: { word: string; definition: string; example: 
   return wrap;
 }
 
-function renderShadowingSection(text: string): HTMLElement {
-  const wrap = document.createElement('div');
-  wrap.innerHTML = `
-    <div class="shadow-card">
-      <div class="ra-generate-wrap">
-        <button class="btn btn-primary ra-generate-btn">音声を生成</button>
-      </div>
-      <div class="ra-controls" style="display:none;">
-        <div class="ra-controls-row">
-          <button class="btn ra-play-btn">再生</button>
-          <button class="btn ra-record-btn">録音</button>
-          <div class="ra-speed-control">
-            <span class="ra-speed-value">1.0x</span>
-            <input type="range" class="ra-speed-range" min="0.5" max="1.5" step="0.1" value="1.0" />
-          </div>
-        </div>
-        <div class="ra-recordings" style="display:none;">
-          <div class="ra-recordings-row">
-            <span class="ra-recordings-label">お手本</span>
-            <button class="btn btn-sm ra-play-model">再生</button>
-          </div>
-          <div class="ra-recordings-row">
-            <span class="ra-recordings-label">あなた</span>
-            <audio class="ra-recording-audio" controls></audio>
-          </div>
-        </div>
-      </div>
-      <p class="shadow-paragraph" style="display:none;">${escapeHtml(text)}</p>
-    </div>
-  `;
-
-  if (!getCurrentUser()) {
-    // 未ログイン: 旧モック挙動
-    const gen = wrap.querySelector('.ra-generate-btn') as HTMLButtonElement;
-    gen.addEventListener('click', () => {
-      (wrap.querySelector('.shadow-paragraph') as HTMLElement).style.display = '';
-      gen.textContent = '再生（mock）';
-    });
-    return wrap;
-  }
-
-  let audioCtx: AudioContext | null = null;
-  let audioBuffer: AudioBuffer | null = null;
-  let currentSource: AudioBufferSourceNode | null = null;
-  let isPlaying = false;
-  let playbackRate = 1.0;
-  let mediaRecorder: MediaRecorder | null = null;
-  let chunks: Blob[] = [];
-
-  const generateBtn = wrap.querySelector('.ra-generate-btn') as HTMLButtonElement;
-  const controls = wrap.querySelector('.ra-controls') as HTMLElement;
-  const generateWrap = wrap.querySelector('.ra-generate-wrap') as HTMLElement;
-  const paragraph = wrap.querySelector('.shadow-paragraph') as HTMLElement;
-  const playBtn = wrap.querySelector('.ra-play-btn') as HTMLButtonElement;
-  const playModelBtn = wrap.querySelector('.ra-play-model') as HTMLButtonElement;
-  const recordBtn = wrap.querySelector('.ra-record-btn') as HTMLButtonElement;
-  const recordingsArea = wrap.querySelector('.ra-recordings') as HTMLElement;
-  const recordingAudio = wrap.querySelector('.ra-recording-audio') as HTMLAudioElement;
-  const speedRange = wrap.querySelector('.ra-speed-range') as HTMLInputElement;
-  const speedValue = wrap.querySelector('.ra-speed-value') as HTMLElement;
-
-  function stopPlayback(): void {
-    if (currentSource) {
-      try { currentSource.stop(); } catch { /* */ }
-    }
-    currentSource = null;
-    isPlaying = false;
-    playBtn.textContent = '再生';
-  }
-
-  function startPlayback(): void {
-    if (!audioCtx || !audioBuffer) return;
-    stopPlayback();
-    const source = audioCtx.createBufferSource();
-    source.buffer = audioBuffer;
-    source.playbackRate.value = playbackRate;
-    source.connect(audioCtx.destination);
-    source.onended = () => {
-      isPlaying = false;
-      currentSource = null;
-      playBtn.textContent = '再生';
-    };
-    source.start();
-    currentSource = source;
-    isPlaying = true;
-    playBtn.textContent = '停止';
-  }
-
-  speedRange.addEventListener('input', () => {
-    playbackRate = parseFloat(speedRange.value);
-    speedValue.textContent = `${playbackRate.toFixed(1)}x`;
-  });
-
-  generateBtn.addEventListener('click', async () => {
-    generateBtn.disabled = true;
-    generateBtn.textContent = '生成中…';
-    try {
-      audioCtx = audioCtx || new AudioContext();
-      const token = await getIdToken();
-      const voice = localStorage.getItem('lediary_v2_tts_voice') || 'Achird';
-      const res = await fetch(`/api/diary/tts?text=${encodeURIComponent(text)}&voice=${voice}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error(`TTS ${res.status}`);
-      audioBuffer = await audioCtx.decodeAudioData(await res.arrayBuffer());
-      generateWrap.style.display = 'none';
-      controls.style.display = '';
-      paragraph.style.display = '';
-    } catch (err) {
-      console.error(err);
-      alert('音声の生成に失敗しました');
-      generateBtn.disabled = false;
-      generateBtn.textContent = '音声を生成';
-    }
-  });
-
-  playBtn.addEventListener('click', () => {
-    if (isPlaying) stopPlayback(); else startPlayback();
-  });
-
-  playModelBtn.addEventListener('click', () => startPlayback());
-
-  recordBtn.addEventListener('click', async () => {
-    if (mediaRecorder && mediaRecorder.state === 'recording') {
-      mediaRecorder.stop();
-      stopPlayback();
-      recordBtn.textContent = '録音';
-      recordBtn.classList.remove('ra-recording');
-      return;
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      chunks = [];
-      mediaRecorder = new MediaRecorder(stream);
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data);
-      };
-      mediaRecorder.onstop = () => {
-        stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(chunks, { type: 'audio/webm' });
-        recordingAudio.src = URL.createObjectURL(blob);
-        recordingsArea.style.display = '';
-      };
-      mediaRecorder.start();
-      recordBtn.textContent = '停止';
-      recordBtn.classList.add('ra-recording');
-      startPlayback();
-    } catch (err) {
-      console.error(err);
-      alert('マイクへのアクセスが必要です');
-    }
-  });
-
-  return wrap;
-}
 
 interface ExpansionQ {
   question: string;
   hintJa: string;
   hintPhrases: string[];
+  afterSentence?: string;
   reflected?: boolean;
   answer?: string;
 }
@@ -581,6 +432,7 @@ function renderExpansionSection(entry: DiaryEntry, bodyEl: HTMLElement): HTMLEle
           question: q.question,
           answer,
           diaryContext: entry.userTranslation,
+          afterSentence: q.afterSentence,
         });
         const corrected = res.corrected || answer;
         const explanation = res.explanation || '';

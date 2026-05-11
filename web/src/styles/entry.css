@@ -36,6 +36,26 @@
   font-weight: 500;
 }
 
+.entry-hero-credit {
+  position: absolute;
+  bottom: 6px;
+  right: 12px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.7);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  letter-spacing: 0.02em;
+}
+
+.entry-hero-credit a {
+  color: rgba(255, 255, 255, 0.92);
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 255, 255, 0.4);
+}
+
+.entry-hero-credit a:hover {
+  text-decoration-color: rgba(255, 255, 255, 0.85);
+}
+
 .entry-content {
   padding: 28px 24px 0;
 }
@@ -198,26 +218,6 @@
   margin-top: 2px;
 }
 
-/* Shadowing */
-.shadow-card {
-  background: var(--surface-warm);
-  border-radius: var(--radius);
-  padding: 18px;
-}
-
-.shadow-paragraph {
-  font-family: var(--serif);
-  font-size: 16px;
-  line-height: 1.85;
-  color: var(--text);
-  margin-top: 16px;
-  display: none;
-}
-
-.shadow-paragraph.shown {
-  display: block;
-}
-
 /* Expansion */
 .expansion-q {
   background: var(--surface-warm);
@@ -323,64 +323,6 @@
   color: var(--text-secondary);
   font-style: italic;
   margin-top: 4px;
-}
-
-/* Shadowing controls */
-.ra-controls-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.ra-speed-control {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.ra-speed-range {
-  width: 100px;
-  accent-color: var(--text);
-}
-
-.ra-recording {
-  background: rgba(192, 57, 43, 0.1);
-  border-color: var(--danger);
-  color: var(--danger);
-}
-
-.ra-recordings {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.ra-recordings-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.ra-recordings-label {
-  font-size: 11px;
-  color: var(--text-muted);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  width: 60px;
-  flex-shrink: 0;
-}
-
-.ra-recording-audio {
-  flex: 1;
-  height: 32px;
 }
 
 /* Expansion answer corrected + reflected */
