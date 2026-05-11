@@ -1042,6 +1042,9 @@ Return ONLY JSON.`;
         return;
       }
 
+      // analyzeDiary と同様にサーバ側で文分割→番号付きで渡す
+      const sentences = splitIntoSentences(text);
+
       const systemPrompt = `You are an English writing coach helping a Japanese learner improve the flow and cohesion of their diary entry.
 Analyze how the sentences connect to each other. Focus ONLY on transitions and connections between sentences — not grammar or vocabulary.
 
@@ -1049,9 +1052,9 @@ Return a JSON object:
 {
   "suggestions": [
     {
-      "between": "Quote the end of sentence A and start of sentence B where the connection is weak",
+      "sentenceIndex": "1-based integer pointing to ONE sentence from the numbered list — the sentence WHERE the change actually happens (usually the one that needs a transition word added/replaced/removed at its start)",
       "suggestion": "日本語で『何をどうするか』を簡潔に。挿入なら『〜の前に Actually を入れる』、置換なら『Anyway を Since に置き換える』、削除なら『Anyway を取り除く』のように、英単語/句以外は日本語で書く",
-      "revised": "Show the two sentences naturally connected (English)",
+      "revised": "the rewritten version of THAT ONE sentence (sentenceIndex) — same scope, do NOT include adjacent sentences",
       "reason": "日本語で『なぜそうすべきか』を簡潔に"
     }
   ],
@@ -1060,17 +1063,47 @@ Return a JSON object:
 
 Rules:
 - Return 0-3 suggestions. If the text flows well, return empty suggestions array with a positive overall comment.
-- Keep suggestions practical and specific.
-- "between" should quote enough text to identify the location (5-10 words from each sentence).
+- sentenceIndex MUST be a valid 1-based index from the numbered list below. NEVER invent one out of range.
+- "revised" rewrites THAT ONE numbered sentence ONLY. NEVER pull in content from neighboring sentences. Length should stay within ~1.5x of the source sentence.
 - "suggestion" must be a Japanese description of the change. English words inside (Anyway, Since, etc.) should remain in English, but the verb must be Japanese (置き換える/入れる/取り除く).
 
 ${CASUAL_TONE_RULE}
 
 - Return ONLY JSON.`;
 
-      const response = await callLLM(systemPrompt, `Diary entry:\n${text}`);
-      const result = parseJsonObject<{ suggestions: Array<{ between: string; suggestion: string; revised: string; reason: string }>; overall: string }>(response);
-      res.json(result);
+      const userMessage = sentences.length > 0
+        ? `User's English sentences (numbered — refer to these by sentenceIndex):\n${sentences.map((s, i) => `[${i + 1}] ${s}`).join("\n")}`
+        : `Diary entry:\n${text}`;
+
+      const response = await callLLM(systemPrompt, userMessage);
+      const raw = parseJsonObject<{ suggestions?: Array<{ sentenceIndex?: number; between?: string; suggestion: string; revised: string; reason: string }>; overall?: string }>(response);
+
+      // sentenceIndex → between を解決。範囲外 / 欠落は drop。
+      // 後方互換: between を直接返してきた場合も拾う。
+      const sentenceCount = (s: string): number => (s.match(/[.!?]+/g) || []).length || 1;
+      const suggestions = (raw.suggestions || [])
+        .map((s) => {
+          let between = "";
+          if (typeof s.sentenceIndex === "number" && Number.isInteger(s.sentenceIndex) &&
+              s.sentenceIndex >= 1 && s.sentenceIndex <= sentences.length) {
+            between = sentences[s.sentenceIndex - 1]!;
+          } else if (typeof s.between === "string" && s.between.length > 0) {
+            between = s.between;
+          } else {
+            return null;
+          }
+          return { between, suggestion: s.suggestion, revised: s.revised, reason: s.reason };
+        })
+        .filter((s): s is { between: string; suggestion: string; revised: string; reason: string } => s !== null)
+        // スコープバックストップ: revised が between より大幅に長い／文数が増えていたら drop
+        .filter((s) => {
+          if (!s.revised || !s.between) return false;
+          if (s.revised.length > s.between.length * 2.5 + 20) return false;
+          if (sentenceCount(s.revised) > sentenceCount(s.between) + 1) return false;
+          return true;
+        });
+
+      res.json({ suggestions, overall: raw.overall || "" });
       return;
     }
 
