@@ -118,11 +118,6 @@
   border-left: 3px solid var(--border-strong);
 }
 
-.entry-body-wrap {
-  position: relative;
-  margin-bottom: 48px;
-}
-
 .entry-body {
   font-family: var(--serif);
   font-size: 18px;
@@ -130,45 +125,88 @@
   color: var(--text);
   white-space: pre-wrap;
   letter-spacing: 0.005em;
-  /* 再生ボタンが本文末尾に重ならないよう右側に余白 */
-  padding-right: 36px;
+  margin-bottom: 14px;
 }
 
-/* 英文ブロック右上のさりげない音声再生ボタン */
-.entry-tts-btn {
-  position: absolute;
-  top: 2px;
-  right: 0;
-  width: 28px;
-  height: 28px;
+/* 英文下の TTS プレイヤー — 再生 + 速度プリセット */
+.entry-tts {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px 6px 6px;
+  background: var(--surface-soft);
+  border-radius: 100px;
+  margin-bottom: 48px;
+}
+
+.entry-tts-play {
+  width: 32px;
+  height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: transparent;
+  background: var(--text);
+  color: var(--surface);
   border: 0;
   border-radius: 50%;
   padding: 0;
   cursor: pointer;
-  color: var(--text-faint);
-  opacity: 0.55;
-  transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;
+  transition: background 0.15s ease, transform 0.1s ease;
 }
-.entry-tts-btn:hover:not(:disabled) {
-  opacity: 1;
-  color: var(--text);
-  background: var(--surface-soft);
+.entry-tts-play:hover:not(:disabled) {
+  background: var(--text-secondary);
 }
-.entry-tts-btn:disabled {
+.entry-tts-play:active:not(:disabled) {
+  transform: scale(0.94);
+}
+.entry-tts-play:disabled {
   cursor: default;
-  opacity: 0.3;
+  opacity: 0.4;
+}
+.entry-tts-play svg {
+  /* play の三角は中心が右寄りなので 1px ナッジ */
+  margin-left: 1px;
+}
+.entry-tts-play svg rect {
+  /* pause のとき */
+  margin-left: 0;
+}
+
+.entry-tts-speeds {
+  display: inline-flex;
+  gap: 2px;
+}
+.entry-tts-speed {
+  background: transparent;
+  border: 0;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  border-radius: 100px;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+  font-variant-numeric: tabular-nums;
+}
+.entry-tts-speed:hover:not(:disabled):not(.active) {
+  color: var(--text);
+  background: var(--surface);
+}
+.entry-tts-speed.active {
+  color: var(--text);
+  background: var(--surface);
+  font-weight: 600;
+}
+.entry-tts-speed:disabled {
+  cursor: default;
+  opacity: 0.4;
 }
 
 .entry-tts-spinner {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  border: 1.5px solid var(--border-strong);
-  border-top-color: var(--text-muted);
+  border: 1.5px solid rgba(255, 255, 255, 0.3);
+  border-top-color: var(--surface);
   animation: entry-tts-spin 0.8s linear infinite;
 }
 @keyframes entry-tts-spin {

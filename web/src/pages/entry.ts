@@ -195,17 +195,14 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
   jp.textContent = entry.contentJp;
   content.appendChild(jp);
 
-  // 本文 + 右上に小さい音声再生ボタン
-  const bodyWrap = document.createElement('div');
-  bodyWrap.className = 'entry-body-wrap';
+  // 本文 + 下にコンパクトな TTS プレイヤー（再生 + 速度プリセット）
   const body = document.createElement('div');
   body.className = 'entry-body';
   body.textContent = entry.userTranslation;
-  bodyWrap.appendChild(body);
+  content.appendChild(body);
   if (entry.userTranslation) {
-    bodyWrap.appendChild(renderTTSButton(entry.userTranslation));
+    content.appendChild(renderTTSPlayer(entry.userTranslation));
   }
-  content.appendChild(bodyWrap);
   enableTextSelectionBookmark(body);
 
   appendSection(content, '覚えたいフレーズ', renderVocabSection(entry.vocabulary), true);
@@ -262,19 +259,32 @@ function renderVocabSection(vocab: { word: string; definition: string; example: 
   return wrap;
 }
 
-// 英文の横にさりげなく置く再生ボタン。
-// クリックで TTS を生成→再生、再クリックで一時停止。停止＝最初に巻き戻し。
-function renderTTSButton(text: string): HTMLButtonElement {
-  const btn = document.createElement('button');
-  btn.className = 'entry-tts-btn';
-  btn.setAttribute('aria-label', '音声を再生');
-  btn.innerHTML = icons.play(14);
+// 英文下に置くコンパクトな音声プレイヤー。
+// 再生ボタン + 速度プリセット (0.75/1.0/1.25/1.5x)。
+// 初回クリックで TTS 生成 → 再生、以降は同じバッファを使い回し。
+const TTS_SPEEDS = [0.75, 1.0, 1.25, 1.5] as const;
+const TTS_SPEED_KEY = 'lediary_v2_tts_speed';
 
-  // 未ログインのときは押せるが TTS API を叩けないので無効化
+function renderTTSPlayer(text: string): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'entry-tts';
+
+  const savedSpeed = parseFloat(localStorage.getItem(TTS_SPEED_KEY) || '1.0');
+  let playbackRate = TTS_SPEEDS.includes(savedSpeed as 0.75 | 1 | 1.25 | 1.5) ? savedSpeed : 1.0;
+
+  wrap.innerHTML = `
+    <button class="entry-tts-play" aria-label="音声を再生">${icons.play(14)}</button>
+    <div class="entry-tts-speeds" role="group" aria-label="再生速度">
+      ${TTS_SPEEDS.map((s) => `<button class="entry-tts-speed${s === playbackRate ? ' active' : ''}" data-speed="${s}">${s.toFixed(2).replace(/0$/, '')}x</button>`).join('')}
+    </div>
+  `;
+
   if (!getCurrentUser()) {
-    btn.disabled = true;
-    btn.title = 'ログイン後に利用できます';
-    return btn;
+    const playBtn = wrap.querySelector('.entry-tts-play') as HTMLButtonElement;
+    playBtn.disabled = true;
+    playBtn.title = 'ログイン後に利用できます';
+    wrap.querySelectorAll<HTMLButtonElement>('.entry-tts-speed').forEach((b) => (b.disabled = true));
+    return wrap;
   }
 
   let audioCtx: AudioContext | null = null;
@@ -283,11 +293,13 @@ function renderTTSButton(text: string): HTMLButtonElement {
   let isPlaying = false;
   let loading = false;
 
+  const playBtn = wrap.querySelector('.entry-tts-play') as HTMLButtonElement;
+
   function setIcon(name: 'play' | 'pause' | 'loading'): void {
     if (name === 'loading') {
-      btn.innerHTML = `<span class="entry-tts-spinner"></span>`;
+      playBtn.innerHTML = `<span class="entry-tts-spinner"></span>`;
     } else {
-      btn.innerHTML = name === 'play' ? icons.play(14) : icons.pause(14);
+      playBtn.innerHTML = name === 'play' ? icons.play(14) : icons.pause(14);
     }
   }
 
@@ -305,6 +317,7 @@ function renderTTSButton(text: string): HTMLButtonElement {
     stop();
     const source = audioCtx.createBufferSource();
     source.buffer = audioBuffer;
+    source.playbackRate.value = playbackRate;
     source.connect(audioCtx.destination);
     source.onended = () => {
       isPlaying = false;
@@ -317,13 +330,13 @@ function renderTTSButton(text: string): HTMLButtonElement {
     setIcon('pause');
   }
 
-  btn.addEventListener('click', async () => {
+  playBtn.addEventListener('click', async () => {
     if (loading) return;
     if (isPlaying) { stop(); return; }
     if (audioBuffer) { play(); return; }
     loading = true;
     setIcon('loading');
-    btn.disabled = true;
+    playBtn.disabled = true;
     try {
       audioCtx = audioCtx || new AudioContext();
       const token = await getIdToken();
@@ -340,11 +353,23 @@ function renderTTSButton(text: string): HTMLButtonElement {
       alert('音声の生成に失敗しました');
     } finally {
       loading = false;
-      btn.disabled = false;
+      playBtn.disabled = false;
     }
   });
 
-  return btn;
+  wrap.querySelectorAll<HTMLButtonElement>('.entry-tts-speed').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const next = parseFloat(btn.dataset.speed || '1');
+      if (next === playbackRate) return;
+      playbackRate = next;
+      localStorage.setItem(TTS_SPEED_KEY, String(next));
+      wrap.querySelectorAll('.entry-tts-speed').forEach((b) => b.classList.toggle('active', b === btn));
+      // 再生中なら即座に新しい速度で再生し直す
+      if (isPlaying) play();
+    });
+  });
+
+  return wrap;
 }
 
 
