@@ -64,42 +64,29 @@ type LLMOptions = { jsonSchema?: unknown };
 
 class ClaudeCodePermanentError extends Error {}
 
-// claude_code circuit breaker — cached health probe so Mac-offline cases
-// trip over to Gemini in <3s instead of waiting for an LLM request to
-// timeout.
-const CLAUDE_HEALTH_TTL_MS = 30_000;
-let claudeHealthCached: boolean | null = null;
-let claudeHealthCheckedAt = 0;
+// claude_code の health は Cloudflare Tunnel 経由で warm ~100ms 程度なので、
+// キャッシュせず毎回 fresh に叩く。これで Pi がダウンしたケースでも
+// 確実に 3 秒以内にフォールバック判定が下りる（旧設計は 30s キャッシュで
+// Pi 落ち直後の 30s 以内のリクエストが詰まる可能性があった）。
+const CLAUDE_HEALTH_TIMEOUT_MS = 3_000;
+// /v1/messages 自体のタイムアウト。Pi が応答中に hang した稀ケースの保険。
+// 通常 5-15s で返るので 60s で十分すぎる余裕。
+const CLAUDE_CALL_TIMEOUT_MS = 60_000;
 
 async function claudeCodeHealthy(): Promise<boolean> {
-  if (
-    claudeHealthCached !== null &&
-    Date.now() - claudeHealthCheckedAt < CLAUDE_HEALTH_TTL_MS
-  ) {
-    return claudeHealthCached;
-  }
   const url = claudeCodeApiUrl.value();
   if (!url) return false;
-  let ok = false;
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 3_000);
+    const timer = setTimeout(() => controller.abort(), CLAUDE_HEALTH_TIMEOUT_MS);
     const res = await fetch(`${url.replace(/\/$/, "")}/health`, {
       signal: controller.signal,
     });
     clearTimeout(timer);
-    ok = res.ok;
+    return res.ok;
   } catch {
-    ok = false;
+    return false;
   }
-  claudeHealthCached = ok;
-  claudeHealthCheckedAt = Date.now();
-  return ok;
-}
-
-function markClaudeCodeUnhealthy(): void {
-  claudeHealthCached = false;
-  claudeHealthCheckedAt = Date.now();
 }
 
 function markBackend(used: string): void {
@@ -129,7 +116,6 @@ async function callLLM(
     return result;
   } catch (err) {
     if (err instanceof ClaudeCodePermanentError) throw err;
-    markClaudeCodeUnhealthy();
     console.warn(
       `[LLM] claude_code transient failure, falling back to Gemini:`,
       err instanceof Error ? err.message : err,
@@ -187,11 +173,21 @@ async function callClaudeCode(
   if (opts.jsonSchema !== undefined) body.json_schema = opts.jsonSchema;
   if (process.env.CLAUDE_CODE_MODEL) body.model = process.env.CLAUDE_CODE_MODEL;
 
-  const res = await fetch(`${url.replace(/\/$/, "")}/v1/messages`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
-    body: JSON.stringify(body),
-  });
+  // 60s timeout — health check は通っているはずなので通常は十分余裕。
+  // hang 防止の保険として AbortController を入れる。
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), CLAUDE_CALL_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(`${url.replace(/\/$/, "")}/v1/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
 
   const text = await res.text();
   if (res.status === 401 || res.status === 403) {
