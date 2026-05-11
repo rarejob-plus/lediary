@@ -22,6 +22,13 @@ export const icons = {
   bookOpen: (s = 18) => wrap('<path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/>', s),
   flame: (s = 18) => wrap('<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>', s),
   check: (s = 18) => wrap('<path d="M20 6 9 17l-5-5"/>', s),
+  // Play / pause — fill=currentColor で塗りつぶしたい（outline だと細くて視認性が悪い）
+  play: (s = 18) =>
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 24 24" fill="currentColor">` +
+    `<polygon points="7 4 20 12 7 20"/></svg>`,
+  pause: (s = 18) =>
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 24 24" fill="currentColor">` +
+    `<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>`,
   // Lucide circle (outline). 空のスコアドット用。
   circle: (s = 18) => wrap('<circle cx="12" cy="12" r="10"/>', s),
   // 中身を currentColor で塗りつぶした円。filled スコアドット用。

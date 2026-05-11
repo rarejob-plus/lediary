@@ -5,7 +5,7 @@ import { MODE_META, type DiaryEntry } from '../data/mock';
 import { fetchEntry, invalidateEntriesCache, stashForEditor } from '../data/entries';
 import { renderSekkiPill, dayOfYear, daysInYear } from '../data/dateInfo';
 import { api } from '../api/client';
-import { getCurrentUser } from '../auth';
+import { getCurrentUser, getIdToken } from '../auth';
 import { navigate } from '../router';
 import { enableTextSelectionBookmark, bookmarkPhrase } from '../components/text-selection-bookmark';
 
@@ -195,10 +195,17 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
   jp.textContent = entry.contentJp;
   content.appendChild(jp);
 
+  // 本文 + 右上に小さい音声再生ボタン
+  const bodyWrap = document.createElement('div');
+  bodyWrap.className = 'entry-body-wrap';
   const body = document.createElement('div');
   body.className = 'entry-body';
   body.textContent = entry.userTranslation;
-  content.appendChild(body);
+  bodyWrap.appendChild(body);
+  if (entry.userTranslation) {
+    bodyWrap.appendChild(renderTTSButton(entry.userTranslation));
+  }
+  content.appendChild(bodyWrap);
   enableTextSelectionBookmark(body);
 
   appendSection(content, '覚えたいフレーズ', renderVocabSection(entry.vocabulary), true);
@@ -253,6 +260,91 @@ function renderVocabSection(vocab: { word: string; definition: string; example: 
   });
   enableTextSelectionBookmark(wrap);
   return wrap;
+}
+
+// 英文の横にさりげなく置く再生ボタン。
+// クリックで TTS を生成→再生、再クリックで一時停止。停止＝最初に巻き戻し。
+function renderTTSButton(text: string): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.className = 'entry-tts-btn';
+  btn.setAttribute('aria-label', '音声を再生');
+  btn.innerHTML = icons.play(14);
+
+  // 未ログインのときは押せるが TTS API を叩けないので無効化
+  if (!getCurrentUser()) {
+    btn.disabled = true;
+    btn.title = 'ログイン後に利用できます';
+    return btn;
+  }
+
+  let audioCtx: AudioContext | null = null;
+  let audioBuffer: AudioBuffer | null = null;
+  let currentSource: AudioBufferSourceNode | null = null;
+  let isPlaying = false;
+  let loading = false;
+
+  function setIcon(name: 'play' | 'pause' | 'loading'): void {
+    if (name === 'loading') {
+      btn.innerHTML = `<span class="entry-tts-spinner"></span>`;
+    } else {
+      btn.innerHTML = name === 'play' ? icons.play(14) : icons.pause(14);
+    }
+  }
+
+  function stop(): void {
+    if (currentSource) {
+      try { currentSource.stop(); } catch { /* */ }
+    }
+    currentSource = null;
+    isPlaying = false;
+    setIcon('play');
+  }
+
+  function play(): void {
+    if (!audioCtx || !audioBuffer) return;
+    stop();
+    const source = audioCtx.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(audioCtx.destination);
+    source.onended = () => {
+      isPlaying = false;
+      currentSource = null;
+      setIcon('play');
+    };
+    source.start();
+    currentSource = source;
+    isPlaying = true;
+    setIcon('pause');
+  }
+
+  btn.addEventListener('click', async () => {
+    if (loading) return;
+    if (isPlaying) { stop(); return; }
+    if (audioBuffer) { play(); return; }
+    loading = true;
+    setIcon('loading');
+    btn.disabled = true;
+    try {
+      audioCtx = audioCtx || new AudioContext();
+      const token = await getIdToken();
+      const voice = localStorage.getItem('lediary_v2_tts_voice') || 'Achird';
+      const res = await fetch(`/api/diary/tts?text=${encodeURIComponent(text)}&voice=${voice}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(`TTS ${res.status}`);
+      audioBuffer = await audioCtx.decodeAudioData(await res.arrayBuffer());
+      play();
+    } catch (err) {
+      console.error(err);
+      setIcon('play');
+      alert('音声の生成に失敗しました');
+    } finally {
+      loading = false;
+      btn.disabled = false;
+    }
+  });
+
+  return btn;
 }
 
 
