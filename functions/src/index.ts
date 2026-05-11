@@ -56,6 +56,44 @@ type LLMOptions = { jsonSchema?: unknown };
 
 class ClaudeCodePermanentError extends Error {}
 
+// claude_code circuit breaker — cached health probe so Mac-offline cases
+// trip over to Gemini in <3s instead of waiting for an LLM request to
+// timeout.
+const CLAUDE_HEALTH_TTL_MS = 30_000;
+let claudeHealthCached: boolean | null = null;
+let claudeHealthCheckedAt = 0;
+
+async function claudeCodeHealthy(): Promise<boolean> {
+  if (
+    claudeHealthCached !== null &&
+    Date.now() - claudeHealthCheckedAt < CLAUDE_HEALTH_TTL_MS
+  ) {
+    return claudeHealthCached;
+  }
+  const url = claudeCodeApiUrl.value();
+  if (!url) return false;
+  let ok = false;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3_000);
+    const res = await fetch(`${url.replace(/\/$/, "")}/health`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    ok = res.ok;
+  } catch {
+    ok = false;
+  }
+  claudeHealthCached = ok;
+  claudeHealthCheckedAt = Date.now();
+  return ok;
+}
+
+function markClaudeCodeUnhealthy(): void {
+  claudeHealthCached = false;
+  claudeHealthCheckedAt = Date.now();
+}
+
 async function callLLM(
   systemPrompt: string,
   userMessage: string,
@@ -65,10 +103,15 @@ async function callLLM(
   if (backend !== "claude_code") {
     return callGemini(systemPrompt, userMessage);
   }
+  if (!(await claudeCodeHealthy())) {
+    console.warn(`[LLM] claude_code unhealthy, using Gemini directly`);
+    return callGemini(systemPrompt, userMessage);
+  }
   try {
     return await callClaudeCode(systemPrompt, userMessage, opts);
   } catch (err) {
     if (err instanceof ClaudeCodePermanentError) throw err;
+    markClaudeCodeUnhealthy();
     console.warn(
       `[LLM] claude_code transient failure, falling back to Gemini:`,
       err instanceof Error ? err.message : err,
@@ -611,6 +654,7 @@ function generateShareId(): string {
 export const api = onRequest(
   {
     region: "asia-northeast1",
+    timeoutSeconds: 300,
     secrets: [geminiApiKey, unsplashAccessKey, claudeCodeApiUrl, claudeCodeApiKey],
   },
   async (req, res) => {
