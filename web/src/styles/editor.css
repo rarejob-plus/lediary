@@ -83,7 +83,7 @@
 
 .compose-textarea {
   width: 100%;
-  min-height: 110px;
+  min-height: 180px;
   padding: 16px 18px;
   background: var(--surface-warm);
   border: 1px solid transparent;
@@ -335,7 +335,7 @@
 @media (min-width: 1100px) {
   .compose-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr 1.1fr;
+    grid-template-columns: 1.25fr 1.25fr 1fr;
     gap: 24px;
     align-items: start;
   }
@@ -345,6 +345,10 @@
     top: 72px;
     max-height: calc(100vh - 96px);
     overflow-y: auto;
+  }
+
+  .compose-left .compose-textarea {
+    min-height: 320px;
   }
 
   .compose-right .compose-textarea.en {
@@ -380,3 +384,24 @@
   }
 }
 
+
+/* 添削／流れを整える のリクエスト中、古いカードを隠して薄いプレースホルダだけ表示 */
+.correction-loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 24px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.correction-loading-spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--text-muted);
+  animation: correction-loading-spin 0.8s linear infinite;
+}
+@keyframes correction-loading-spin {
+  to { transform: rotate(360deg); }
+}

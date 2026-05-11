@@ -331,6 +331,11 @@ export function renderEditor(root: HTMLElement): void {
     submitting = true;
     btn.disabled = true;
     btn.textContent = '添削中…';
+    // どうせ新しい結果で上書きするので、リクエスト中は古いカードを残さない
+    currentFeedback = [];
+    rewrites = [];
+    revealed = [];
+    showCorrectionLoading();
     try {
       feedbackKind = 'correct';
       currentFeedback = await loadFeedback(jp, en, dateStr, currentMode);
@@ -340,6 +345,7 @@ export function renderEditor(root: HTMLElement): void {
       correctionSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (e) {
       console.error(e);
+      correctionSection.innerHTML = '';
       alert('添削に失敗しました');
     } finally {
       submitting = false;
@@ -348,6 +354,16 @@ export function renderEditor(root: HTMLElement): void {
     }
   });
 
+  // ローディング中に古いカードを残さないための薄いプレースホルダ
+  function showCorrectionLoading() {
+    correctionSection.innerHTML = `
+      <div class="correction-loading">
+        <div class="correction-loading-spinner"></div>
+        <span>処理中…</span>
+      </div>
+    `;
+  }
+
   // 流れを整える 経由で来たときの自動トリガー（再添削も同様）
   async function triggerFlow(en: string) {
     if (submitting) return;
@@ -355,6 +371,11 @@ export function renderEditor(root: HTMLElement): void {
     const btn = actionRow.querySelector('#correct-btn') as HTMLButtonElement;
     btn.disabled = true;
     btn.textContent = '流れを確認中…';
+    // 前回の結果はクリアして処理中表示に切り替え
+    currentFeedback = [];
+    rewrites = [];
+    revealed = [];
+    showCorrectionLoading();
     try {
       feedbackKind = 'flow';
       currentFeedback = await loadFlowCheck(en);
@@ -364,6 +385,7 @@ export function renderEditor(root: HTMLElement): void {
       correctionSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (e) {
       console.error(e);
+      correctionSection.innerHTML = '';
       alert('流れチェックに失敗しました');
     } finally {
       submitting = false;
