@@ -316,6 +316,17 @@ function parseJsonArray<T>(content: string): T {
 // ─── Diary analysis ───
 
 interface FeedbackItem { original: string; corrected: string; explanation: string }
+
+// 英語テキストを文単位に分割。Gemini が文の途中で original を切り出してしまうのを
+// 防ぐため、サーバ側で sentence にしてから番号付きで渡し、index で参照させる。
+// 「Mr. Smith」のような略語による誤分割は日記ではほぼ起きないので簡易ルールで割り切る。
+function splitIntoSentences(text: string): string[] {
+  return text
+    .trim()
+    .split(/(?<=[.!?])\s+(?=\S)/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
 interface VocabItem { word: string; definition: string; example: string }
 interface ExpansionQuestion { question: string; hintJa: string; hintPhrases: string[]; afterSentence: string }
 interface HintItem { japanese: string; english: string; note: string }
@@ -469,8 +480,8 @@ Return a JSON object with exactly these fields:
 {
   "feedback": [
     {
-      "original": "the user's full sentence containing the issue",
-      "corrected": "the corrected full sentence",
+      "sentenceIndex": "1-based integer pointing to a single entry in the 'User's English sentences' list below",
+      "corrected": "the corrected version of THAT ONE sentence",
       "explanation": "日本語で、なぜ添削後の方が良いかを具体的に説明。両方の表現のニュアンスの違い（どういう場面で使われるか、どういう印象を与えるか）を含めること"
     }
   ],
@@ -488,31 +499,30 @@ Return a JSON object with exactly these fields:
 Rules:
 - feedback: Compare the user's English translation sentence by sentence against natural English standards and suggest corrections appropriate to the CORRECTION LEVEL above.
 
-  CRITICAL — what "original" and "corrected" mean:
-  * "original" MUST be a verbatim English sentence taken from the user's English translation (the "User's English translation attempt" section in the user message). NEVER take "original" from the Japanese diary. NEVER use Japanese text (ひらがな・カタカナ・漢字 dominant) as "original".
-  * "original" MUST be a COMPLETE sentence — start at the sentence's beginning (capital letter / start of text or the character right after .!?), end at .!?). NEVER take a fragment that crosses sentence boundaries (e.g. "...sprint. Anyway, I don't have" — half of one sentence + start of the next is FORBIDDEN). If the change spans two sentences, pick the ONE sentence the change actually lives in, not a chunk straddling both.
-  * "corrected" MUST be an improved English version of that exact "original" English sentence. It is NOT an English translation of the Japanese diary.
-  * "corrected" MUST contain the SAME number of sentences as "original" (almost always 1). NEVER add surrounding sentences from the user's translation that aren't in "original". If "original" is 1 sentence, "corrected" MUST be 1 sentence. NEVER expand a one-sentence "original" into a multi-sentence "corrected" by pulling in adjacent context.
-  * "corrected" length MUST be roughly comparable to "original" — within ~1.5x in characters. If your "corrected" is more than twice as long as "original", you are over-rewriting; trim it to just the actual change.
-  * If the user's English translation is empty or doesn't contain English sentences, return an empty feedback array [].
-  * If a sentence in the user's English translation is itself written in Japanese (i.e., the user left a placeholder), SKIP it — do NOT include it in feedback, do NOT translate it.
+  CRITICAL — sentence-index based feedback:
+  * The user's English has already been split into numbered sentences in the "User's English sentences" section below. Each feedback item points to ONE of those sentences via its 1-based index.
+  * "sentenceIndex" MUST be an integer that exists in that list (1..N). NEVER invent an index outside the range.
+  * "corrected" MUST be a rewrite of THAT ONE sentence ONLY. It is a sentence — typically a single one. NEVER include text from adjacent numbered sentences. NEVER add lead-in clauses from the previous sentence or trail-out clauses from the next sentence.
+  * "corrected" is NOT an English translation of the Japanese diary — it is a polished version of the user's existing sentence.
+  * "corrected" length should be roughly comparable to the source sentence — within ~1.5x. If you want to write much more than that, you are over-rewriting; trim.
+  * If the user's English is empty or no sentences are listed, return an empty feedback array [].
+  * If a numbered "sentence" is actually Japanese (the user left a placeholder), SKIP it — do NOT include it in feedback.
 
   For each valid feedback item:
-  - "original": the FULL English sentence from the user's translation, exactly as they wrote it.
-  - "corrected": the FULL improved English sentence — same scope, same sentence count.
+  - "sentenceIndex": which numbered sentence you're correcting.
+  - "corrected": the FULL improved version of that one sentence — same scope.
   - "explanation": Japanese text explaining WHY the corrected version is better — specifically describe the nuance difference between the two expressions (e.g., when each would be used, what impression each gives, what subtle meaning differs).
 
   All "corrected" sentences MUST follow the TONE RULES above.
   SELF-CHECK PER ITEM:
-  (1) Is "original" actually a quote from the user's English translation? If not, DROP it.
-  (2) Does "original" start at a sentence boundary AND end at .!? (a complete sentence, not a fragment that crosses into another sentence)? If not, DROP it.
-  (3) Does "corrected" have the SAME sentence count as "original" (count of .!?)? If "corrected" has more sentences (i.e. it pulled in adjacent context), DROP it.
-  (4) Is "corrected" within ~1.5x the character length of "original"? If "corrected" is much longer, you over-rewrote — DROP it or trim back.
-  (5) Is "original" written in English (not Japanese)? If it contains Japanese characters as the core of the sentence, DROP it.
-  (6) Is "corrected" MORE casual than "original"? If it became stiffer (e.g., "someone I know" → "acquaintance"), DROP it.
-  (7) Is "corrected" actually DIFFERENT from "original"? If the only differences are whitespace, punctuation, or capitalization (i.e., the words are identical), DROP it. NEVER produce a feedback item where the user's sentence is already correct — only return items where there is a real, meaningful change.
+  (1) Is "sentenceIndex" a valid 1-based number that exists in the sentences list? If not, DROP it.
+  (2) Does "corrected" stay within ONE sentence's worth of scope (no content from neighboring numbered sentences)? If it bleeds into other sentences, DROP it.
+  (3) Is "corrected" within ~1.5x the character length of the source sentence? If much longer, you over-rewrote — DROP it or trim back.
+  (4) Is the source sentence written in English (not Japanese)? If it contains Japanese characters as the core of the sentence, DROP it.
+  (5) Is "corrected" MORE casual than the source? If it became stiffer (e.g., "someone I know" → "acquaintance"), DROP it.
+  (6) Is "corrected" actually DIFFERENT from the source? If the only differences are whitespace, punctuation, or capitalization, DROP it. NEVER produce a feedback item where the user's sentence is already correct — only return items where there is a real, meaningful change.
 - If a sentence is already correct and natural, omit it from feedback entirely. An empty feedback array [] is preferred over filler items. Quality > quantity. Do NOT pad the feedback array with no-op items just to "show work".
-- AT MOST ONE feedback item per sentence. Never produce two feedback items whose "original" overlaps (i.e., shares any substring of the user's text). If a sentence needs multiple changes, combine them into a single feedback item with one "corrected" that incorporates all the changes.
+- AT MOST ONE feedback item per sentenceIndex. Never produce two feedback items pointing to the same sentenceIndex. If a sentence needs multiple changes, combine them into a single feedback item.
 - vocabulary: Extract 3-5 useful vocabulary items ONLY from expressions used in the "corrected" sentences above. These must be words/phrases that actually appear in your corrections. Do NOT include unrelated vocabulary.${skipMoodAndCover ? "" : `
 - mood: Pick ONE English word that captures the dominant feeling of the diary content (not of the writing quality). Prefer evocative single-word adjectives a learner can actually use in conversation (buoyant / calm / accomplished / restless / focused / introspective / excited / cozy / frustrated / hopeful / grateful / peaceful / nostalgic / energized / wistful / playful / drained / content). ONE single English word only — no phrases, no quotes, no punctuation. lowercase. Even when contentJp is short, always return one mood word.
 - coverKeyword: Pick a SHORT English search phrase (1-3 words) for a stock photo that visually captures the diary's scene.
@@ -524,9 +534,14 @@ Rules:
 
 Return ONLY the JSON object, no markdown fences or extra text.`;
 
+  // サーバ側で文単位に分割し、Gemini には index で指してもらう。
+  // こうすると original が文の途中で切れる事故が構造的に発生しない。
+  const sentences = userTranslation ? splitIntoSentences(userTranslation) : [];
+
   let userMessage = `Japanese diary:\n${contentJp}`;
-  if (userTranslation) {
-    userMessage += `\n\nUser's English translation attempt:\n${userTranslation}`;
+  if (sentences.length > 0) {
+    userMessage += `\n\nUser's English sentences (numbered — refer to these by sentenceIndex):\n`;
+    userMessage += sentences.map((s, i) => `[${i + 1}] ${s}`).join("\n");
   } else {
     userMessage += "\n\n(No translation attempt provided)";
   }
@@ -538,12 +553,27 @@ Return ONLY the JSON object, no markdown fences or extra text.`;
   }
 
   const response = await callLLM(systemPrompt, userMessage);
-  const analysis = parseJsonObject<DiaryAnalysis>(response);
+  const analysis = parseJsonObject<DiaryAnalysis & { feedback: Array<FeedbackItem & { sentenceIndex?: number }> }>(response);
 
   if (!userTranslation) analysis.feedback = [];
   if (!analysis.feedback) analysis.feedback = [];
   if (!analysis.vocabulary) analysis.vocabulary = [];
   if (!analysis.expansionQuestions) analysis.expansionQuestions = [];
+
+  // sentenceIndex → original を解決。範囲外 / 欠落は drop。
+  // 後方互換: Gemini が稀に index ではなく original を返してきた場合も拾う。
+  analysis.feedback = analysis.feedback
+    .map((fb) => {
+      const idx = (fb as { sentenceIndex?: number }).sentenceIndex;
+      if (typeof idx === "number" && Number.isInteger(idx) && idx >= 1 && idx <= sentences.length) {
+        return { original: sentences[idx - 1]!, corrected: fb.corrected, explanation: fb.explanation };
+      }
+      if (typeof fb.original === "string" && fb.original.length > 0) {
+        return { original: fb.original, corrected: fb.corrected, explanation: fb.explanation };
+      }
+      return null;
+    })
+    .filter((fb): fb is FeedbackItem => fb !== null);
 
   // No-op フィルタ: original と corrected が同じ（空白/句読点/大小文字差のみ含む）アイテムは捨てる
   const norm = (s: string) => s.toLowerCase().replace(/[\s.,!?;:'"`]+/g, " ").trim();
@@ -552,8 +582,8 @@ Return ONLY the JSON object, no markdown fences or extra text.`;
   );
 
   // Scope バックストップ: corrected が original より大幅に長い／文数が増えているアイテムは
-  // 「Gemini が周辺の文まで巻き込んで書き換えた」サインなので捨てる。
-  // 例: original "...sprints. Anyway, I don't have" → corrected が 2 文以上の長文
+  // 「LLM が周辺の文まで巻き込んで書き換えた」サインなので捨てる。
+  // 文単位の index 指定にしても保険として残す。
   const sentenceCount = (s: string): number => (s.match(/[.!?]+/g) || []).length || 1;
   analysis.feedback = analysis.feedback.filter((fb) => {
     const oLen = fb.original.length;
