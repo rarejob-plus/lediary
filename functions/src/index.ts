@@ -346,6 +346,30 @@ function splitIntoSentences(text: string): string[] {
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
 }
+
+// LLM が説明文に sentence index 表記 ([2], [3]) や「sentenceIndex 2」「文 [2]」
+// などを漏らすことがあるので削ぎ落とす。
+// 例: "[2]で「具体的には」と切り出した後、[3]で具体例が続くため" →
+//      "「具体的には」と切り出した後、具体例が続くため"
+function stripSentenceIndexRefs(text: string | undefined): string {
+  if (!text) return "";
+  // 日本語の助詞・後続表現を後で消すために共通化したパターン
+  const JP_PARTICLE = "(?:を|に|が|は|の|で|と|から|まで|へ|も|や|か|ね|について|では|でも)";
+  return text
+    // [数字]: 後続の助詞を貪欲に消して "[2]で「..." → "「..." にする
+    .replace(new RegExp(`\\s*\\[\\d+\\]\\s*${JP_PARTICLE}?\\s*`, "g"), "")
+    // 「sentenceIndex 2」「sentence 2」 + 後続の "の文"/助詞
+    .replace(new RegExp(`sentenceIndex\\s*\\d+\\s*(?:の文)?\\s*${JP_PARTICLE}?\\s*`, "gi"), "")
+    .replace(/\bsentence\s*#?\d+\b/gi, "")
+    // 「文番号 2」「文 2 番目」「文 2」 + 後続助詞
+    .replace(new RegExp(`文番号\\s*\\d+\\s*${JP_PARTICLE}?\\s*`, "g"), "")
+    .replace(new RegExp(`文\\s*\\d+\\s*(?:番目|つ目|番|目)?\\s*${JP_PARTICLE}?\\s*`, "g"), "")
+    // 余分な空白／句読点重複の整理
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\s+([、。,.])/g, "$1")
+    .replace(/(?:^|\s)[—–-]\s*[、。]/g, "$1") // "— 、" のような孤立 dash + 句読点
+    .trim();
+}
 interface VocabItem { word: string; definition: string; example: string }
 interface ExpansionQuestion { question: string; hintJa: string; hintPhrases: string[]; afterSentence: string }
 interface HintItem { japanese: string; english: string; note: string }
@@ -521,6 +545,7 @@ Rules:
   CRITICAL — sentence-index based feedback:
   * The user's English has already been split into numbered sentences in the "User's English sentences" section below. Each feedback item points to ONE of those sentences via its 1-based index.
   * "sentenceIndex" MUST be an integer that exists in that list (1..N). NEVER invent an index outside the range.
+  * The numbered list and "[N]" notation are INTERNAL only — for you to refer to sentences by their index. NEVER mention "[1]", "[2]", "[3]" etc., or words like "sentenceIndex" / "sentence 2" / "the second sentence", in the "explanation" field shown to the user. Explanations must describe the change naturally in Japanese without referencing the index notation.
   * "corrected" MUST be a rewrite of THAT ONE sentence ONLY. It is a sentence — typically a single one. NEVER include text from adjacent numbered sentences. NEVER add lead-in clauses from the previous sentence or trail-out clauses from the next sentence.
   * "corrected" is NOT an English translation of the Japanese diary — it is a polished version of the user's existing sentence.
   * "corrected" length should be roughly comparable to the source sentence — within ~1.5x. If you want to write much more than that, you are over-rewriting; trim.
@@ -581,14 +606,16 @@ Return ONLY the JSON object, no markdown fences or extra text.`;
 
   // sentenceIndex → original を解決。範囲外 / 欠落は drop。
   // 後方互換: Gemini が稀に index ではなく original を返してきた場合も拾う。
+  // explanation には [N] のような内部参照を漏らされることがあるので sanitize する。
   analysis.feedback = analysis.feedback
     .map((fb) => {
+      const explanation = stripSentenceIndexRefs(fb.explanation);
       const idx = (fb as { sentenceIndex?: number }).sentenceIndex;
       if (typeof idx === "number" && Number.isInteger(idx) && idx >= 1 && idx <= sentences.length) {
-        return { original: sentences[idx - 1]!, corrected: fb.corrected, explanation: fb.explanation };
+        return { original: sentences[idx - 1]!, corrected: fb.corrected, explanation };
       }
       if (typeof fb.original === "string" && fb.original.length > 0) {
-        return { original: fb.original, corrected: fb.corrected, explanation: fb.explanation };
+        return { original: fb.original, corrected: fb.corrected, explanation };
       }
       return null;
     })
@@ -1107,6 +1134,7 @@ Return a JSON object:
 Rules:
 - Return 0-3 suggestions. If the text flows well, return empty suggestions array with a positive overall comment.
 - sentenceIndex MUST be a valid 1-based index from the numbered list below. NEVER invent one out of range.
+- The numbered list and "[N]" notation are INTERNAL only. NEVER mention "[1]", "[2]" etc., or words like "sentenceIndex" / "the second sentence" / "[3]で具体例が続く", in "suggestion" / "reason" / "overall". Describe the change naturally in Japanese without referencing the index notation.
 - "revised" rewrites THAT ONE numbered sentence ONLY. NEVER pull in content from neighboring sentences. Length should stay within ~1.5x of the source sentence.
 - "suggestion" must be a Japanese description of the change. English words inside (Anyway, Since, etc.) should remain in English, but the verb must be Japanese (置き換える/入れる/取り除く).
 
@@ -1135,7 +1163,12 @@ ${CASUAL_TONE_RULE}
           } else {
             return null;
           }
-          return { between, suggestion: s.suggestion, revised: s.revised, reason: s.reason };
+          return {
+            between,
+            suggestion: stripSentenceIndexRefs(s.suggestion),
+            revised: s.revised,
+            reason: stripSentenceIndexRefs(s.reason),
+          };
         })
         .filter((s): s is { between: string; suggestion: string; revised: string; reason: string } => s !== null)
         // スコープバックストップ: revised が between より大幅に長い／文数が増えていたら drop
@@ -1146,7 +1179,7 @@ ${CASUAL_TONE_RULE}
           return true;
         });
 
-      res.json({ suggestions, overall: raw.overall || "" });
+      res.json({ suggestions, overall: stripSentenceIndexRefs(raw.overall) });
       return;
     }
 
