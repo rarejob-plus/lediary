@@ -2,10 +2,9 @@ import { renderHeader } from '../components/header';
 import { icons } from '../components/icons';
 import type { Mode, FeedbackItem } from '../data/mock';
 import { MODE_META } from '../data/mock';
-import { fetchEntry, invalidateEntriesCache, takeStashedEntry } from '../data/entries';
+import { fetchEntry, takeStashedEntry } from '../data/entries';
 import { fetchDays, type DayRating } from '../data/days';
 import { renderRatingRow } from '../components/day-rating-row';
-import { api } from '../api/client';
 import { getCurrentUser } from '../auth';
 import { navigate } from '../router';
 import { enableTextSelectionBookmark } from '../components/text-selection-bookmark';
@@ -13,6 +12,7 @@ import { callLLM } from '../llm';
 import { flowCheck } from '../llm-diary';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
+import { analyzeAndSavePost, savePostTextOnly } from '../data/posts';
 
 interface HintItem { english: string; japanese: string; note?: string; }
 
@@ -295,14 +295,12 @@ export function renderEditor(root: HTMLElement): void {
       doneBtn.textContent = '保存中…';
       try {
         if (user && currentFeedback.length > 0) {
-          await api.post('/diary/posts', {
+          await savePostTextOnly({
             contentJp: (jpBlock.querySelector('#jp-input') as HTMLTextAreaElement).value,
             userTranslation: finalText,
             date: dateStr,
             mode: currentMode,
-            textOnly: true,
           });
-          invalidateEntriesCache();
         }
         if (user) {
           navigate(`/entry/${user.uid}_${dateStr}_${currentMode}`);
@@ -541,24 +539,12 @@ async function loadHints(contentJp: string, date: string, mode: Mode): Promise<H
   return hints;
 }
 
-interface RawAnalysisResponse {
-  feedback?: FeedbackItem[];
-  vocabulary?: unknown[];
-  expansionQuestions?: unknown[];
-}
-
 async function loadFeedback(contentJp: string, userTranslation: string, date: string, mode: Mode): Promise<FeedbackItem[]> {
   if (!getCurrentUser()) {
     await new Promise((r) => setTimeout(r, 600));
     return SAMPLE_FEEDBACK;
   }
-  const res = await api.post<RawAnalysisResponse>('/diary/posts', {
-    contentJp,
-    userTranslation,
-    date,
-    mode,
-  });
-  invalidateEntriesCache();
+  const res = await analyzeAndSavePost({ contentJp, userTranslation, date, mode });
   return res.feedback || [];
 }
 

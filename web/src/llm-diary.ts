@@ -74,6 +74,26 @@ export function generateShareId(): string {
 
 // ─── 型 ───
 
+export interface FeedbackItem {
+  original: string;
+  corrected: string;
+  explanation: string;
+}
+
+export interface VocabItem {
+  word: string;
+  definition: string;
+  example: string;
+}
+
+export interface DiaryAnalysis {
+  feedback: FeedbackItem[];
+  vocabulary: VocabItem[];
+  expansionQuestions: ExpansionQuestion[];
+  mood?: string;
+  coverKeyword?: string;
+}
+
 export interface ExpansionQuestion {
   question: string;
   hintPhrases: string[];
@@ -298,4 +318,181 @@ Return ONLY the JSON object.`;
     const response = await callLLM(systemPrompt, userMessage);
     return parseJsonObject<LessonSheet>(response);
   });
+}
+
+// ─── analyzeDiary: 添削 / vocab / expansion / mood / coverKeyword を1発で生成 ───
+
+export interface AnalyzeOptions {
+  previousFeedback?: FeedbackItem[];
+  attemptCount?: number;
+  // contentJp が変わってない & 既に mood/coverKeyword 両方ある時に true。
+  // プロンプトから mood / coverKeyword を外してコスト/レイテンシ節約。
+  skipMoodAndCover?: boolean;
+}
+
+export async function analyzeDiary(
+  contentJp: string,
+  userTranslation: string,
+  opts: AnalyzeOptions = {},
+): Promise<DiaryAnalysis> {
+  const previousFeedback = opts.previousFeedback || [];
+  const attemptCount = opts.attemptCount ?? 1;
+  const skipMoodAndCover = opts.skipMoodAndCover ?? false;
+
+  let levelInstruction: string;
+  if (attemptCount <= 1) {
+    levelInstruction = `CORRECTION LEVEL: Basic — Focus on clear grammatical errors, wrong tenses, missing articles, incorrect prepositions, and obviously unnatural phrasing. Do NOT nitpick style or suggest minor improvements.
+Also check for abrupt topic transitions. When the diary jumps between unrelated topics without a connecting phrase, suggest adding a natural transition such as: "Anyway, on a different note,", "As for my day,", "Moving on,", "On the other hand,", "In contrast,". Choose the appropriate transition based on context — use contrast phrases ("In contrast," "On the other hand,") when the topics have an inherent contrast, and topic-shift phrases ("Anyway,", "On a different note,") when they are simply unrelated.`;
+  } else if (attemptCount === 2) {
+    levelInstruction = `CORRECTION LEVEL: Intermediate — The user has already fixed basic errors. Now focus on more natural phrasing, better word choices, and idiomatic expressions. Suggest ways to sound less textbook and more conversational.`;
+  } else {
+    levelInstruction = `CORRECTION LEVEL: Advanced — The user has already improved grammar and naturalness. Now focus on native-level refinement: varied sentence rhythm, precise vocabulary, expressive phrasing, and stylistic polish.`;
+  }
+
+  const systemPrompt = `You are an expert English writing coach for Japanese learners preparing for RareJob online English lessons.
+Your task is to analyze a short Japanese diary entry (typically 3 lines) and the user's attempted English translation.
+
+${levelInstruction}
+
+${CASUAL_TONE_RULE}
+
+Return a JSON object with exactly these fields:
+{
+  "feedback": [
+    {
+      "sentenceIndex": "1-based integer pointing to a single entry in the 'User's English sentences' list below",
+      "corrected": "the corrected version of THAT ONE sentence",
+      "explanation": "日本語で、なぜ添削後の方が良いかを具体的に説明。両方の表現のニュアンスの違い（どういう場面で使われるか、どういう印象を与えるか）を含めること"
+    }
+  ],
+  "vocabulary": [
+    {
+      "word": "a useful word or phrase from the refined translation",
+      "definition": "concise definition in Japanese",
+      "example": "a natural example sentence using the word"
+    }
+  ]${skipMoodAndCover ? '' : `,
+  "mood": "ONE evocative English word capturing the dominant feeling of the day (e.g., 'buoyant', 'calm', 'accomplished', 'restless', 'focused', 'introspective', 'excited', 'cozy', 'frustrated', 'hopeful', 'grateful', 'peaceful', 'nostalgic', 'energized')",
+  "coverKeyword": "1-3 English words describing a CONCRETE VISUAL SUBJECT from the diary, suitable for a stock-photo search (e.g., 'cherry blossoms', 'morning coffee', 'jogging park', 'rainy window'). Prefer concrete physical things over abstract concepts."`}
+}
+
+Rules:
+- feedback: Compare the user's English translation sentence by sentence against natural English standards and suggest corrections appropriate to the CORRECTION LEVEL above.
+
+  CRITICAL — sentence-index based feedback:
+  * The user's English has already been split into numbered sentences in the "User's English sentences" section below. Each feedback item points to ONE of those sentences via its 1-based index.
+  * "sentenceIndex" MUST be an integer that exists in that list (1..N). NEVER invent an index outside the range.
+  * The numbered list and "[N]" notation are INTERNAL only — for you to refer to sentences by their index. NEVER mention "[1]", "[2]", "[3]" etc., or words like "sentenceIndex" / "sentence 2" / "the second sentence", in the "explanation" field shown to the user. Explanations must describe the change naturally in Japanese without referencing the index notation.
+  * "corrected" MUST be a rewrite of THAT ONE sentence ONLY. It is a sentence — typically a single one. NEVER include text from adjacent numbered sentences. NEVER add lead-in clauses from the previous sentence or trail-out clauses from the next sentence.
+  * "corrected" is NOT an English translation of the Japanese diary — it is a polished version of the user's existing sentence.
+  * "corrected" length should be roughly comparable to the source sentence — within ~1.5x. If you want to write much more than that, you are over-rewriting; trim.
+  * If the user's English is empty or no sentences are listed, return an empty feedback array [].
+  * If a numbered "sentence" is actually Japanese (the user left a placeholder), SKIP it — do NOT include it in feedback.
+
+  For each valid feedback item:
+  - "sentenceIndex": which numbered sentence you're correcting.
+  - "corrected": the FULL improved version of that one sentence — same scope.
+  - "explanation": Japanese text explaining WHY the corrected version is better — specifically describe the nuance difference between the two expressions (e.g., when each would be used, what impression each gives, what subtle meaning differs).
+
+  All "corrected" sentences MUST follow the TONE RULES above.
+  SELF-CHECK PER ITEM:
+  (1) Is "sentenceIndex" a valid 1-based number that exists in the sentences list? If not, DROP it.
+  (2) Does "corrected" stay within ONE sentence's worth of scope (no content from neighboring numbered sentences)? If it bleeds into other sentences, DROP it.
+  (3) Is "corrected" within ~1.5x the character length of the source sentence? If much longer, you over-rewrote — DROP it or trim back.
+  (4) Is the source sentence written in English (not Japanese)? If it contains Japanese characters as the core of the sentence, DROP it.
+  (5) Is "corrected" MORE casual than the source? If it became stiffer (e.g., "someone I know" → "acquaintance"), DROP it.
+  (6) Is "corrected" actually DIFFERENT from the source? If the only differences are whitespace, punctuation, or capitalization, DROP it. NEVER produce a feedback item where the user's sentence is already correct — only return items where there is a real, meaningful change.
+- If a sentence is already correct and natural, omit it from feedback entirely. An empty feedback array [] is preferred over filler items. Quality > quantity. Do NOT pad the feedback array with no-op items just to "show work".
+- AT MOST ONE feedback item per sentenceIndex. Never produce two feedback items pointing to the same sentenceIndex. If a sentence needs multiple changes, combine them into a single feedback item.
+- vocabulary: Extract 3-5 useful vocabulary items ONLY from expressions used in the "corrected" sentences above. These must be words/phrases that actually appear in your corrections. Do NOT include unrelated vocabulary.${skipMoodAndCover ? '' : `
+- mood: Pick ONE English word that captures the dominant feeling of the diary content (not of the writing quality). Prefer evocative single-word adjectives a learner can actually use in conversation (buoyant / calm / accomplished / restless / focused / introspective / excited / cozy / frustrated / hopeful / grateful / peaceful / nostalgic / energized / wistful / playful / drained / content). ONE single English word only — no phrases, no quotes, no punctuation. lowercase. Even when contentJp is short, always return one mood word.
+- coverKeyword: Pick a SHORT English search phrase (1-3 words) for a stock photo that visually captures the diary's scene.
+  PRIORITIZE PHOTOS WITH A JAPANESE LOOK & FEEL. The user is writing in Japanese about their daily life in Japan, so cover photos should preferably feel grounded in Japan — Japanese homes / streets / food / parks / people / objects — not generic Western stock. To bias the search toward Japanese photos:
+  * When natural, prepend a Japan-specific qualifier or replace generic nouns with Japan-rooted ones: "japanese", "tokyo", "kyoto" / "ramen", "izakaya", "konbini", "sento", "koban", "tatami", "shrine", "sakura", "obento", "washoku", "tonkatsu", "matcha", "soba", "futon", "japanese house" 等.
+  * Generic activity is fine if a Japan-specific term doesn't fit naturally — but lean Japan whenever there's a reasonable choice. E.g. "lunch" → "obento" or "ramen" if that fits; "coffee shop" → "tokyo cafe"; "park" → "japanese park" or "sakura park"; "cinema" → leave as "popcorn cinema" (no natural JP term).
+  Prefer concrete nouns (places, objects, activities) over emotions. AVOID dark, scary, gloomy, horror, or moody subjects — favor bright, warm, daylight, cheerful subjects suitable as a journal cover. If the diary scene is genuinely dark (e.g., night), still pick the most positive concrete element (e.g., "tokyo lights" instead of "dark street").
+  Examples: 「家族でフラワーパークに行く」→ "japanese flower park"; 「朝ジョギングしている」→ "tokyo jogging"; 「カフェで本を読んだ」→ "tokyo cafe book"; 「ラーメン食べた」→ "ramen shop"; 「コンビニ寄った」→ "konbini night"; 「映画を観に行った」→ "popcorn cinema". Always return one keyword.`}
+
+Return ONLY the JSON object, no markdown fences or extra text.`;
+
+  const sentences = userTranslation ? splitIntoSentences(userTranslation) : [];
+
+  let userMessage = `Japanese diary:\n${contentJp}`;
+  if (sentences.length > 0) {
+    userMessage += `\n\nUser's English sentences (numbered — refer to these by sentenceIndex):\n`;
+    userMessage += sentences.map((s, i) => `[${i + 1}] ${s}`).join('\n');
+  } else {
+    userMessage += '\n\n(No translation attempt provided)';
+  }
+  if (previousFeedback.length > 0) {
+    userMessage += '\n\nPreviously suggested corrections (DO NOT contradict these — the user applied your fixes):\n';
+    for (const fb of previousFeedback) {
+      userMessage += `- "${fb.original}" → "${fb.corrected}"\n`;
+    }
+  }
+
+  const analysis = await withRetry('analyzeDiary', async () => {
+    const response = await callLLM(systemPrompt, userMessage);
+    return parseJsonObject<DiaryAnalysis & { feedback: Array<FeedbackItem & { sentenceIndex?: number }> }>(response);
+  });
+
+  if (!userTranslation) analysis.feedback = [];
+  if (!analysis.feedback) analysis.feedback = [];
+  if (!analysis.vocabulary) analysis.vocabulary = [];
+  if (!analysis.expansionQuestions) analysis.expansionQuestions = [];
+
+  // sentenceIndex → original を解決。範囲外/欠落は drop。LLM が稀に index ではなく
+  // original を返す古い動作も後方互換で拾う。
+  analysis.feedback = analysis.feedback
+    .map((fb): FeedbackItem | null => {
+      const explanation = stripSentenceIndexRefs(fb.explanation);
+      const idx = (fb as { sentenceIndex?: number }).sentenceIndex;
+      if (typeof idx === 'number' && Number.isInteger(idx) && idx >= 1 && idx <= sentences.length) {
+        return { original: sentences[idx - 1]!, corrected: fb.corrected, explanation };
+      }
+      if (typeof fb.original === 'string' && fb.original.length > 0) {
+        return { original: fb.original, corrected: fb.corrected, explanation };
+      }
+      return null;
+    })
+    .filter((fb): fb is FeedbackItem => fb !== null);
+
+  // No-op フィルタ: original と corrected が同じ (空白/句読点/大小文字差のみ) は捨てる
+  const norm = (s: string) => s.toLowerCase().replace(/[\s.,!?;:'"`]+/g, ' ').trim();
+  analysis.feedback = analysis.feedback.filter((fb) =>
+    fb.original && fb.corrected && norm(fb.original) !== norm(fb.corrected),
+  );
+
+  // Scope バックストップ: corrected が original より大幅に長い/文数が増えてるアイテムは
+  // 「LLM が周辺の文まで巻き込んで書き換えた」サインなので捨てる
+  const sentenceCount = (s: string): number => (s.match(/[.!?]+/g) || []).length || 1;
+  analysis.feedback = analysis.feedback.filter((fb) => {
+    const oLen = fb.original.length;
+    const cLen = fb.corrected.length;
+    const oS = sentenceCount(fb.original);
+    const cS = sentenceCount(fb.corrected);
+    if (cLen > oLen * 2.5 + 20) return false;
+    if (cS > oS + 1) return false;
+    return true;
+  });
+
+  // 検証: original が userTranslation の中に substring として実在するか
+  if (userTranslation) {
+    const haystack = norm(userTranslation);
+    analysis.feedback = analysis.feedback.filter((fb) => haystack.includes(norm(fb.original)));
+  }
+
+  // Backstop: original が既出 feedback の範囲とかぶってたら drop。
+  // 最終本文への replace() が競合しないようにする保険。
+  const kept: FeedbackItem[] = [];
+  for (const fb of analysis.feedback) {
+    if (!fb.original) continue;
+    const overlap = kept.some(
+      (k) => k.original.includes(fb.original) || fb.original.includes(k.original),
+    );
+    if (!overlap) kept.push(fb);
+  }
+  analysis.feedback = kept;
+
+  return analysis;
 }

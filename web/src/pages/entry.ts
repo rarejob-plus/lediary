@@ -4,11 +4,11 @@ import { coverFor } from '../components/cover';
 import { MODE_META, type DiaryEntry } from '../data/mock';
 import { deleteEntry, fetchEntry, invalidateEntriesCache, moveEntryMode, stashForEditor } from '../data/entries';
 import { renderSekkiPill, dayOfYear, daysInYear } from '../data/dateInfo';
-import { api } from '../api/client';
 import { getCurrentUser, getIdToken } from '../auth';
 import { navigate } from '../router';
 import { enableTextSelectionBookmark, bookmarkPhrase } from '../components/text-selection-bookmark';
 import { correctExpansionAnswer, generateExpansionQuestions, generateLessonSheetContent, generateShareId } from '../llm-diary';
+import { savePostTextOnly } from '../data/posts';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
@@ -583,15 +583,13 @@ function renderExpansionSection(entry: DiaryEntry, bodyEl: HTMLElement): HTMLEle
           questions[idx] = { ...q, reflected: true, answer: finalText };
           entry.expansionQuestions = questions;
           try {
-            await api.post('/diary/posts', {
+            await savePostTextOnly({
               contentJp: entry.contentJp,
               userTranslation: inserted,
               date: entry.date,
               mode: entry.mode,
-              textOnly: true,
               expansionQuestions: questions,
             });
-            invalidateEntriesCache();
           } catch (err) {
             console.error(err);
             alert('保存に失敗しました（表示は更新されています）');
