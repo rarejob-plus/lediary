@@ -1,6 +1,8 @@
 // 充実度スコア (1-10) + ひとことメモのデータ層。
 // Firestore の lediary-days/{userId}_{date} と対応。
 
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '../firebase';
 import { api } from '../api/client';
 import { getCurrentUser } from '../auth';
 
@@ -29,13 +31,16 @@ export function invalidateDaysCache(): void {
 }
 
 export async function fetchDays(force = false): Promise<Map<string, DayRating>> {
-  if (!getCurrentUser()) return new Map();
+  const user = getCurrentUser();
+  if (!user) return new Map();
   if (!force && cache && Date.now() - cache.fetchedAt < CACHE_TTL_MS) {
     return cache.days;
   }
-  const raws = await api.get<RawDay[]>('/diary/days');
+  const q = query(collection(db, 'lediary-days'), where('userId', '==', user.uid));
+  const snap = await getDocs(q);
   const days = new Map<string, DayRating>();
-  for (const r of raws) {
+  for (const doc of snap.docs) {
+    const r = doc.data() as RawDay;
     if (typeof r.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(r.date)) continue;
     days.set(r.date, { date: r.date, score: r.score, note: r.note, updatedAt: r.updatedAt });
   }

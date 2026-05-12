@@ -1,7 +1,8 @@
-// データレイヤー: 認証時は /api/diary/posts、未認証時は mock を返す。
+// データレイヤー: 認証時は Firestore SDK 直接、未認証時は mock を返す。
 // 本実装が完了したら mock fallback を削除する想定。
 
-import { api } from '../api/client';
+import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
+import { db } from '../firebase';
 import { getCurrentUser } from '../auth';
 import { MOCK_ENTRIES, type DiaryEntry, type Mode } from './mock';
 
@@ -20,6 +21,9 @@ interface RawPost {
   updatedAt?: number | { _seconds: number };
   mood?: string;
   lessonSheetId?: string;
+  coverImageUrl?: string;
+  coverPhotographer?: string;
+  coverPhotographerUrl?: string;
 }
 
 function timeFromCreatedAt(c?: RawPost['createdAt']): string {
@@ -47,6 +51,9 @@ function toEntry(raw: RawPost): DiaryEntry {
     expansionQuestions: raw.expansionQuestions || [],
     mood: raw.mood,
     lessonSheetId: raw.lessonSheetId,
+    coverImageUrl: raw.coverImageUrl,
+    coverPhotographer: raw.coverPhotographer,
+    coverPhotographerUrl: raw.coverPhotographerUrl,
     createdAt: ms,
   };
 }
@@ -60,12 +67,19 @@ export function invalidateEntriesCache(): void {
 }
 
 export async function fetchEntries(force = false): Promise<DiaryEntry[]> {
-  if (!getCurrentUser()) return MOCK_ENTRIES;
+  const user = getCurrentUser();
+  if (!user) return MOCK_ENTRIES;
   if (!force && cache && Date.now() - cache.fetchedAt < CACHE_TTL_MS) {
     return cache.entries;
   }
-  const raws = await api.get<RawPost[]>('/diary/posts');
-  const entries = raws
+  const q = query(
+    collection(db, 'lediary-posts'),
+    where('userId', '==', user.uid),
+    orderBy('createdAt', 'desc'),
+  );
+  const snap = await getDocs(q);
+  const entries = snap.docs
+    .map((d) => ({ id: d.id, ...(d.data() as Omit<RawPost, 'id'>) }))
     .filter((r) => typeof r.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.date))
     .map(toEntry);
   cache = { fetchedAt: Date.now(), entries };

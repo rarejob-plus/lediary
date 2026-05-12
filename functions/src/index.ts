@@ -874,26 +874,8 @@ async function handleRequest(req: FbRequest, res: ExpressResponse): Promise<void
       return;
     }
 
-    // GET /api/diary/posts
-    if (path === "/api/diary/posts" && method === "GET") {
-      const snap = await db.collection("lediary-posts")
-        .where("userId", "==", userId)
-        .orderBy("createdAt", "desc")
-        .get();
-      const posts = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      res.json(posts);
-      return;
-    }
-
-    // GET /api/diary/days — fulfillment スコアの一覧
-    if (path === "/api/diary/days" && method === "GET") {
-      const snap = await db.collection("lediary-days")
-        .where("userId", "==", userId)
-        .get();
-      const days = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      res.json(days);
-      return;
-    }
+    // NOTE: read endpoints (`GET /diary/posts`, `GET /diary/days`, `GET /diary/posts/:id`)
+    // moved to client-side Firestore SDK. See lediary/web/src/data/{entries,days}.ts.
 
     // POST /api/diary/days — fulfillment スコア + note の upsert
     // body: { date: "YYYY-MM-DD", score: 1-10, note?: string }
@@ -963,19 +945,8 @@ async function handleRequest(req: FbRequest, res: ExpressResponse): Promise<void
       return;
     }
 
-    // GET /api/diary/posts/:id
-    const postMatch = path.match(/^\/api\/diary\/posts\/(.+)$/);
-    if (postMatch && method === "GET") {
-      const doc = await db.collection("lediary-posts").doc(postMatch[1]).get();
-      if (!doc.exists || doc.data()?.userId !== userId) {
-        res.status(404).json({ error: "Post not found" });
-        return;
-      }
-      res.json({ id: doc.id, ...doc.data() });
-      return;
-    }
-
     // DELETE /api/diary/posts/:id
+    const postMatch = path.match(/^\/api\/diary\/posts\/(.+)$/);
     if (postMatch && method === "DELETE") {
       const doc = await db.collection("lediary-posts").doc(postMatch[1]).get();
       if (!doc.exists || doc.data()?.userId !== userId) {

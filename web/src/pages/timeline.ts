@@ -114,54 +114,38 @@ function renderBody(wrap: HTMLElement, entries: DiaryEntry[], days: Map<string, 
     groups.get(e.date)!.push(e);
   }
 
-  for (const [date, dayEntries] of groups) {
-    const day = document.createElement('div');
-    day.className = 'timeline-day';
-
-    const parts = dayHeaderParts(date);
-    const header = document.createElement('div');
-    header.className = 'timeline-day-header';
-    header.innerHTML = `
-      <div class="timeline-day-num">${parts.num}</div>
-      <div class="timeline-day-meta">
-        <strong>${parts.weekday}</strong>
-        <span>${parts.monthYear}</span>
-      </div>
-      <div class="timeline-day-rating"></div>
-    `;
-    day.appendChild(header);
-
-    const ratingEl = header.querySelector('.timeline-day-rating') as HTMLElement;
-    renderRatingRow(ratingEl, { date, days, size: 'sm' });
-
-    for (const entry of dayEntries) {
-      const meta = MODE_META[entry.mode];
-      const card = document.createElement('button');
-      card.className = 'entry-card';
-      card.innerHTML = `
-        <div class="entry-cover" style="background:${entry.cover ?? coverFor(entry.mode, entry.time, entry.coverImageUrl)};">
-          <div class="entry-cover-meta">
-            <span class="entry-cover-pill">${iconFor(meta.icon)} ${meta.label}</span>
-            ${renderSekkiPill(entry.date, 'entry-cover-pill')}
-            <span class="entry-cover-pill">${dayOfYear(entry.date)} / ${daysInYear(entry.date)}</span>
-            ${entry.mood ? `<span class="entry-cover-pill">${escapeHtml(entry.mood)}</span>` : ''}
-          </div>
-        </div>
-        <div class="entry-card-body">
-          <div class="entry-card-time">${entry.time}</div>
-          <p class="entry-card-text">${escapeHtml(entry.userTranslation || entry.contentJp)}</p>
-          ${entry.vocabulary.length > 0 ? `
-            <div class="entry-card-tags">
-              ${entry.vocabulary.slice(0, 3).map((v) => `<span class="entry-tag">${escapeHtml(v.word)}</span>`).join('')}
-            </div>
-          ` : ''}
-        </div>
-      `;
-      card.addEventListener('click', () => navigate(`/entry/${entry.id}`));
-      day.appendChild(card);
+  // 直近 INITIAL_LIMIT 件まで初期描画 — 履歴増加に伴う cover 画像ロードの肥大化を防ぐ。
+  // 残りは「もっと見る」で1回で展開する。
+  const INITIAL_LIMIT = 10;
+  const groupArr = Array.from(groups.entries());
+  let cutoff = groupArr.length;
+  let acc = 0;
+  for (let i = 0; i < groupArr.length; i++) {
+    acc += groupArr[i]![1].length;
+    if (acc >= INITIAL_LIMIT) {
+      cutoff = i + 1;
+      break;
     }
+  }
+  for (let i = 0; i < cutoff; i++) {
+    const [date, dayEntries] = groupArr[i]!;
+    wrap.appendChild(renderDay(date, dayEntries, days));
+  }
 
-    wrap.appendChild(day);
+  if (cutoff < groupArr.length) {
+    const moreBtn = document.createElement('button');
+    moreBtn.className = 'timeline-more-btn';
+    moreBtn.type = 'button';
+    moreBtn.textContent = 'もっと見る';
+    moreBtn.addEventListener('click', () => {
+      const frag = document.createDocumentFragment();
+      for (let i = cutoff; i < groupArr.length; i++) {
+        const [date, dayEntries] = groupArr[i]!;
+        frag.appendChild(renderDay(date, dayEntries, days));
+      }
+      moreBtn.replaceWith(frag);
+    });
+    wrap.appendChild(moreBtn);
   }
 
   if (entries.length === 0) {
@@ -170,6 +154,56 @@ function renderBody(wrap: HTMLElement, entries: DiaryEntry[], days: Map<string, 
     empty.textContent = 'まだエントリがありません。今日のひとことから始めましょう。';
     wrap.appendChild(empty);
   }
+}
+
+function renderDay(date: string, dayEntries: DiaryEntry[], days: Map<string, DayRating>): HTMLElement {
+  const day = document.createElement('div');
+  day.className = 'timeline-day';
+
+  const parts = dayHeaderParts(date);
+  const header = document.createElement('div');
+  header.className = 'timeline-day-header';
+  header.innerHTML = `
+    <div class="timeline-day-num">${parts.num}</div>
+    <div class="timeline-day-meta">
+      <strong>${parts.weekday}</strong>
+      <span>${parts.monthYear}</span>
+    </div>
+    <div class="timeline-day-rating"></div>
+  `;
+  day.appendChild(header);
+
+  const ratingEl = header.querySelector('.timeline-day-rating') as HTMLElement;
+  renderRatingRow(ratingEl, { date, days, size: 'sm' });
+
+  for (const entry of dayEntries) {
+    const meta = MODE_META[entry.mode];
+    const card = document.createElement('button');
+    card.className = 'entry-card';
+    card.innerHTML = `
+      <div class="entry-cover" style="background:${entry.cover ?? coverFor(entry.mode, entry.time, entry.coverImageUrl)};">
+        <div class="entry-cover-meta">
+          <span class="entry-cover-pill">${iconFor(meta.icon)} ${meta.label}</span>
+          ${renderSekkiPill(entry.date, 'entry-cover-pill')}
+          <span class="entry-cover-pill">${dayOfYear(entry.date)} / ${daysInYear(entry.date)}</span>
+          ${entry.mood ? `<span class="entry-cover-pill">${escapeHtml(entry.mood)}</span>` : ''}
+        </div>
+      </div>
+      <div class="entry-card-body">
+        <div class="entry-card-time">${entry.time}</div>
+        <p class="entry-card-text">${escapeHtml(entry.userTranslation || entry.contentJp)}</p>
+        ${entry.vocabulary.length > 0 ? `
+          <div class="entry-card-tags">
+            ${entry.vocabulary.slice(0, 3).map((v) => `<span class="entry-tag">${escapeHtml(v.word)}</span>`).join('')}
+          </div>
+        ` : ''}
+      </div>
+    `;
+    card.addEventListener('click', () => navigate(`/entry/${entry.id}`));
+    day.appendChild(card);
+  }
+
+  return day;
 }
 
 function iconFor(name: 'sun' | 'graduation' | 'moon' | 'bookOpen', size = 11): string {
