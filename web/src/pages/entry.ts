@@ -2,7 +2,7 @@ import { renderHeader } from '../components/header';
 import { icons } from '../components/icons';
 import { coverFor } from '../components/cover';
 import { MODE_META, type DiaryEntry } from '../data/mock';
-import { fetchEntry, invalidateEntriesCache, stashForEditor } from '../data/entries';
+import { deleteEntry, fetchEntry, invalidateEntriesCache, moveEntryMode, stashForEditor } from '../data/entries';
 import { renderSekkiPill, dayOfYear, daysInYear } from '../data/dateInfo';
 import { api } from '../api/client';
 import { getCurrentUser, getIdToken } from '../auth';
@@ -159,11 +159,7 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
     moveBtn.disabled = true;
     moveBtn.textContent = '移動中…';
     try {
-      const res = await api.post<{ id: string }>('/diary/posts/move', {
-        fromId: entry.id,
-        toMode: targetMode,
-      });
-      invalidateEntriesCache();
+      const res = await moveEntryMode(entry.id, targetMode);
       navigate(`/entry/${res.id || targetId}`);
     } catch (err) {
       console.error(err);
@@ -178,8 +174,7 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
     delBtn.disabled = true;
     try {
       if (getCurrentUser()) {
-        await api.delete(`/diary/posts/${entry.id}`);
-        invalidateEntriesCache();
+        await deleteEntry(entry.id);
       }
       navigate('/');
     } catch (err) {

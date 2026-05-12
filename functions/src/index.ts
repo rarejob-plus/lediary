@@ -877,86 +877,8 @@ async function handleRequest(req: FbRequest, res: ExpressResponse): Promise<void
     // NOTE: read endpoints (`GET /diary/posts`, `GET /diary/days`, `GET /diary/posts/:id`)
     // moved to client-side Firestore SDK. See lediary/web/src/data/{entries,days}.ts.
 
-    // POST /api/diary/days — fulfillment スコア + note の upsert
-    // body: { date: "YYYY-MM-DD", score: 1-10, note?: string }
-    if (path === "/api/diary/days" && method === "POST") {
-      const { date: dateParam, score, note } = req.body;
-      if (!dateParam || typeof dateParam !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
-        res.status(400).json({ error: "valid date (YYYY-MM-DD) is required" });
-        return;
-      }
-      if (typeof score !== "number" || !Number.isInteger(score) || score < 1 || score > 10) {
-        res.status(400).json({ error: "score must be integer 1-10" });
-        return;
-      }
-      const docID = `${userId}_${dateParam}`;
-      const existing = await db.collection("lediary-days").doc(docID).get();
-      const now = Date.now();
-      const data: Record<string, unknown> = {
-        userId,
-        date: dateParam,
-        score,
-        note: typeof note === "string" ? note : (existing.data()?.note || ""),
-        updatedAt: now,
-        createdAt: existing.exists ? (existing.data()?.createdAt || now) : now,
-      };
-      await db.collection("lediary-days").doc(docID).set(data);
-      res.json({ id: docID, ...data });
-      return;
-    }
-
-    // DELETE /api/diary/days/:date — スコアを取り消す
-    const dayMatch = path.match(/^\/api\/diary\/days\/(\d{4}-\d{2}-\d{2})$/);
-    if (dayMatch && method === "DELETE") {
-      const docID = `${userId}_${dayMatch[1]}`;
-      await db.collection("lediary-days").doc(docID).delete();
-      res.json({ success: true });
-      return;
-    }
-
-    // POST /api/diary/posts/move — change an entry's mode (copy + delete)
-    if (path === "/api/diary/posts/move" && method === "POST") {
-      const { fromId, toMode } = req.body;
-      if (!fromId || !toMode) {
-        res.status(400).json({ error: "fromId and toMode required" });
-        return;
-      }
-      if (!["morning", "lesson", "diary", "story"].includes(toMode)) {
-        res.status(400).json({ error: "invalid toMode" });
-        return;
-      }
-      const fromDoc = await db.collection("lediary-posts").doc(fromId).get();
-      if (!fromDoc.exists || fromDoc.data()?.userId !== userId) {
-        res.status(404).json({ error: "source not found" });
-        return;
-      }
-      const fromData = fromDoc.data()!;
-      const date = fromData.date;
-      const newId = `${userId}_${date}_${toMode}`;
-      const targetDoc = await db.collection("lediary-posts").doc(newId).get();
-      if (targetDoc.exists && (targetDoc.data()?.contentJp || targetDoc.data()?.userTranslation)) {
-        res.status(409).json({ error: "target already has content" });
-        return;
-      }
-      const newData = { ...fromData, mode: toMode, updatedAt: Date.now() };
-      await db.collection("lediary-posts").doc(newId).set(newData);
-      await db.collection("lediary-posts").doc(fromId).delete();
-      res.json({ id: newId });
-      return;
-    }
-
-    // DELETE /api/diary/posts/:id
-    const postMatch = path.match(/^\/api\/diary\/posts\/(.+)$/);
-    if (postMatch && method === "DELETE") {
-      const doc = await db.collection("lediary-posts").doc(postMatch[1]).get();
-      if (!doc.exists || doc.data()?.userId !== userId) {
-        res.status(404).json({ error: "Post not found" });
-        return;
-      }
-      await db.collection("lediary-posts").doc(postMatch[1]).delete();
-      res.json({ success: true });
-      return;
-    }
+    // NOTE: days POST/DELETE と posts DELETE/move もクライアント側 Firestore SDK に移行済。
+    // 詳細: lediary/web/src/data/{days,entries}.ts。
 
     // POST /api/diary/hints
     if (path === "/api/diary/hints" && method === "POST") {

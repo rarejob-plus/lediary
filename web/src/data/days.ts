@@ -1,9 +1,8 @@
 // 充実度スコア (1-10) + ひとことメモのデータ層。
 // Firestore の lediary-days/{userId}_{date} と対応。
 
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, doc, query, where, getDocs, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { api } from '../api/client';
 import { getCurrentUser } from '../auth';
 
 export interface DayRating {
@@ -49,14 +48,33 @@ export async function fetchDays(force = false): Promise<Map<string, DayRating>> 
 }
 
 export async function saveDayRating(date: string, score: number, note?: string): Promise<DayRating> {
-  const body: Record<string, unknown> = { date, score };
-  if (typeof note === 'string') body.note = note;
-  const r = await api.post<RawDay>('/diary/days', body);
+  const user = getCurrentUser();
+  if (!user) throw new Error('not authenticated');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('invalid date');
+  if (!Number.isInteger(score) || score < 1 || score > 10) throw new Error('score must be 1-10');
+
+  const docId = `${user.uid}_${date}`;
+  const ref = doc(db, 'lediary-days', docId);
+  const existing = await getDoc(ref);
+  const now = Date.now();
+  const existingData = existing.exists() ? (existing.data() as RawDay) : null;
+  const data: RawDay = {
+    id: docId,
+    userId: user.uid,
+    date,
+    score,
+    note: typeof note === 'string' ? note : (existingData?.note ?? ''),
+    updatedAt: now,
+    createdAt: existingData?.createdAt ?? now,
+  };
+  await setDoc(ref, data);
   invalidateDaysCache();
-  return { date: r.date, score: r.score, note: r.note, updatedAt: r.updatedAt };
+  return { date: data.date, score: data.score, note: data.note, updatedAt: data.updatedAt };
 }
 
 export async function deleteDayRating(date: string): Promise<void> {
-  await api.delete(`/diary/days/${date}`);
+  const user = getCurrentUser();
+  if (!user) throw new Error('not authenticated');
+  await deleteDoc(doc(db, 'lediary-days', `${user.uid}_${date}`));
   invalidateDaysCache();
 }

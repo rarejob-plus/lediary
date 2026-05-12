@@ -1,7 +1,17 @@
 // データレイヤー: 認証時は Firestore SDK 直接、未認証時は mock を返す。
 // 本実装が完了したら mock fallback を削除する想定。
 
-import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
+import {
+  collection,
+  doc,
+  query,
+  where,
+  orderBy,
+  getDocs,
+  getDoc,
+  deleteDoc,
+  writeBatch,
+} from 'firebase/firestore';
 import { db } from '../firebase';
 import { getCurrentUser } from '../auth';
 import { MOCK_ENTRIES, type DiaryEntry, type Mode } from './mock';
@@ -91,6 +101,40 @@ export async function fetchEntry(id: string): Promise<DiaryEntry | undefined> {
   // 一覧から探すことで個別 GET の 404 を避ける
   const entries = await fetchEntries();
   return entries.find((e) => e.id === id);
+}
+
+export async function deleteEntry(id: string): Promise<void> {
+  const user = getCurrentUser();
+  if (!user) throw new Error('not authenticated');
+  await deleteDoc(doc(db, 'lediary-posts', id));
+  invalidateEntriesCache();
+}
+
+// mode 変更は doc ID が mode を含むので copy + delete。content が既にある target には移せない。
+export async function moveEntryMode(fromId: string, toMode: Mode): Promise<{ id: string }> {
+  const user = getCurrentUser();
+  if (!user) throw new Error('not authenticated');
+  if (!['morning', 'lesson', 'diary', 'story'].includes(toMode)) {
+    throw new Error('invalid toMode');
+  }
+  const fromRef = doc(db, 'lediary-posts', fromId);
+  const fromSnap = await getDoc(fromRef);
+  if (!fromSnap.exists()) throw new Error('source not found');
+  const fromData = fromSnap.data() as RawPost;
+  const newId = `${user.uid}_${fromData.date}_${toMode}`;
+  if (newId === fromId) return { id: fromId };
+  const targetRef = doc(db, 'lediary-posts', newId);
+  const targetSnap = await getDoc(targetRef);
+  if (targetSnap.exists()) {
+    const t = targetSnap.data() as RawPost;
+    if (t.contentJp || t.userTranslation) throw new Error('target already has content');
+  }
+  const batch = writeBatch(db);
+  batch.set(targetRef, { ...fromData, mode: toMode, updatedAt: Date.now() });
+  batch.delete(fromRef);
+  await batch.commit();
+  invalidateEntriesCache();
+  return { id: newId };
 }
 
 // エントリ詳細から editor に遷移する際のハンドオフ用バッファ。
