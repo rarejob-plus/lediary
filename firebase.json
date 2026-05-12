@@ -16,8 +16,8 @@
     "rewrites": [
       {
         "source": "/api/**",
-        "function": {
-          "functionId": "api",
+        "run": {
+          "serviceId": "rarejob-plus-api",
           "region": "asia-northeast1"
         }
       },
