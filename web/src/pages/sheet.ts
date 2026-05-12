@@ -1,3 +1,6 @@
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../firebase';
+
 interface VocabItem {
   word: string;
   definition: string;
@@ -24,13 +27,12 @@ export async function renderSheet(root: HTMLElement, id: string): Promise<void> 
     </div>
   `;
   try {
-    const res = await fetch(`/api/diary/lesson-sheet/${encodeURIComponent(id)}`);
-    if (!res.ok) {
+    const snap = await getDoc(doc(db, 'lediary-sheets', id));
+    if (!snap.exists()) {
       root.querySelector('.ls-page')!.innerHTML = '<p class="ls-loading">Lesson sheet not found.</p>';
       return;
     }
-    const data: LessonSheetData = await res.json();
-    drawSheet(root.querySelector('.ls-page')!, data);
+    drawSheet(root.querySelector('.ls-page')!, snap.data() as LessonSheetData);
   } catch (err) {
     console.error('[Sheet]', err);
     root.querySelector('.ls-page')!.innerHTML = '<p class="ls-loading">Failed to load.</p>';

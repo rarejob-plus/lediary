@@ -8,6 +8,9 @@ import { api } from '../api/client';
 import { getCurrentUser, getIdToken } from '../auth';
 import { navigate } from '../router';
 import { enableTextSelectionBookmark, bookmarkPhrase } from '../components/text-selection-bookmark';
+import { correctExpansionAnswer, generateExpansionQuestions, generateLessonSheetContent, generateShareId } from '../llm-diary';
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { db } from '../firebase';
 
 export function renderEntry(root: HTMLElement, id: string): void {
   root.appendChild(renderHeader(null));
@@ -117,12 +120,12 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
     sheetBtn.disabled = true;
     sheetBtn.textContent = '作成中…';
     try {
-      const res = await api.post<{ shareId: string }>('/diary/lesson-sheet', { postId: entry.id });
-      entry.lessonSheetId = res.shareId;
+      const shareId = await createLessonSheet(entry);
+      entry.lessonSheetId = shareId;
       sheetBtn.innerHTML = `${icons.share(14)} シートを開く`;
       sheetBtn.disabled = false;
       invalidateEntriesCache();
-      const url = `https://lediary.web.app/s/${res.shareId}`;
+      const url = `https://lediary.web.app/s/${shareId}`;
       window.open(url, '_blank');
       navigator.clipboard?.writeText(url).catch(() => {});
     } catch (err) {
@@ -483,15 +486,21 @@ function renderExpansionSection(entry: DiaryEntry, bodyEl: HTMLElement): HTMLEle
     btn.disabled = true;
     btn.textContent = '生成中…';
     try {
-      const res = await api.post<{ expansionQuestions: ExpansionQ[] }>('/diary/expand', {
-        contentJp: entry.contentJp,
-        userTranslation: entry.userTranslation,
-        date: entry.date,
-        mode: entry.mode,
-      });
-      if (res.expansionQuestions && res.expansionQuestions.length > 0) {
-        questions = res.expansionQuestions;
+      const expansion = await generateExpansionQuestions(entry.contentJp || '', entry.userTranslation || '');
+      if (expansion.length > 0) {
+        // expansion を ExpansionQ 形状に合わせる (hintJa が ExpansionQ にあるかは型次第なので最小マッピング)
+        questions = expansion.map((q) => ({
+          question: q.question,
+          hintJa: '',
+          hintPhrases: q.hintPhrases,
+          afterSentence: q.afterSentence,
+        }));
         entry.expansionQuestions = questions;
+        // 保存も client から
+        await updateDoc(doc(db, 'lediary-posts', entry.id), {
+          expansionQuestions: questions,
+          updatedAt: Date.now(),
+        });
         invalidateEntriesCache();
         rerender();
       } else {
@@ -540,12 +549,12 @@ function renderExpansionSection(entry: DiaryEntry, bodyEl: HTMLElement): HTMLEle
       submitBtn.disabled = true;
       submitBtn.textContent = '添削中…';
       try {
-        const res = await api.post<{ corrected: string; explanation: string }>('/diary/correct-answer', {
-          question: q.question,
+        const res = await correctExpansionAnswer(
+          q.question,
           answer,
-          diaryContext: entry.userTranslation,
-          afterSentence: q.afterSentence,
-        });
+          entry.userTranslation || '',
+          q.afterSentence || '',
+        );
         const corrected = res.corrected || answer;
         const explanation = res.explanation || '';
         result.innerHTML = `
@@ -613,4 +622,35 @@ function iconFor(name: 'sun' | 'graduation' | 'moon' | 'bookOpen'): string {
 
 function escapeHtml(s: string | undefined | null): string {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+}
+
+// 旧 POST /api/diary/lesson-sheet 相当: LLM 生成 → lediary-sheets に保存 → diary post に id 反映。
+async function createLessonSheet(entry: DiaryEntry): Promise<string> {
+  const user = getCurrentUser();
+  if (!user) throw new Error('not authenticated');
+  // 元 post をクライアントから取り直して、(corrected text や vocab の) 最新値を使う
+  const postSnap = await getDoc(doc(db, 'lediary-posts', entry.id));
+  if (!postSnap.exists()) throw new Error('post not found');
+  const post = postSnap.data() as Record<string, unknown>;
+  const contentJp = (post.contentJp as string) || '';
+  const correctedText = (post.userTranslation as string) || '';
+  const vocab = (post.vocabulary as { word: string; definition: string; example: string }[]) || [];
+
+  const sheet = await generateLessonSheetContent(contentJp, correctedText, vocab);
+  const shareId = generateShareId();
+  await setDoc(doc(db, 'lediary-sheets', shareId), {
+    shareId,
+    userId: user.uid,
+    postId: entry.id,
+    title: sheet.title,
+    articleBody: correctedText,
+    contentJp,
+    vocabulary: sheet.vocabulary,
+    discussionTopics: sheet.discussionTopics,
+    date: (post.date as string) || '',
+    mode: (post.mode as string) || 'diary',
+    createdAt: Date.now(),
+  });
+  await updateDoc(doc(db, 'lediary-posts', entry.id), { lessonSheetId: shareId });
+  return shareId;
 }

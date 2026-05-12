@@ -9,6 +9,10 @@ import { api } from '../api/client';
 import { getCurrentUser } from '../auth';
 import { navigate } from '../router';
 import { enableTextSelectionBookmark } from '../components/text-selection-bookmark';
+import { callLLM } from '../llm';
+import { flowCheck } from '../llm-diary';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { db } from '../firebase';
 
 interface HintItem { english: string; japanese: string; note?: string; }
 
@@ -461,13 +465,80 @@ async function loadExisting(date: string, mode: Mode) {
   return fetchEntry(id);
 }
 
+// 旧サーバプロンプトをそのまま移植 — 表現は触らない。
+const HINTS_SYSTEM_PROMPT = `You are an English writing coach helping a Japanese learner translate their diary into natural English.
+Given a Japanese diary entry, suggest the MINIMUM SET of English building blocks the learner needs to write their own translation.
+
+Critical rules — stay strictly within the user's text:
+- Each hint MUST correspond to a specific word, phrase, or idea that ACTUALLY APPEARS in the Japanese diary. The "japanese" field must be a quote (or near-paraphrase) of part of the user's text.
+- Do NOT add expressions that "would sound nice" but are not needed to translate what the user wrote. For example, if the diary does not say "わくわく" or similar, do NOT suggest "excited to". If it does not say "いよいよ" / "ようやく", do NOT suggest "finally".
+- Skip basic vocabulary the learner already knows (family, today, go, start, etc.). Focus on the words/phrases most likely to trip up an intermediate Japanese learner: idiomatic expressions, casual connectors, collocations, less-obvious verbs.
+- If the diary is short and uses only common vocabulary, return very few items (even 2-3 is fine). Quantity should scale with the diary's content, not a fixed target.
+- Each Japanese concept/phrase should appear only ONCE — no synonyms for the same idea.
+- Do NOT provide a full translation — just the building blocks.
+
+Style:
+- Match the tone and casualness of the original Japanese diary.
+- Always show expressions in their base/dictionary form (e.g. "feel under the weather" not "feeling under the weather", "hit up" not "hit up a restaurant").
+
+Tone: casual, like a friend. Avoid stiff/formal English unless the Japanese is clearly formal.
+
+Return a JSON array (typically 2-8 items, no upper requirement — just enough to cover the parts the learner might struggle with):
+[
+  {"japanese": "日本語の部分/概念（必ずユーザー文中の言葉）", "english": "対応する英語表現", "note": "使い方の補足（日本語、1文）"}
+]
+
+Return ONLY the JSON array, no markdown fences or extra text.`;
+
+function parseHintsJsonArray(raw: string): HintItem[] {
+  let s = raw.trim();
+  // ```json ... ``` フェンス除去
+  s = s.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+  // 文字列内に紛れた配列を抽出 (LLM が前後に話を入れた場合の保険)
+  const first = s.indexOf('[');
+  const last = s.lastIndexOf(']');
+  if (first >= 0 && last > first) s = s.slice(first, last + 1);
+  const parsed = JSON.parse(s);
+  if (!Array.isArray(parsed)) throw new Error('not an array');
+  return parsed as HintItem[];
+}
+
+async function generateHintsClient(contentJp: string): Promise<HintItem[]> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const response = await callLLM(HINTS_SYSTEM_PROMPT, contentJp);
+      return parseHintsJsonArray(response);
+    } catch (err) {
+      console.warn(`[generateHints] parse failure attempt ${attempt + 1}:`, err);
+    }
+  }
+  return [];
+}
+
 async function loadHints(contentJp: string, date: string, mode: Mode): Promise<HintItem[]> {
-  if (!getCurrentUser()) {
+  const user = getCurrentUser();
+  if (!user) {
     await new Promise((r) => setTimeout(r, 350));
     return SAMPLE_HINTS;
   }
-  const res = await api.post<{ hints: HintItem[] }>('/diary/hints', { contentJp, date, mode });
-  return res.hints || [];
+  const hints = await generateHintsClient(contentJp);
+  // 旧サーバ実装と同じく lediary-posts に merge 保存。createdAt は新規作成時のみ書く
+  // (merge:true でも明示フィールドは上書きされるので、既存 doc では含めない)。
+  const docID = `${user.uid}_${date}_${mode}`;
+  const ref = doc(db, 'lediary-posts', docID);
+  const existing = await getDoc(ref);
+  const now = Date.now();
+  const payload: Record<string, unknown> = {
+    userId: user.uid,
+    contentJp,
+    mode,
+    date,
+    hints,
+    updatedAt: now,
+  };
+  if (!existing.exists()) payload.createdAt = now;
+  await setDoc(ref, payload, { merge: true });
+  return hints;
 }
 
 interface RawAnalysisResponse {
@@ -491,18 +562,13 @@ async function loadFeedback(contentJp: string, userTranslation: string, date: st
   return res.feedback || [];
 }
 
-interface FlowCheckResponse {
-  suggestions?: { between: string; suggestion: string; revised: string; reason: string }[];
-  overall?: string;
-}
-
 async function loadFlowCheck(text: string): Promise<FeedbackItem[]> {
   if (!getCurrentUser()) {
     await new Promise((r) => setTimeout(r, 600));
     return SAMPLE_FEEDBACK;
   }
-  const res = await api.post<FlowCheckResponse>('/diary/flow-check', { text });
-  return (res.suggestions || []).map((s) => ({
+  const res = await flowCheck(text);
+  return res.suggestions.map((s) => ({
     original: s.between,
     corrected: s.revised,
     explanation: `${s.suggestion} — ${s.reason}`,
