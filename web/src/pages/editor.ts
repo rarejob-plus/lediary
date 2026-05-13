@@ -191,7 +191,10 @@ export function renderEditor(root: HTMLElement): void {
 
   const actionRow = document.createElement('div');
   actionRow.className = 'compose-action-row';
-  actionRow.innerHTML = `<button class="btn btn-primary" id="correct-btn">添削してもらう</button>`;
+  actionRow.innerHTML = `
+    <button class="btn btn-primary" id="correct-btn">添削してもらう</button>
+    <button class="btn" id="save-btn" style="display:none;">${icons.check(14)} 完成</button>
+  `;
   right.appendChild(actionRow);
 
   const correctionSection = document.createElement('div');
@@ -321,6 +324,32 @@ export function renderEditor(root: HTMLElement): void {
     enableTextSelectionBookmark(correctionSection);
   }
 
+  actionRow.querySelector('#save-btn')!.addEventListener('click', async () => {
+    if (submitting) return;
+    const jp = (jpBlock.querySelector('#jp-input') as HTMLTextAreaElement).value;
+    const en = (enBlock.querySelector('#en-input') as HTMLTextAreaElement).value;
+    const user = getCurrentUser();
+    if (!user) {
+      navigate('/');
+      return;
+    }
+    const btn = actionRow.querySelector('#save-btn') as HTMLButtonElement;
+    submitting = true;
+    btn.disabled = true;
+    btn.textContent = '保存中…';
+    try {
+      await savePostTextOnly({ contentJp: jp, userTranslation: en, date: dateStr, mode: currentMode });
+      navigate(`/entry/${user.uid}_${dateStr}_${currentMode}`);
+    } catch (err) {
+      console.error(err);
+      alert('保存に失敗しました');
+      btn.disabled = false;
+      btn.textContent = `${icons.check(14)} 完成`;
+    } finally {
+      submitting = false;
+    }
+  });
+
   actionRow.querySelector('#correct-btn')!.addEventListener('click', async () => {
     if (submitting) return;
     const jp = (jpBlock.querySelector('#jp-input') as HTMLTextAreaElement).value.trim();
@@ -333,6 +362,8 @@ export function renderEditor(root: HTMLElement): void {
     submitting = true;
     btn.disabled = true;
     btn.textContent = '添削中…';
+    // 添削カード側に完成ボタンが出るので、inline の保存ボタンは隠す
+    (actionRow.querySelector('#save-btn') as HTMLButtonElement).style.display = 'none';
     // どうせ新しい結果で上書きするので、リクエスト中は古いカードを残さない
     currentFeedback = [];
     rewrites = [];
@@ -373,6 +404,7 @@ export function renderEditor(root: HTMLElement): void {
     const btn = actionRow.querySelector('#correct-btn') as HTMLButtonElement;
     btn.disabled = true;
     btn.textContent = '流れを確認中…';
+    (actionRow.querySelector('#save-btn') as HTMLButtonElement).style.display = 'none';
     // 前回の結果はクリアして処理中表示に切り替え
     currentFeedback = [];
     rewrites = [];
@@ -402,6 +434,7 @@ export function renderEditor(root: HTMLElement): void {
   let initialLoad = true;
 
   function applyEntry(entry: ReturnType<typeof takeStashedEntry> | Awaited<ReturnType<typeof loadExisting>>): void {
+    const saveBtn = actionRow.querySelector('#save-btn') as HTMLButtonElement;
     // モードに紐づく既存エントリがなければ全部リセット
     if (!entry) {
       (jpBlock.querySelector('#jp-input') as HTMLTextAreaElement).value = '';
@@ -410,22 +443,20 @@ export function renderEditor(root: HTMLElement): void {
       rewrites = [];
       revealed = [];
       correctionSection.innerHTML = '';
+      saveBtn.style.display = 'none';
       return;
     }
     (jpBlock.querySelector('#jp-input') as HTMLTextAreaElement).value = entry.contentJp;
     (enBlock.querySelector('#en-input') as HTMLTextAreaElement).value = entry.userTranslation;
-    if (entry.feedback?.length) {
-      feedbackKind = 'correct';
-      currentFeedback = entry.feedback;
-      rewrites = [];
-      revealed = [];
-      renderCorrection();
-    } else {
-      currentFeedback = [];
-      rewrites = [];
-      revealed = [];
-      correctionSection.innerHTML = '';
-    }
+    // 既存エントリの過去添削は再表示しない。ユーザが必要なら「もう一度添削」を選ぶ。
+    // 編集モードでは 完成 ボタンを露出して直接保存できるようにする。
+    currentFeedback = [];
+    rewrites = [];
+    revealed = [];
+    correctionSection.innerHTML = '';
+    // 添削/流れ整理経由なら、それぞれの「完成」がカード側にあるので inline 保存は不要
+    const wantsCorrection = action === 'correct' || action === 'flow';
+    saveBtn.style.display = entry.userTranslation && !wantsCorrection ? '' : 'none';
     if (initialLoad) {
       initialLoad = false;
       if (action === 'flow' && entry.userTranslation) {
