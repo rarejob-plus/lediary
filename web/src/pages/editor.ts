@@ -250,12 +250,12 @@ export function renderEditor(root: HTMLElement): void {
           </div>
           <div class="correction-explanation">${escapeHtml(fb.explanation)}</div>
           <div class="correction-rewrite-label">自分で書き直す</div>
-          <textarea class="correction-rewrite" data-idx="${i}" placeholder="ヒントだけで書き直してみよう">${escapeHtml(rewrites[i] || '')}</textarea>
+          <textarea name="correction-rewrite-${i}" class="correction-rewrite" data-idx="${i}" placeholder="ヒントだけで書き直してみよう">${escapeHtml(rewrites[i] || '')}</textarea>
         ` : `
           <div class="correction-corrected">${escapeHtml(fb.corrected)}</div>
           <div class="correction-explanation">${escapeHtml(fb.explanation)}</div>
           <div class="correction-rewrite-label">自分で書き直す</div>
-          <textarea class="correction-rewrite" data-idx="${i}" placeholder="${stoic ? 'ヒントだけで書き直してみよう' : '参考にして書き直してみよう'}">${escapeHtml(rewrites[i] || '')}</textarea>
+          <textarea name="correction-rewrite-${i}" class="correction-rewrite" data-idx="${i}" placeholder="${stoic ? 'ヒントだけで書き直してみよう' : '参考にして書き直してみよう'}">${escapeHtml(rewrites[i] || '')}</textarea>
         `}
       `;
       const veil = card.querySelector('.stoic-veil') as HTMLElement | null;
@@ -463,30 +463,16 @@ async function loadExisting(date: string, mode: Mode) {
   return fetchEntry(id);
 }
 
-// 旧サーバプロンプトをそのまま移植 — 表現は触らない。
-const HINTS_SYSTEM_PROMPT = `You are an English writing coach helping a Japanese learner translate their diary into natural English.
-Given a Japanese diary entry, suggest the MINIMUM SET of English building blocks the learner needs to write their own translation.
+const HINTS_SYSTEM_PROMPT = `Give the MINIMUM English building blocks a Japanese learner needs to translate their diary themselves. Do NOT translate the whole thing.
 
-Critical rules — stay strictly within the user's text:
-- Each hint MUST correspond to a specific word, phrase, or idea that ACTUALLY APPEARS in the Japanese diary. The "japanese" field must be a quote (or near-paraphrase) of part of the user's text.
-- Do NOT add expressions that "would sound nice" but are not needed to translate what the user wrote. For example, if the diary does not say "わくわく" or similar, do NOT suggest "excited to". If it does not say "いよいよ" / "ようやく", do NOT suggest "finally".
-- Skip basic vocabulary the learner already knows (family, today, go, start, etc.). Focus on the words/phrases most likely to trip up an intermediate Japanese learner: idiomatic expressions, casual connectors, collocations, less-obvious verbs.
-- If the diary is short and uses only common vocabulary, return very few items (even 2-3 is fine). Quantity should scale with the diary's content, not a fixed target.
-- Each Japanese concept/phrase should appear only ONCE — no synonyms for the same idea.
-- Do NOT provide a full translation — just the building blocks.
+Each hint must map to a word/phrase that actually appears in the Japanese. Skip basics (family, today, go) — focus on idiomatic expressions, casual connectors, collocations, tricky verbs. Each Japanese concept once, no synonyms. Short diary → few hints (2-3 is fine).
 
-Style:
-- Match the tone and casualness of the original Japanese diary.
-- Always show expressions in their base/dictionary form (e.g. "feel under the weather" not "feeling under the weather", "hit up" not "hit up a restaurant").
+Show English in base/dictionary form ("feel under the weather", not "feeling..."). Match the tone (casual = casual, formal = formal). Never add expressions the diary doesn't call for.
 
-Tone: casual, like a friend. Avoid stiff/formal English unless the Japanese is clearly formal.
+Return JSON array (2-8 items typical):
+[{"japanese":"diaryからの該当語/概念","english":"対応表現","note":"使い方の補足(日本語1文)"}]
 
-Return a JSON array (typically 2-8 items, no upper requirement — just enough to cover the parts the learner might struggle with):
-[
-  {"japanese": "日本語の部分/概念（必ずユーザー文中の言葉）", "english": "対応する英語表現", "note": "使い方の補足（日本語、1文）"}
-]
-
-Return ONLY the JSON array, no markdown fences or extra text.`;
+Return ONLY the JSON array.`;
 
 function parseHintsJsonArray(raw: string): HintItem[] {
   let s = raw.trim();

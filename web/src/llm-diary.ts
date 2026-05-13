@@ -17,12 +17,27 @@ function parseJsonObject<T>(content: string): T {
   if (!match) throw new Error('No JSON object found in LLM response');
   try {
     return JSON.parse(match[0]);
-  } catch {
+  } catch (firstErr) {
     const fixed = match[0]
       .replace(/,\s*([}\]])/g, '$1')
       .replace(/[“”]/g, '"')
       .replace(/[‘’]/g, "'");
-    return JSON.parse(fixed);
+    try {
+      return JSON.parse(fixed);
+    } catch (secondErr) {
+      // デバッグ用: position 周辺を切り出してエラーに添える
+      const posMatch = /position (\d+)/.exec(String((firstErr as Error)?.message ?? ''));
+      const pos = posMatch ? Number(posMatch[1]) : -1;
+      const src = match[0];
+      const snippet = pos >= 0
+        ? `…${src.slice(Math.max(0, pos - 60), pos)}⟪HERE⟫${src.slice(pos, pos + 60)}…`
+        : src.slice(0, 200);
+      const err = new Error(
+        `parseJsonObject failed: ${(firstErr as Error)?.message}\n  context: ${snippet}`,
+      );
+      (err as Error & { raw?: string }).raw = src;
+      throw err;
+    }
   }
 }
 
@@ -138,30 +153,17 @@ export async function generateExpansionQuestions(
   contentJp: string,
   userTranslation: string,
 ): Promise<ExpansionQuestion[]> {
-  const systemPrompt = `You are an expert English writing coach for Japanese learners.
-Generate 3 follow-up questions to help the user expand their English diary entry with more detail.
+  const systemPrompt = `Generate exactly 3 5W1H follow-up questions to expand a Japanese learner's English diary.
 
-Return a JSON object:
-{
-  "expansionQuestions": [
-    {
-      "question": "A 5W1H question to expand a specific part of the diary (Why/How/What/When/Where/Who)",
-      "hintPhrases": ["useful English phrase for answering", "another helpful expression"],
-      "afterSentence": "The user's sentence after which the answer should be inserted (exact match from the translation)"
-    }
-  ]
-}
+Return JSON:
+{"expansionQuestions":[{"question":"...","hintPhrases":["...","..."],"afterSentence":"exact match from user's English"}]}
 
-Rules:
-- Generate exactly 3 questions that dig deeper into SPECIFIC parts of the diary using 5W1H.
-- Each question should target a sentence that could be expanded with more detail.
-- "afterSentence" must exactly match one of the user's sentences.
-- "hintPhrases" should contain 2-3 useful English phrases/collocations the learner can use to answer.
-- Questions should be different from what might have been asked before — look for unexplored angles.
+- Each question targets a specific sentence worth expanding.
+- afterSentence must exactly match one of the user's English sentences.
+- hintPhrases: 2-3 casual English phrases the learner can use.
+- ${CASUAL_TONE_RULE}
 
-${CASUAL_TONE_RULE}
-
-Return ONLY the JSON object, no markdown fences or extra text.`;
+Return ONLY JSON.`;
 
   const userMessage = `Japanese diary:\n${contentJp || ''}\n\nUser's English translation:\n${userTranslation}`;
   return withRetry('generateExpansionQuestions', async () => {
@@ -179,21 +181,13 @@ export async function correctExpansionAnswer(
   diaryContext: string,
   afterSentence: string,
 ): Promise<CorrectAnswerResult> {
-  const systemPrompt = `You are an English writing coach. The user is answering a follow-up question about their diary entry. The corrected answer will be INSERTED into the diary RIGHT AFTER the sentence "${afterSentence || '(unknown)'}".
+  const systemPrompt = `Correct the user's answer so it slots naturally after "${afterSentence || '(unknown)'}" in their diary.
 
-Your job: produce a "corrected" version that (1) is natural casual spoken English, (2) preserves the user's meaning and content, and (3) flows naturally from the preceding sentence — adding a minimal connector ONLY when the raw sentence would feel abrupt.
+Goal: natural casual spoken English, keep the user's meaning. Add a light casual connector (Actually / Plus / Honestly / The thing is / On top of that / Because / And) ONLY when the answer would feel abrupt; if it already flows (e.g. starts with It/We/That referencing context), leave the start alone. No formal connectors (Furthermore / Moreover / Therefore).
 
-CONNECTOR POLICY (critical):
-- If the user's answer already starts with words that flow from the preceding sentence (e.g., it has its own pronoun referring to the previous topic, or starts with "It" / "We" / "That" referencing context), DO NOT add a connector. Leave the start untouched.
-- If the answer is a bare standalone sentence that would sound abrupt next to the previous one, prepend ONE short, natural connector that fits the relationship: "Actually," / "Plus," / "Honestly," / "What I loved was" / "The thing is," / "On top of that," / "Especially since" / "Because" / "And" — choose based on the LOGICAL relationship between the previous sentence and this answer.
-- NEVER add formal connectors like "Furthermore", "Moreover", "Additionally", "Therefore". Use the casual list above.
-- The connector must feel light, not forced. If you can't think of one that adds genuine flow, just leave it without one.
-
-Return a JSON object:
-{"corrected": "the corrected sentence (with connector if needed)", "explanation": "日本語で簡潔に修正理由（修正なしなら空文字、接続詞を足した場合はその意図も書く）"}
+Return JSON: {"corrected":"...","explanation":"日本語で簡潔に。修正なし→空文字。接続詞追加→その意図も書く"}
 
 ${CASUAL_TONE_RULE}
-
 Return ONLY JSON.`;
 
   const userMessage = `Preceding sentence (the answer will go right after this):\n${afterSentence || '(no preceding sentence)'}\n\nFull diary context: ${diaryContext || ''}\n\nQuestion that prompted the answer: ${question || ''}\n\nUser's answer: ${answer}`;
@@ -208,32 +202,17 @@ Return ONLY JSON.`;
 export async function flowCheck(text: string): Promise<FlowCheckResult> {
   const sentences = splitIntoSentences(text);
 
-  const systemPrompt = `You are an English writing coach helping a Japanese learner improve the flow and cohesion of their diary entry.
-Analyze how the sentences connect to each other. Focus ONLY on transitions and connections between sentences — not grammar or vocabulary.
+  const systemPrompt = `Check the flow between numbered English sentences. Suggest transition fixes only — not grammar/vocab.
 
-Return a JSON object:
-{
-  "suggestions": [
-    {
-      "sentenceIndex": "1-based integer pointing to ONE sentence from the numbered list — the sentence WHERE the change actually happens (usually the one that needs a transition word added/replaced/removed at its start)",
-      "suggestion": "日本語で『何をどうするか』を簡潔に。挿入なら『〜の前に Actually を入れる』、置換なら『Anyway を Since に置き換える』、削除なら『Anyway を取り除く』のように、英単語/句以外は日本語で書く",
-      "revised": "the rewritten version of THAT ONE sentence (sentenceIndex) — same scope, do NOT include adjacent sentences",
-      "reason": "日本語で『なぜそうすべきか』を簡潔に"
-    }
-  ],
-  "overall": "日本語で全体の流れについて一言コメント（良い場合は褒める）"
-}
+Return JSON:
+{"suggestions":[{"sentenceIndex":N,"suggestion":"日本語で『何をどうするか』(例:『Anyway を Since に置き換える』)","revised":"that sentence rewritten, ≤1.5× length","reason":"日本語でなぜ"}],"overall":"日本語で全体の流れコメント"}
 
-Rules:
-- Return 0-3 suggestions. If the text flows well, return empty suggestions array with a positive overall comment.
-- sentenceIndex MUST be a valid 1-based index from the numbered list below. NEVER invent one out of range.
-- The numbered list and "[N]" notation are INTERNAL only. NEVER mention "[1]", "[2]" etc., or words like "sentenceIndex" / "the second sentence" / "[3]で具体例が続く", in "suggestion" / "reason" / "overall". Describe the change naturally in Japanese without referencing the index notation.
-- "revised" rewrites THAT ONE numbered sentence ONLY. NEVER pull in content from neighboring sentences. Length should stay within ~1.5x of the source sentence.
-- "suggestion" must be a Japanese description of the change. English words inside (Anyway, Since, etc.) should remain in English, but the verb must be Japanese (置き換える/入れる/取り除く).
-
-${CASUAL_TONE_RULE}
-
-- Return ONLY JSON.`;
+- 0-3 suggestions. Flows well → empty array + positive overall.
+- sentenceIndex = 1-based from the list. Invalid → skip.
+- revised rewrites THAT ONE sentence only, no neighbors pulled in.
+- Don't write "[N]"/"sentenceIndex"/"the second sentence" in any Japanese field.
+- ${CASUAL_TONE_RULE}
+Return ONLY JSON.`;
 
   const userMessage = sentences.length > 0
     ? `User's English sentences (numbered — refer to these by sentenceIndex):\n${sentences.map((s, i) => `[${i + 1}] ${s}`).join('\n')}`
@@ -284,34 +263,16 @@ export async function generateLessonSheetContent(
   correctedText: string,
   vocabulary: LessonSheetVocab[],
 ): Promise<LessonSheet> {
-  const systemPrompt = `You are creating lesson material for an online English conversation lesson, formatted like a RareJob Weekly News Article (WNA).
-The material is based on a student's diary entry. The student wrote in Japanese, then translated to English with AI correction.
+  const systemPrompt = `Make RareJob WNA-style lesson material from a student's diary (JP + corrected EN) for a 25-min English conversation lesson.
 
-Return a JSON object with the EXACT same structure as a WNA material:
-{
-  "title": "A short, engaging title for this lesson (like a news article headline)",
-  "vocabulary": [
-    { "word": "key phrase or expression", "definition": "simple English definition", "example": "example sentence using the word" }
-  ],
-  "discussionTopics": [
-    {
-      "topic": "Topic heading (e.g., About the Diary, Going Deeper, Your Opinion)",
-      "questions": ["Discussion question 1", "Discussion question 2"]
-    }
-  ]
-}
+Return JSON:
+{"title":"catchy article-style headline","vocabulary":[{"word":"...","definition":"simple English def","example":"natural sentence"}],"discussionTopics":[{"topic":"heading","questions":["...","..."]}]}
 
-Rules:
-- "title": Create a catchy, article-style title based on the diary content (e.g., "A Quiet Lunch at a Traditional Japanese Cafe")
-- "vocabulary": Pick 4-6 useful words/phrases from the diary or its corrections. Each needs a clear English definition and a natural example sentence.
-- "discussionTopics": Create exactly 2 topic groups with 2-3 questions each. IMPORTANT: Do NOT ask factual questions whose answers are already in the diary (e.g., "How many times did you practice?"). Instead, use the diary as a springboard for broader, opinion-based discussion. Questions should be about the TOPICS and THEMES in the diary, not about the diary itself. Good example: diary mentions practicing English 3 times → ask "How often do you think someone should practice writing to improve?" or "What's the best way to build a daily study habit?". Order from easier to harder.
-- All content must be in English only (the tutor does not speak Japanese)
-- Discussion questions should feel natural for a 25-minute conversation lesson
-- The diary text itself will be shown as the "Article" section, so do NOT include it in the JSON
-
-${CASUAL_TONE_RULE}
-
-Return ONLY the JSON object.`;
+- title: article headline, English.
+- vocabulary: 4-6 useful items from the diary/corrections. English everywhere (tutor doesn't read Japanese).
+- discussionTopics: exactly 2 groups × 2-3 questions, easier→harder. Use diary as a springboard for opinion/theme questions; do NOT ask factual questions whose answers are already in the diary.
+- Do NOT include the diary text itself (it's shown elsewhere as the "Article" section).
+Return ONLY JSON.`;
 
   const userMessage = `Student's diary (Japanese):\n${contentJp}\n\nStudent's English text (corrected):\n${correctedText}\n\nVocabulary learned:\n${vocabulary.map((v) => `${v.word}: ${v.definition}`).join('\n')}`;
   return withRetry('generateLessonSheetContent', async () => {
@@ -339,81 +300,35 @@ export async function analyzeDiary(
   const attemptCount = opts.attemptCount ?? 1;
   const skipMoodAndCover = opts.skipMoodAndCover ?? false;
 
-  let levelInstruction: string;
-  if (attemptCount <= 1) {
-    levelInstruction = `CORRECTION LEVEL: Basic — Focus on clear grammatical errors, wrong tenses, missing articles, incorrect prepositions, and obviously unnatural phrasing. Do NOT nitpick style or suggest minor improvements.
-Also check for abrupt topic transitions. When the diary jumps between unrelated topics without a connecting phrase, suggest adding a natural transition such as: "Anyway, on a different note,", "As for my day,", "Moving on,", "On the other hand,", "In contrast,". Choose the appropriate transition based on context — use contrast phrases ("In contrast," "On the other hand,") when the topics have an inherent contrast, and topic-shift phrases ("Anyway,", "On a different note,") when they are simply unrelated.`;
-  } else if (attemptCount === 2) {
-    levelInstruction = `CORRECTION LEVEL: Intermediate — The user has already fixed basic errors. Now focus on more natural phrasing, better word choices, and idiomatic expressions. Suggest ways to sound less textbook and more conversational.`;
-  } else {
-    levelInstruction = `CORRECTION LEVEL: Advanced — The user has already improved grammar and naturalness. Now focus on native-level refinement: varied sentence rhythm, precise vocabulary, expressive phrasing, and stylistic polish.`;
-  }
+  // 添削レベル — Basic は文法/不自然さ重視、Intermediate は自然さ、Advanced は仕上げ。
+  const levelMap: Record<number, string> = {
+    1: 'Level: Basic. Fix clear grammar/article/preposition errors and unnatural phrasing. Also add transitions ("Anyway,", "On a different note,") when topics jump abruptly.',
+    2: 'Level: Intermediate. Polish phrasing and word choice; sound conversational, not textbook.',
+    3: 'Level: Advanced. Native-level polish — rhythm, precise vocab, stylistic flourish.',
+  };
+  const levelInstruction = levelMap[Math.min(Math.max(attemptCount, 1), 3)]!;
 
-  const systemPrompt = `You are an expert English writing coach for Japanese learners preparing for RareJob online English lessons.
-Your task is to analyze a short Japanese diary entry (typically 3 lines) and the user's attempted English translation.
+  const systemPrompt = `You are an English coach for a Japanese learner. Analyze their Japanese diary + English translation.
 
 ${levelInstruction}
+Tone: casual English like a friend texting (no textbook/formal). Japanese fields use polite ですます調.
 
-${CASUAL_TONE_RULE}
-
-Return a JSON object with exactly these fields:
+Return JSON:
 {
-  "feedback": [
-    {
-      "sentenceIndex": "1-based integer pointing to a single entry in the 'User's English sentences' list below",
-      "corrected": "the corrected version of THAT ONE sentence",
-      "explanation": "日本語で、なぜ添削後の方が良いかを具体的に説明。両方の表現のニュアンスの違い（どういう場面で使われるか、どういう印象を与えるか）を含めること"
-    }
-  ],
-  "vocabulary": [
-    {
-      "word": "a useful word or phrase from the refined translation",
-      "definition": "concise definition in Japanese",
-      "example": "a natural example sentence using the word"
-    }
-  ]${skipMoodAndCover ? '' : `,
-  "mood": "ONE evocative English word capturing the dominant feeling of the day (e.g., 'buoyant', 'calm', 'accomplished', 'restless', 'focused', 'introspective', 'excited', 'cozy', 'frustrated', 'hopeful', 'grateful', 'peaceful', 'nostalgic', 'energized')",
-  "coverKeyword": "1-3 English words describing a CONCRETE VISUAL SUBJECT from the diary, suitable for a stock-photo search (e.g., 'cherry blossoms', 'morning coffee', 'jogging park', 'rainy window'). Prefer concrete physical things over abstract concepts."`}
+  "feedback": [{"sentenceIndex": N, "corrected": "...", "explanation": "日本語でニュアンス差を簡潔に"}],
+  "vocabulary": [{"word": "...", "definition": "日本語", "example": "..."}]${skipMoodAndCover ? '' : `,
+  "mood": "ONE lowercase English word (calm/excited/cozy/buoyant/restless/focused 等)",
+  "coverKeyword": "1-3 English words for a stock photo. Bias toward Japan (japanese/tokyo/ramen/sakura/konbini/izakaya 等). Concrete subjects, bright not dark."`}
 }
 
 Rules:
-- feedback: Compare the user's English translation sentence by sentence against natural English standards and suggest corrections appropriate to the CORRECTION LEVEL above.
+- feedback.sentenceIndex = 1-based index from the numbered list below. Invalid index → drop.
+- corrected rewrites THAT ONE sentence only, ≤1.5× source length. Don't quote-back the source unchanged.
+- If a sentence is already natural, omit it. Empty array is fine. One feedback per index; combine multiple fixes.
+- Don't reference "[N]"/"sentenceIndex"/"the second sentence" inside explanation.
+- vocabulary: 3-5 items, each must appear in your corrected text.
 
-  CRITICAL — sentence-index based feedback:
-  * The user's English has already been split into numbered sentences in the "User's English sentences" section below. Each feedback item points to ONE of those sentences via its 1-based index.
-  * "sentenceIndex" MUST be an integer that exists in that list (1..N). NEVER invent an index outside the range.
-  * The numbered list and "[N]" notation are INTERNAL only — for you to refer to sentences by their index. NEVER mention "[1]", "[2]", "[3]" etc., or words like "sentenceIndex" / "sentence 2" / "the second sentence", in the "explanation" field shown to the user. Explanations must describe the change naturally in Japanese without referencing the index notation.
-  * "corrected" MUST be a rewrite of THAT ONE sentence ONLY. It is a sentence — typically a single one. NEVER include text from adjacent numbered sentences. NEVER add lead-in clauses from the previous sentence or trail-out clauses from the next sentence.
-  * "corrected" is NOT an English translation of the Japanese diary — it is a polished version of the user's existing sentence.
-  * "corrected" length should be roughly comparable to the source sentence — within ~1.5x. If you want to write much more than that, you are over-rewriting; trim.
-  * If the user's English is empty or no sentences are listed, return an empty feedback array [].
-  * If a numbered "sentence" is actually Japanese (the user left a placeholder), SKIP it — do NOT include it in feedback.
-
-  For each valid feedback item:
-  - "sentenceIndex": which numbered sentence you're correcting.
-  - "corrected": the FULL improved version of that one sentence — same scope.
-  - "explanation": Japanese text explaining WHY the corrected version is better — specifically describe the nuance difference between the two expressions (e.g., when each would be used, what impression each gives, what subtle meaning differs).
-
-  All "corrected" sentences MUST follow the TONE RULES above.
-  SELF-CHECK PER ITEM:
-  (1) Is "sentenceIndex" a valid 1-based number that exists in the sentences list? If not, DROP it.
-  (2) Does "corrected" stay within ONE sentence's worth of scope (no content from neighboring numbered sentences)? If it bleeds into other sentences, DROP it.
-  (3) Is "corrected" within ~1.5x the character length of the source sentence? If much longer, you over-rewrote — DROP it or trim back.
-  (4) Is the source sentence written in English (not Japanese)? If it contains Japanese characters as the core of the sentence, DROP it.
-  (5) Is "corrected" MORE casual than the source? If it became stiffer (e.g., "someone I know" → "acquaintance"), DROP it.
-  (6) Is "corrected" actually DIFFERENT from the source? If the only differences are whitespace, punctuation, or capitalization, DROP it. NEVER produce a feedback item where the user's sentence is already correct — only return items where there is a real, meaningful change.
-- If a sentence is already correct and natural, omit it from feedback entirely. An empty feedback array [] is preferred over filler items. Quality > quantity. Do NOT pad the feedback array with no-op items just to "show work".
-- AT MOST ONE feedback item per sentenceIndex. Never produce two feedback items pointing to the same sentenceIndex. If a sentence needs multiple changes, combine them into a single feedback item.
-- vocabulary: Extract 3-5 useful vocabulary items ONLY from expressions used in the "corrected" sentences above. These must be words/phrases that actually appear in your corrections. Do NOT include unrelated vocabulary.${skipMoodAndCover ? '' : `
-- mood: Pick ONE English word that captures the dominant feeling of the diary content (not of the writing quality). Prefer evocative single-word adjectives a learner can actually use in conversation (buoyant / calm / accomplished / restless / focused / introspective / excited / cozy / frustrated / hopeful / grateful / peaceful / nostalgic / energized / wistful / playful / drained / content). ONE single English word only — no phrases, no quotes, no punctuation. lowercase. Even when contentJp is short, always return one mood word.
-- coverKeyword: Pick a SHORT English search phrase (1-3 words) for a stock photo that visually captures the diary's scene.
-  PRIORITIZE PHOTOS WITH A JAPANESE LOOK & FEEL. The user is writing in Japanese about their daily life in Japan, so cover photos should preferably feel grounded in Japan — Japanese homes / streets / food / parks / people / objects — not generic Western stock. To bias the search toward Japanese photos:
-  * When natural, prepend a Japan-specific qualifier or replace generic nouns with Japan-rooted ones: "japanese", "tokyo", "kyoto" / "ramen", "izakaya", "konbini", "sento", "koban", "tatami", "shrine", "sakura", "obento", "washoku", "tonkatsu", "matcha", "soba", "futon", "japanese house" 等.
-  * Generic activity is fine if a Japan-specific term doesn't fit naturally — but lean Japan whenever there's a reasonable choice. E.g. "lunch" → "obento" or "ramen" if that fits; "coffee shop" → "tokyo cafe"; "park" → "japanese park" or "sakura park"; "cinema" → leave as "popcorn cinema" (no natural JP term).
-  Prefer concrete nouns (places, objects, activities) over emotions. AVOID dark, scary, gloomy, horror, or moody subjects — favor bright, warm, daylight, cheerful subjects suitable as a journal cover. If the diary scene is genuinely dark (e.g., night), still pick the most positive concrete element (e.g., "tokyo lights" instead of "dark street").
-  Examples: 「家族でフラワーパークに行く」→ "japanese flower park"; 「朝ジョギングしている」→ "tokyo jogging"; 「カフェで本を読んだ」→ "tokyo cafe book"; 「ラーメン食べた」→ "ramen shop"; 「コンビニ寄った」→ "konbini night"; 「映画を観に行った」→ "popcorn cinema". Always return one keyword.`}
-
-Return ONLY the JSON object, no markdown fences or extra text.`;
+Return ONLY the JSON object.`;
 
   const sentences = userTranslation ? splitIntoSentences(userTranslation) : [];
 
