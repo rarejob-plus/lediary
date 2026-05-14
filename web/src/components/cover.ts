@@ -18,7 +18,13 @@ function bandForHour(hour: number): { l1: number; l2: number; s: number } {
   return { l1: 30, l2: 16, s: 50 };                 // 夜
 }
 
-export function coverFor(mode: Mode, time: string): string {
+export function coverFor(mode: Mode, time: string, imageUrl?: string): string {
+  if (imageUrl) {
+    // 上から下へ薄→濃のオーバーレイで pill / 装飾の可読性を確保
+    // url() はシングルクオート: HTML の style="..." 属性のダブルクオートと衝突しない
+    const safe = imageUrl.replace(/'/g, '%27').replace(/"/g, '%22');
+    return `linear-gradient(180deg, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.55) 100%), url('${safe}') center/cover no-repeat`;
+  }
   const hour = parseInt(time.split(':')[0] ?? '12', 10);
   const hue = HUE_BY_MODE[mode];
   const { l1, l2, s } = bandForHour(isNaN(hour) ? 12 : hour);

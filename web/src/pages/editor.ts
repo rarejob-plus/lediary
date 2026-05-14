@@ -16,25 +16,6 @@ import { analyzeAndSavePost, savePostTextOnly } from '../data/posts';
 
 interface HintItem { english: string; japanese: string; note?: string; }
 
-const SAMPLE_FEEDBACK: FeedbackItem[] = [
-  {
-    original: "I'm head to flower park with my family today!",
-    corrected: "I'm heading to a flower park with my family today!",
-    explanation: '"head" は動詞として進行形 "heading" に。"flower park" は初出なので冠詞 "a" が必要。',
-  },
-  {
-    original: 'Anyway, today marks the start of Golden Week!',
-    corrected: 'And today is finally the start of Golden Week!',
-    explanation: '"Anyway" は話題を変える時に使うので、文脈が続く今回は不自然。',
-  },
-];
-
-const SAMPLE_HINTS: HintItem[] = [
-  { english: 'head to', japanese: '〜へ向かう' },
-  { english: 'mark the start of', japanese: '〜の始まりを告げる' },
-  { english: 'finally', japanese: 'いよいよ、ようやく' },
-];
-
 const STOIC_KEY = 'lediary_v2_stoic';
 
 function todayStr(): string {
@@ -308,7 +289,7 @@ export function renderEditor(root: HTMLElement): void {
         if (user) {
           navigate(`/entry/${user.uid}_${dateStr}_${currentMode}`);
         } else {
-          navigate('/entry/mock_2026-05-02_morning');
+          navigate('/');
         }
       } catch (err) {
         console.error(err);
@@ -532,10 +513,7 @@ async function generateHintsClient(contentJp: string): Promise<HintItem[]> {
 
 async function loadHints(contentJp: string, date: string, mode: Mode): Promise<HintItem[]> {
   const user = getCurrentUser();
-  if (!user) {
-    await new Promise((r) => setTimeout(r, 350));
-    return SAMPLE_HINTS;
-  }
+  if (!user) return [];
   const hints = await generateHintsClient(contentJp);
   // 旧サーバ実装と同じく lediary-posts に merge 保存。createdAt は新規作成時のみ書く
   // (merge:true でも明示フィールドは上書きされるので、既存 doc では含めない)。
@@ -557,19 +535,13 @@ async function loadHints(contentJp: string, date: string, mode: Mode): Promise<H
 }
 
 async function loadFeedback(contentJp: string, userTranslation: string, date: string, mode: Mode): Promise<FeedbackItem[]> {
-  if (!getCurrentUser()) {
-    await new Promise((r) => setTimeout(r, 600));
-    return SAMPLE_FEEDBACK;
-  }
+  if (!getCurrentUser()) return [];
   const res = await analyzeAndSavePost({ contentJp, userTranslation, date, mode });
   return res.feedback || [];
 }
 
 async function loadFlowCheck(text: string): Promise<FeedbackItem[]> {
-  if (!getCurrentUser()) {
-    await new Promise((r) => setTimeout(r, 600));
-    return SAMPLE_FEEDBACK;
-  }
+  if (!getCurrentUser()) return [];
   const res = await flowCheck(text);
   return res.suggestions.map((s) => ({
     original: s.between,

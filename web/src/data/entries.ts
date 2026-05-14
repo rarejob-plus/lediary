@@ -1,5 +1,4 @@
-// データレイヤー: 認証時は Firestore SDK 直接、未認証時は mock を返す。
-// 本実装が完了したら mock fallback を削除する想定。
+// データレイヤー: 認証時は Firestore SDK 直接。未認証時は空配列を返す。
 
 import {
   collection,
@@ -14,7 +13,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { getCurrentUser } from '../auth';
-import { MOCK_ENTRIES, type DiaryEntry, type Mode } from './mock';
+import type { DiaryEntry, Mode } from './mock';
 
 interface RawPost {
   id: string;
@@ -78,7 +77,7 @@ export function invalidateEntriesCache(): void {
 
 export async function fetchEntries(force = false): Promise<DiaryEntry[]> {
   const user = getCurrentUser();
-  if (!user) return MOCK_ENTRIES;
+  if (!user) return [];
   if (!force && cache && Date.now() - cache.fetchedAt < CACHE_TTL_MS) {
     return cache.entries;
   }
@@ -97,7 +96,7 @@ export async function fetchEntries(force = false): Promise<DiaryEntry[]> {
 }
 
 export async function fetchEntry(id: string): Promise<DiaryEntry | undefined> {
-  if (!getCurrentUser()) return MOCK_ENTRIES.find((e) => e.id === id);
+  if (!getCurrentUser()) return undefined;
   // 一覧から探すことで個別 GET の 404 を避ける
   const entries = await fetchEntries();
   return entries.find((e) => e.id === id);

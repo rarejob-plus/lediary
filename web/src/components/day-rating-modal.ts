@@ -41,7 +41,7 @@ export function openDayRatingModal(opts: OpenOptions): void {
         <span class="day-rating-modal-score-label"></span>
       </div>
       <div class="day-rating-modal-dots"></div>
-      <textarea class="day-rating-modal-note" rows="3" placeholder="一言（任意）— なぜこのスコア？"></textarea>
+      <textarea name="day-rating-note" class="day-rating-modal-note" rows="3" placeholder="一言（任意）— なぜこのスコア？"></textarea>
       <div class="day-rating-modal-actions">
         <button class="day-rating-modal-delete" type="button">取り消す</button>
         <button class="day-rating-modal-save" type="button">保存</button>

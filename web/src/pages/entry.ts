@@ -532,7 +532,7 @@ function renderExpansionSection(entry: DiaryEntry, bodyEl: HTMLElement): HTMLEle
       <div class="expansion-q-phrases">
         ${(q.hintPhrases || []).map((p) => `<span class="expansion-q-phrase">${escapeHtml(p)}</span>`).join('')}
       </div>
-      <textarea class="expansion-q-input" placeholder="英語で答えてみよう"></textarea>
+      <textarea name="expansion-answer-${idx}" class="expansion-q-input" placeholder="英語で答えてみよう"></textarea>
       <div class="expansion-q-result" style="display:none;"></div>
       <div style="display:flex;justify-content:flex-end;margin-top:8px;">
         <button class="btn btn-sm expansion-q-submit">添削</button>
