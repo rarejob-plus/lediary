@@ -167,6 +167,11 @@ export async function generateExpansionQuestions(
 
 The numbered sentences below are how the diary currently flows. For each question, pick a slot to INSERT the learner's answer — the slot is "right after sentence [N]". The answer will be sandwiched between sentence [N] and sentence [N+1] (or just appended if [N] is the last). Design the question and hintPhrases so the answer flows naturally with BOTH neighbors — not just the preceding sentence.
 
+CRITICAL — no redundant questions:
+- Do NOT ask about something the diary already explains. If sentence [N+1] (or any other sentence) already answers "why" / "what" / "how", don't ask that question.
+- Aim for genuinely NEW depth: an unstated reason, a feeling not yet voiced, a concrete example/anecdote, a consequence the writer hasn't mentioned, a contrast, sensory detail, or context outside the timeline.
+- Before finalizing each question, re-read the surrounding sentences and confirm the answer is NOT already in the diary.
+
 Return JSON:
 {"expansionQuestions":[{"question":"...","hintPhrases":["...","..."],"afterSentenceIndex":N,"afterSentence":"exact text of sentence [N]","beforeNext":"exact text of sentence [N+1] or empty if appended"}]}
 
