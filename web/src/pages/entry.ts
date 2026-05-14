@@ -376,6 +376,7 @@ interface ExpansionQ {
   hintJa: string;
   hintPhrases: string[];
   afterSentence?: string;
+  beforeNext?: string;
   reflected?: boolean;
   answer?: string;
 }
@@ -494,6 +495,7 @@ function renderExpansionSection(entry: DiaryEntry, bodyEl: HTMLElement): HTMLEle
           hintJa: '',
           hintPhrases: q.hintPhrases,
           afterSentence: q.afterSentence,
+          beforeNext: q.beforeNext,
         }));
         entry.expansionQuestions = questions;
         // 保存も client から
@@ -554,6 +556,7 @@ function renderExpansionSection(entry: DiaryEntry, bodyEl: HTMLElement): HTMLEle
           answer,
           entry.userTranslation || '',
           q.afterSentence || '',
+          q.beforeNext || '',
         );
         const corrected = res.corrected || answer;
         const explanation = res.explanation || '';

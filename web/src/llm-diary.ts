@@ -113,6 +113,9 @@ export interface ExpansionQuestion {
   question: string;
   hintPhrases: string[];
   afterSentence: string;
+  // 挿入先の直後の文 (= afterSentence の次に並ぶ文)。最終文末への挿入では空文字。
+  // LLM がこの 2 文に挟まれた状態を想定して質問と hintPhrases を作る。
+  beforeNext?: string;
 }
 
 export interface FlowSuggestion {
@@ -153,23 +156,59 @@ export async function generateExpansionQuestions(
   contentJp: string,
   userTranslation: string,
 ): Promise<ExpansionQuestion[]> {
+  // 各文を番号付きで渡し、LLM に「どの文の直後に挿入するか」を index で決めさせる。
+  // 同時に直前/直後の文を意識して、挿入時に前後と自然に繋がる質問を作らせる。
+  const sentences = splitIntoSentences(userTranslation || '');
+  const numbered = sentences.length > 0
+    ? sentences.map((s, i) => `[${i + 1}] ${s}`).join('\n')
+    : '(no English sentences yet)';
+
   const systemPrompt = `Generate exactly 3 5W1H follow-up questions to expand a Japanese learner's English diary.
 
-Return JSON:
-{"expansionQuestions":[{"question":"...","hintPhrases":["...","..."],"afterSentence":"exact match from user's English"}]}
+The numbered sentences below are how the diary currently flows. For each question, pick a slot to INSERT the learner's answer — the slot is "right after sentence [N]". The answer will be sandwiched between sentence [N] and sentence [N+1] (or just appended if [N] is the last). Design the question and hintPhrases so the answer flows naturally with BOTH neighbors — not just the preceding sentence.
 
-- Each question targets a specific sentence worth expanding.
-- afterSentence must exactly match one of the user's English sentences.
-- hintPhrases: 2-3 casual English phrases the learner can use.
+Return JSON:
+{"expansionQuestions":[{"question":"...","hintPhrases":["...","..."],"afterSentenceIndex":N,"afterSentence":"exact text of sentence [N]","beforeNext":"exact text of sentence [N+1] or empty if appended"}]}
+
+- Pick 3 distinct slots when possible (different afterSentenceIndex each).
+- afterSentenceIndex MUST be 1..N from the numbered list. afterSentence MUST be the verbatim text of that sentence.
+- beforeNext is sentence [N+1] verbatim, or "" if you chose the last sentence.
+- hintPhrases: 2-3 casual English phrases that work as the OPENING of the answer and don't clash with what follows.
 - ${CASUAL_TONE_RULE}
 
 Return ONLY JSON.`;
 
-  const userMessage = `Japanese diary:\n${contentJp || ''}\n\nUser's English translation:\n${userTranslation}`;
-  return withRetry('generateExpansionQuestions', async () => {
+  const userMessage = `Japanese diary:\n${contentJp || ''}\n\nUser's English sentences (numbered):\n${numbered}`;
+  const raw = await withRetry('generateExpansionQuestions', async () => {
     const response = await callLLM(systemPrompt, userMessage);
-    const parsed = parseJsonObject<{ expansionQuestions: ExpansionQuestion[] }>(response);
-    return parsed.expansionQuestions || [];
+    return parseJsonObject<{
+      expansionQuestions?: Array<{
+        question: string;
+        hintPhrases?: string[];
+        afterSentenceIndex?: number;
+        afterSentence?: string;
+        beforeNext?: string;
+      }>;
+    }>(response);
+  });
+
+  return (raw.expansionQuestions || []).map((q) => {
+    // index 経由で sentences から再解決 (LLM が afterSentence を微妙に書き換えた場合の保険)
+    let after = q.afterSentence || '';
+    let next = q.beforeNext ?? '';
+    if (typeof q.afterSentenceIndex === 'number'
+        && Number.isInteger(q.afterSentenceIndex)
+        && q.afterSentenceIndex >= 1
+        && q.afterSentenceIndex <= sentences.length) {
+      after = sentences[q.afterSentenceIndex - 1]!;
+      next = q.afterSentenceIndex < sentences.length ? sentences[q.afterSentenceIndex]! : '';
+    }
+    return {
+      question: q.question,
+      hintPhrases: q.hintPhrases || [],
+      afterSentence: after,
+      beforeNext: next,
+    } as ExpansionQuestion;
   });
 }
 
@@ -180,17 +219,24 @@ export async function correctExpansionAnswer(
   answer: string,
   diaryContext: string,
   afterSentence: string,
+  beforeNext: string = '',
 ): Promise<CorrectAnswerResult> {
-  const systemPrompt = `Correct the user's answer so it slots naturally after "${afterSentence || '(unknown)'}" in their diary.
+  const slotDesc = beforeNext
+    ? `The answer will be INSERTED between two existing sentences:\nPREVIOUS: "${afterSentence || '(none)'}"\nNEXT:     "${beforeNext}"`
+    : `The answer will be APPENDED at the end of the diary, right after:\n"${afterSentence || '(none)'}"`;
 
-Goal: natural casual spoken English, keep the user's meaning. Add a light casual connector (Actually / Plus / Honestly / The thing is / On top of that / Because / And) ONLY when the answer would feel abrupt; if it already flows (e.g. starts with It/We/That referencing context), leave the start alone. No formal connectors (Furthermore / Moreover / Therefore).
+  const systemPrompt = `Correct the user's answer so it slots naturally into the diary.
+
+${slotDesc}
+
+Goal: natural casual spoken English, keep the user's meaning. Make it flow with BOTH neighbors (if NEXT exists). Add a light casual connector (Actually / Plus / Honestly / The thing is / On top of that / Because / And) ONLY when the answer would feel abrupt; if it already flows (e.g. starts with It/We/That referencing context), leave the start alone. No formal connectors (Furthermore / Moreover / Therefore). If the NEXT sentence starts with a connector that would now clash (e.g. NEXT starts with "Anyway,"), you may end the corrected answer in a way that doesn't fight it — but don't rewrite NEXT.
 
 Return JSON: {"corrected":"...","explanation":"日本語で簡潔に。修正なし→空文字。接続詞追加→その意図も書く"}
 
 ${CASUAL_TONE_RULE}
 Return ONLY JSON.`;
 
-  const userMessage = `Preceding sentence (the answer will go right after this):\n${afterSentence || '(no preceding sentence)'}\n\nFull diary context: ${diaryContext || ''}\n\nQuestion that prompted the answer: ${question || ''}\n\nUser's answer: ${answer}`;
+  const userMessage = `Question that prompted the answer: ${question || ''}\n\nFull diary context:\n${diaryContext || ''}\n\nUser's answer: ${answer}`;
   return withRetry('correctExpansionAnswer', async () => {
     const response = await callLLM(systemPrompt, userMessage);
     return parseJsonObject<CorrectAnswerResult>(response);
