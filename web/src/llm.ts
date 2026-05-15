@@ -8,7 +8,7 @@ import { getIdToken } from './auth';
 const CLAUDE_CODE_URL = 'https://claude.rarejob-plus.org';
 const CLAUDE_HEALTH_TIMEOUT_MS = 2_500;
 const CLAUDE_CALL_TIMEOUT_MS = 60_000;
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODEL = 'gemini-3.1-flash-lite';
 
 export type LLMBackend = 'claude_code' | 'gemini_ai_logic';
 
