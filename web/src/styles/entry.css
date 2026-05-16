@@ -1,39 +1,79 @@
-/* ─── Entry detail ─── */
+/* ─── Entry detail · Hero (handoff §3.3 / §4.5) ─── */
 .entry-hero {
-  height: 280px;
-  background: var(--surface-soft);
+  height: 360px;
+  background: var(--ld-surface-2);
   position: relative;
+  background-size: cover;
+  background-position: center;
 }
 
+/* duotone darken: 上は透明、下に向けて黒を重ねてタイトル可読性を確保 */
 .entry-hero-fade {
   position: absolute;
   inset: 0;
-  background: linear-gradient(to bottom, transparent 40%, rgba(0, 0, 0, 0.45) 100%);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 30%, rgba(0, 0, 0, 0.55) 100%);
+}
+
+/* film-grain (HSL gradient cover にも photo にも 12% で乗せる) */
+.entry-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.12;
+  mix-blend-mode: overlay;
+  background-image: radial-gradient(rgba(0, 0, 0, 0.5) 1px, transparent 1px);
+  background-size: 3px 3px;
+}
+
+/* hero overlay: タイトル + meta を bottom-left に重ねる */
+.entry-hero-overlay {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  bottom: 28px;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  color: #fff;
+}
+
+.entry-hero-title {
+  font-family: var(--ld-serif);
+  font-size: var(--ld-fs-hero);
+  line-height: var(--ld-lh-hero);
+  font-weight: 500;
+  letter-spacing: -0.018em;
+  color: #fff;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.35);
+  text-wrap: balance;
+  margin: 0;
+  /* hero に収めるため 2 行で省略 */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .entry-hero-meta {
-  position: absolute;
-  bottom: 22px;
-  left: 24px;
-  right: 24px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: rgba(255, 255, 255, 0.95);
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
-  font-size: 12px;
+  /* MetaLine on cover; styling derives from .ld-meta--on-cover */
 }
 
-.entry-hero-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 11px;
-  background: rgba(255, 255, 255, 0.22);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border-radius: 100px;
-  font-weight: 500;
+@media (max-width: 600px) {
+  .entry-hero {
+    height: 280px;
+  }
+  .entry-hero-overlay {
+    left: 18px;
+    right: 18px;
+    bottom: 22px;
+    gap: 10px;
+  }
+  .entry-hero-title {
+    font-size: 36px;
+    line-height: 42px;
+  }
 }
 
 .entry-hero-credit {
@@ -119,13 +159,25 @@
 }
 
 .entry-body {
-  font-family: var(--serif);
-  font-size: 18px;
-  line-height: 1.85;
-  color: var(--text);
+  font-family: var(--ld-serif);
+  font-size: var(--ld-fs-body);
+  line-height: var(--ld-lh-body);
+  color: var(--ld-ink);
   white-space: pre-wrap;
   letter-spacing: 0.005em;
   margin-bottom: 14px;
+  text-wrap: pretty;
+}
+
+/* 最初の段落に drop cap — magazine-feature ぽさ */
+.entry-body::first-letter {
+  font-family: var(--ld-serif);
+  font-size: 3.4em;
+  line-height: 0.92;
+  float: left;
+  font-weight: 500;
+  padding: 0.06em 0.12em 0 0;
+  color: var(--ld-ink);
 }
 
 /* 英文下の TTS プレイヤー — 再生 + 速度プリセット */

@@ -91,6 +91,21 @@ export function renderSekkiPill(dateStr: string, pillClass: string): string {
   `;
 }
 
+/** MetaLine 内で使う「ピルなしの節気ラベル + tooltip」。Day One 風の hairline 区切り行に載せる用。 */
+export function renderSekkiInline(dateStr: string): string {
+  const info = solarTermInfo(dateStr);
+  return `
+    <span class="sekki-pill-wrap">
+      <span>${info.name}</span>
+      <span class="sekki-tooltip" role="tooltip">
+        <span class="sekki-tooltip-head">${info.name}<span class="sekki-tooltip-season">${info.season}</span></span>
+        <span class="sekki-tooltip-period">${info.period}</span>
+        <span class="sekki-tooltip-desc">${info.description}</span>
+      </span>
+    </span>
+  `;
+}
+
 export function dayOfYear(dateStr: string): number {
   const d = new Date(dateStr + 'T00:00:00');
   const start = new Date(d.getFullYear(), 0, 1);

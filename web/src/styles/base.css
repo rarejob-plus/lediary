@@ -1,21 +1,68 @@
 :root {
-  --bg: #ffffff;
-  --surface: #ffffff;
-  --surface-soft: #f5f4f1;
-  --surface-warm: #fafaf7;
-  --text: #1d1d1f;
-  --text-secondary: #4a4a4f;
-  --text-muted: #86868b;
-  --text-faint: #b8b8bd;
-  --border: rgba(0, 0, 0, 0.08);
-  --border-strong: rgba(0, 0, 0, 0.16);
-  --accent: #2563eb;
+  /* ── lediary design tokens (handoff: design_handoff_lediary_redesign) ── */
+  --ld-bg:           #ffffff;
+  --ld-surface:      #fafaf7;
+  --ld-surface-2:    #f5f4f1;
+  --ld-surface-3:    #ecebe6;
+  --ld-paper:        #f7f3e9;
+  --ld-ink:          #1d1d1f;
+  --ld-ink-2:        #2b2b2e;
+  --ld-secondary:    #4a4a4f;
+  --ld-muted:        #86868b;
+  --ld-faint:        #b8b8bd;
+  --ld-rule:         rgba(15, 15, 17, 0.08);
+  --ld-rule-strong:  rgba(15, 15, 17, 0.14);
+
+  --ld-accent:       #2563eb;
+  --ld-accent-deep:  #1d4ed8;
+  --ld-accent-tint:  #eff5ff;
+
+  --ld-serif: 'Lora', 'Iowan Old Style', 'Source Serif Pro', Georgia, serif;
+  --ld-sans:  -apple-system, BlinkMacSystemFont, 'SF Pro Text',
+              'Hiragino Kaku Gothic ProN', 'Noto Sans JP',
+              'Inter', system-ui, sans-serif;
+  --ld-mono:  'SF Mono', 'JetBrains Mono', 'Menlo', 'Consolas', ui-monospace, monospace;
+
+  --ld-fs-hero: 56px;  --ld-lh-hero: 64px;
+  --ld-fs-h1:   40px;  --ld-lh-h1:   48px;
+  --ld-fs-h2:   28px;  --ld-lh-h2:   36px;
+  --ld-fs-h3:   20px;  --ld-lh-h3:   28px;
+  --ld-fs-body: 18px;  --ld-lh-body: 30px;
+  --ld-fs-meta: 13px;  --ld-lh-meta: 18px;
+  --ld-fs-caps: 11px;  --ld-lh-caps: 14px;
+
+  --ld-r-sm:   8px;
+  --ld-r-md:   14px;
+  --ld-r-lg:   20px;
+  --ld-r-pill: 100px;
+
+  --ld-shadow-1: 0 1px 2px rgba(15,15,17,.04);
+  --ld-shadow-2: 0 1px 2px rgba(15,15,17,.04), 0 8px 24px rgba(15,15,17,.06);
+  --ld-shadow-3: 0 8px 32px rgba(15,15,17,.10), 0 2px 8px rgba(15,15,17,.05);
+
+  --ld-ease:     cubic-bezier(.2, .7, .3, 1);
+  --ld-dur-fast: 160ms;
+  --ld-dur:      220ms;
+  --ld-dur-slow: 420ms;
+
+  /* ── legacy aliases — bridges old class names to new tokens ── */
+  --bg: var(--ld-bg);
+  --surface: var(--ld-bg);
+  --surface-soft: var(--ld-surface-2);
+  --surface-warm: var(--ld-surface);
+  --text: var(--ld-ink);
+  --text-secondary: var(--ld-secondary);
+  --text-muted: var(--ld-muted);
+  --text-faint: var(--ld-faint);
+  --border: var(--ld-rule);
+  --border-strong: var(--ld-rule-strong);
+  --accent: var(--ld-accent);
   --danger: #c0392b;
-  --radius: 14px;
-  --radius-sm: 8px;
-  --serif: 'Lora', 'Iowan Old Style', Georgia, serif;
-  --sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif;
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --radius: var(--ld-r-md);
+  --radius-sm: var(--ld-r-sm);
+  --serif: var(--ld-serif);
+  --sans: var(--ld-sans);
+  --shadow-1: var(--ld-shadow-1);
   --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.08);
 }
 
@@ -344,4 +391,71 @@ input {
 
 .sekki-tooltip-desc {
   color: rgba(245, 245, 247, 0.92);
+}
+
+/* ─── MetaLine (Day One 風: hairline · 区切り) ─── */
+/* 既存の pill 群を 1 行に統合した meta 表示。entry-card 下と hero 上で再利用。 */
+.ld-meta {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  font-family: var(--ld-sans);
+  font-size: var(--ld-fs-meta);
+  line-height: var(--ld-lh-meta);
+  color: var(--ld-secondary);
+  gap: 0;
+}
+
+.ld-meta__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px;
+  position: relative;
+}
+
+.ld-meta__item:first-child {
+  padding-left: 0;
+}
+
+.ld-meta__item:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 50%;
+  width: 1px;
+  height: 10px;
+  transform: translateY(-50%);
+  background: var(--ld-rule-strong);
+}
+
+.ld-meta__item--accent {
+  color: var(--ld-accent-deep);
+  font-weight: 500;
+}
+
+.ld-meta__icon {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* hero overlay 内では白字＋separator も白系に */
+.ld-meta--on-cover {
+  color: rgba(255, 255, 255, 0.92);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+.ld-meta--on-cover .ld-meta__item:not(:last-child)::after {
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.ld-meta--on-cover .ld-meta__item--accent {
+  color: #fff;
+  font-weight: 600;
+}
+
+/* MetaLine 内の節気ピル wrap が hairline と干渉しないよう調整 */
+.ld-meta .sekki-pill-wrap {
+  display: inline-flex;
+  align-items: center;
 }

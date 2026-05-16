@@ -5,7 +5,7 @@ import { renderRatingRow } from '../components/day-rating-row';
 import { MODE_META, type DiaryEntry, type Mode } from '../data/mock';
 import { fetchEntries } from '../data/entries';
 import { fetchDays, type DayRating } from '../data/days';
-import { renderSekkiPill, dayOfYear, daysInYear } from '../data/dateInfo';
+import { renderSekkiInline, dayOfYear, daysInYear } from '../data/dateInfo';
 import { navigate } from '../router';
 
 function todayStr(): string {
@@ -77,25 +77,30 @@ function renderBody(wrap: HTMLElement, entries: DiaryEntry[], days: Map<string, 
 
   const todayRow = document.createElement('div');
   todayRow.className = 'today-row';
+  const modeSubtitle: Record<Mode, string> = {
+    morning: '今日の予定・意気込み',
+    lesson: 'レッスンの振り返り',
+    diary: '一日の終わりの日記',
+    story: 'エピソード・小話',
+  };
   (['morning', 'lesson', 'diary', 'story'] as Mode[]).forEach((m) => {
     const meta = MODE_META[m];
     const filled = todayByMode.get(m);
     const card = document.createElement('button');
     card.className = `today-card ${filled ? 'filled' : ''}`;
-    card.innerHTML = filled
-      ? `
-        <div class="today-card-mode" style="color:${meta.color};">
-          ${iconFor(meta.icon, 14)} ${meta.label}
-        </div>
-        <div class="today-card-check-mark" style="color:${meta.color};">${icons.check(16)}</div>
-      `
-      : `
-        <div class="today-card-mode">
-          ${iconFor(meta.icon, 14)} ${meta.label}
-        </div>
-        <div class="today-card-status today-card-empty">まだ書いていない</div>
-        <div class="today-card-check">${icons.pen(11)} 書く</div>
-      `;
+    const statusLabel = filled ? '書いた' : 'まだ書いていない';
+    const statusInner = filled
+      ? icons.check(12)
+      : '';
+    card.innerHTML = `
+      <div class="today-card-row">
+        <span class="today-card-icon">${iconFor(meta.icon, 22)}</span>
+        <span class="today-card-status ${filled ? 'done' : 'todo'}"
+              role="img" aria-label="${statusLabel}" title="${statusLabel}">${statusInner}</span>
+      </div>
+      <div class="today-card-title">${meta.label}</div>
+      <div class="today-card-sub">${modeSubtitle[m]}</div>
+    `;
     card.addEventListener('click', () => {
       if (filled) {
         navigate(`/entry/${filled.id}`);
@@ -181,16 +186,15 @@ function renderDay(date: string, dayEntries: DiaryEntry[], days: Map<string, Day
     const card = document.createElement('button');
     card.className = 'entry-card';
     card.innerHTML = `
-      <div class="entry-cover" style="background:${entry.cover ?? coverFor(entry.mode, entry.time, entry.coverImageUrl)};">
-        <div class="entry-cover-meta">
-          <span class="entry-cover-pill">${iconFor(meta.icon)} ${meta.label}</span>
-          ${renderSekkiPill(entry.date, 'entry-cover-pill')}
-          <span class="entry-cover-pill">${dayOfYear(entry.date)} / ${daysInYear(entry.date)}</span>
-          ${entry.mood ? `<span class="entry-cover-pill">${escapeHtml(entry.mood)}</span>` : ''}
-        </div>
-      </div>
+      <div class="entry-cover" style="background:${entry.cover ?? coverFor(entry.mode, entry.time, entry.coverImageUrl)};"></div>
       <div class="entry-card-body">
-        <div class="entry-card-time">${entry.time}</div>
+        <div class="ld-meta entry-card-meta">
+          <span class="ld-meta__item ld-meta__item--accent"><span class="ld-meta__icon">${iconFor(meta.icon, 12)}</span>${meta.label}</span>
+          <span class="ld-meta__item">${renderSekkiInline(entry.date)}</span>
+          <span class="ld-meta__item">${dayOfYear(entry.date)} / ${daysInYear(entry.date)}</span>
+          ${entry.mood ? `<span class="ld-meta__item">${escapeHtml(entry.mood)}</span>` : ''}
+          <span class="ld-meta__item">${entry.time}</span>
+        </div>
         <p class="entry-card-text">${escapeHtml(entry.userTranslation || entry.contentJp)}</p>
         ${entry.vocabulary.length > 0 ? `
           <div class="entry-card-tags">

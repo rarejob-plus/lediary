@@ -32,114 +32,131 @@
   letter-spacing: 0.04em;
 }
 
-/* Today's 4-mode cards */
+/* ─ Today's 4-mode cards (handoff §4.2): status indicator (filled dot vs dashed ring) ─ */
 .today-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  margin-bottom: 36px;
+  gap: 12px;
+  margin-bottom: 40px;
 }
 
 .today-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 14px 12px;
+  position: relative;
+  background: var(--ld-bg);
+  border: 1px solid var(--ld-rule);
+  border-radius: var(--ld-r-md);
+  padding: 18px 18px 16px;
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.15s, transform 0.15s;
+  transition: border-color var(--ld-dur) var(--ld-ease),
+              transform var(--ld-dur) var(--ld-ease),
+              box-shadow var(--ld-dur) var(--ld-ease);
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  min-height: 96px;
+  gap: 14px;
+  min-height: 132px;
+  overflow: hidden;
 }
 
 .today-card:hover {
-  border-color: var(--border-strong);
+  border-color: var(--ld-rule-strong);
   transform: translateY(-1px);
+  box-shadow: var(--ld-shadow-1);
 }
 
 .today-card.filled {
-  background: var(--surface-warm);
-  border-color: transparent;
+  background: var(--ld-surface);
+}
+
+/* 左端の accent rail で「書いた」を強く示す */
+.today-card.filled::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 2px;
+  background: var(--ld-accent-deep);
+  border-radius: 2px;
+}
+
+.today-card-row {
+  display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
-.today-card-check-mark {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.today-card-icon {
   width: 28px;
   height: 28px;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.04);
+  display: grid;
+  place-items: center;
+  color: var(--ld-secondary);
 }
 
-.today-card-mode {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-muted);
+.today-card.filled .today-card-icon {
+  color: var(--ld-accent-deep);
 }
 
-.today-card.filled .today-card-mode {
-  color: var(--text-secondary);
+.today-card-title {
+  font-family: var(--ld-serif);
+  font-size: 22px;
+  line-height: 26px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--ld-ink);
 }
 
+.today-card-sub {
+  font-family: var(--ld-sans);
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--ld-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* status indicator dot/ring */
 .today-card-status {
-  font-family: var(--serif);
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--text-faint);
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex: 1;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  transition: all var(--ld-dur) var(--ld-ease);
 }
 
-.today-card.filled .today-card-status {
-  color: var(--text-secondary);
+.today-card-status.todo {
+  border: 1.25px dashed var(--ld-faint);
+  background: transparent;
 }
 
-.today-card-empty {
-  font-style: italic;
+.today-card:hover .today-card-status.todo {
+  border-color: var(--ld-muted);
 }
 
-.today-card-check {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-top: auto;
+.today-card-status.done {
+  background: var(--ld-accent-deep);
+  color: #fff;
+  box-shadow: 0 0 0 3px var(--ld-accent-tint);
 }
 
 @media (max-width: 600px) {
   .today-row {
-    grid-template-columns: 1fr;
-    gap: 8px;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
   }
   .today-card {
-    flex-direction: row;
-    align-items: center;
-    gap: 12px;
-    min-height: auto;
-    padding: 14px;
+    min-height: 112px;
+    padding: 14px 14px 12px;
+    gap: 10px;
   }
-  .today-card-mode {
-    flex-shrink: 0;
-    flex-direction: column;
-    gap: 2px;
-    align-items: flex-start;
-    width: 70px;
-  }
-  .today-card-status {
-    -webkit-line-clamp: 2;
+  .today-card-title {
+    font-size: 19px;
+    line-height: 24px;
   }
 }
 
@@ -150,18 +167,21 @@
 .timeline-day-header {
   display: flex;
   align-items: baseline;
-  gap: 10px;
-  margin-bottom: 14px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--border);
+  gap: 16px;
+  margin-bottom: 8px;
+  padding-bottom: 0;
+  padding-top: 16px;
+  border-bottom: 0;
 }
 
 .timeline-day-num {
-  font-family: var(--serif);
-  font-size: 28px;
-  font-weight: 600;
+  font-family: var(--ld-serif);
+  font-size: 40px;
+  font-weight: 500;
   letter-spacing: -0.02em;
   line-height: 1;
+  font-variant-numeric: lining-nums;
+  color: var(--ld-ink);
 }
 
 .timeline-day-meta {
@@ -178,81 +198,83 @@
   font-size: 12px;
 }
 
+/* ─ EntryCard (handoff §4.3): cover 左 160×120 + 本文右、hairline 区切りで bottom border ─ */
 .entry-card {
-  display: block;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-  margin-bottom: 14px;
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 20px;
+  align-items: start;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--ld-rule);
+  border-radius: 0;
+  overflow: visible;
+  margin: 0;
+  padding: 20px 0;
   cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.2s ease;
+  transition: opacity var(--ld-dur) var(--ld-ease);
   text-align: left;
   width: 100%;
-  padding: 0;
 }
 
 .entry-card:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-2);
+  transform: none;
+  box-shadow: none;
+  opacity: 0.92;
+}
+
+.entry-card:hover .entry-cover {
+  box-shadow: var(--ld-shadow-1);
 }
 
 .entry-cover {
-  height: 140px;
-  background: var(--surface-soft);
+  width: 160px;
+  height: 120px;
+  border-radius: var(--ld-r-md);
+  background: var(--ld-surface-2);
   position: relative;
-}
-
-.entry-cover-meta {
-  position: absolute;
-  bottom: 12px;
-  left: 16px;
-  right: 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.92);
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
-}
-
-.entry-cover-meta svg {
-  width: 12px;
-  height: 12px;
-}
-
-.entry-cover-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 9px;
-  background: rgba(255, 255, 255, 0.22);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border-radius: 100px;
-  font-weight: 500;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+  transition: box-shadow var(--ld-dur-fast) var(--ld-ease);
 }
 
 .entry-card-body {
-  padding: 14px 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 2px 0 0;
 }
 
-.entry-card-time {
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-bottom: 8px;
-  letter-spacing: 0.04em;
+.entry-card-meta {
+  /* MetaLine spec consumed; sized down a touch for card density */
+  font-size: 12px;
 }
 
 .entry-card-text {
-  font-family: var(--serif);
-  font-size: 15px;
-  line-height: 1.65;
-  color: var(--text);
+  font-family: var(--ld-serif);
+  font-style: italic;
+  font-size: 17px;
+  line-height: 28px;
+  color: var(--ld-secondary);
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  margin: 0;
+}
+
+@media (max-width: 600px) {
+  .entry-card {
+    grid-template-columns: 96px 1fr;
+    gap: 14px;
+    padding: 16px 0;
+  }
+  .entry-cover {
+    width: 96px;
+    height: 72px;
+    border-radius: var(--ld-r-sm);
+  }
 }
 
 .entry-card-tags {

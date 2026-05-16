@@ -3,7 +3,7 @@ import { icons } from '../components/icons';
 import { coverFor } from '../components/cover';
 import { MODE_META, type DiaryEntry } from '../data/mock';
 import { deleteEntry, fetchEntry, invalidateEntriesCache, moveEntryMode, stashForEditor } from '../data/entries';
-import { renderSekkiPill, dayOfYear, daysInYear } from '../data/dateInfo';
+import { renderSekkiInline, dayOfYear, daysInYear } from '../data/dateInfo';
 import { getCurrentUser, getIdToken } from '../auth';
 import { navigate } from '../router';
 import { enableTextSelectionBookmark, bookmarkPhrase } from '../components/text-selection-bookmark';
@@ -51,11 +51,14 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
   hero.style.background = entry.cover ?? coverFor(entry.mode, entry.time, entry.coverImageUrl);
   hero.innerHTML = `
     <div class="entry-hero-fade"></div>
-    <div class="entry-hero-meta">
-      <span class="entry-hero-pill">${iconFor(meta.icon)} ${meta.label}</span>
-      ${renderSekkiPill(entry.date, 'entry-hero-pill')}
-      <span class="entry-hero-pill">${dayOfYear(entry.date)} / ${daysInYear(entry.date)}</span>
-      ${entry.mood ? `<span class="entry-hero-pill">${escapeHtml(entry.mood)}</span>` : ''}
+    <div class="entry-hero-overlay">
+      <h1 class="entry-hero-title">${escapeHtml(deriveHeroTitle(entry))}</h1>
+      <div class="ld-meta ld-meta--on-cover entry-hero-meta">
+        <span class="ld-meta__item ld-meta__item--accent"><span class="ld-meta__icon">${iconFor(meta.icon, 12)}</span>${meta.label}</span>
+        <span class="ld-meta__item">${renderSekkiInline(entry.date)}</span>
+        <span class="ld-meta__item">${dayOfYear(entry.date)} / ${daysInYear(entry.date)}</span>
+        ${entry.mood ? `<span class="ld-meta__item">${escapeHtml(entry.mood)}</span>` : ''}
+      </div>
     </div>
     ${entry.coverImageUrl && entry.coverPhotographer ? `
       <div class="entry-hero-credit">
@@ -614,11 +617,22 @@ function renderExpansionSection(entry: DiaryEntry, bodyEl: HTMLElement): HTMLEle
   return wrap;
 }
 
-function iconFor(name: 'sun' | 'graduation' | 'moon' | 'bookOpen'): string {
-  if (name === 'sun') return icons.sun(11);
-  if (name === 'graduation') return icons.graduation(11);
-  if (name === 'bookOpen') return icons.bookOpen(11);
-  return icons.moon(11);
+function iconFor(name: 'sun' | 'graduation' | 'moon' | 'bookOpen', size = 11): string {
+  if (name === 'sun') return icons.sun(size);
+  if (name === 'graduation') return icons.graduation(size);
+  if (name === 'bookOpen') return icons.bookOpen(size);
+  return icons.moon(size);
+}
+
+/** hero overlay 用に「最初の英文 1 文 → 日本語先頭」のいずれか短いものを 1 行のタイトルとして取り出す。 */
+function deriveHeroTitle(entry: DiaryEntry): string {
+  const source = (entry.userTranslation || entry.contentJp || '').trim();
+  if (!source) return MODE_META[entry.mode].label;
+  // 最初のセンテンス（. ! ? 。 ! ?）まで
+  const m = source.match(/^[^.!?。！？]+[.!?。！？]?/);
+  const first = (m ? m[0] : source).trim();
+  // 80 文字を超えたら省略
+  return first.length > 80 ? first.slice(0, 78).trimEnd() + '…' : first;
 }
 
 function escapeHtml(s: string | undefined | null): string {
