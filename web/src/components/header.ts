@@ -50,11 +50,13 @@ export function renderHeader(active: 'timeline' | 'calendar' | 'editor' | null):
   return header;
 }
 
-export function renderFab(): HTMLElement {
+export function renderFab(opts?: { label?: string; mode?: string }): HTMLElement {
   const a = document.createElement('button');
   a.className = 'fab';
-  a.innerHTML = `${icons.plus(18)} <span>今日を書く</span>`;
-  a.addEventListener('click', () => navigate('/editor'));
+  const label = opts?.label ?? '今日を書く';
+  a.innerHTML = `${icons.pen(16)} <span>${label}</span>`;
+  const target = opts?.mode ? `/editor?mode=${opts.mode}` : '/editor';
+  a.addEventListener('click', () => navigate(target));
   return a;
 }
 

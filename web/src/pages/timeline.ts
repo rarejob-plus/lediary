@@ -31,6 +31,21 @@ function computeStreak(entries: DiaryEntry[]): number {
   return count;
 }
 
+// 直近 7 日（古い → 新しい順）の埋まり方。`isToday` は今日のドットを ring 装飾する用。
+function computeLastSevenDays(entries: DiaryEntry[]): { date: string; filled: boolean; isToday: boolean }[] {
+  const dates = new Set(entries.map((e) => e.date));
+  const today = new Date();
+  const todayStr = dateToStr(today);
+  const out: { date: string; filled: boolean; isToday: boolean }[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    const s = dateToStr(d);
+    out.push({ date: s, filled: dates.has(s), isToday: s === todayStr });
+  }
+  return out;
+}
+
 function dayHeaderParts(dateStr: string): { num: string; weekday: string; monthYear: string } {
   const d = new Date(dateStr + 'T00:00:00');
   return {
@@ -50,7 +65,19 @@ export function renderTimeline(root: HTMLElement): void {
   root.appendChild(renderFab());
 
   Promise.all([fetchEntries(), fetchDays()])
-    .then(([entries, days]) => renderBody(wrap, entries, days))
+    .then(([entries, days]) => {
+      renderBody(wrap, entries, days);
+      // FloatingTodayCta: 既存 FAB を「次の未完了モード」ラベルに差し替える。
+      const today = todayStr();
+      const doneModes = new Set(entries.filter((e) => e.date === today).map((e) => e.mode));
+      const next = (['morning', 'lesson', 'diary', 'story'] as Mode[]).find((m) => !doneModes.has(m));
+      if (next) {
+        const old = root.querySelector('.fab');
+        if (old) old.remove();
+        const label = `今日の ${MODE_META[next].label} を書く`;
+        root.appendChild(renderFab({ label, mode: next }));
+      }
+    })
     .catch((err) => {
       console.error(err);
       wrap.innerHTML = `<p style="color:var(--text-muted);text-align:center;padding:40px 0;">読み込みに失敗しました</p>`;
@@ -60,15 +87,32 @@ export function renderTimeline(root: HTMLElement): void {
 function renderBody(wrap: HTMLElement, entries: DiaryEntry[], days: Map<string, DayRating>): void {
   wrap.innerHTML = '';
 
-  // Top row: streak + today label
+  // Top row: today label
   const streak = computeStreak(entries);
   const topRow = document.createElement('div');
   topRow.className = 'timeline-top-row';
-  topRow.innerHTML = `
-    <span class="timeline-today-label">${formatYmd(new Date())}</span>
-    ${streak > 0 ? `<div class="timeline-streak">${icons.flame(13)} <span>${streak} day streak</span></div>` : ''}
-  `;
+  topRow.innerHTML = `<span class="timeline-today-label">${formatYmd(new Date())}</span>`;
   wrap.appendChild(topRow);
+
+  // Streak strip: 直近 7 日のドット列 + 連続日数を serif で大きく。Day One 風。
+  const week = computeLastSevenDays(entries);
+  const streakStrip = document.createElement('div');
+  streakStrip.className = 'streak-strip';
+  streakStrip.innerHTML = `
+    <div class="streak-strip-week">
+      ${week.map((d) => `
+        <span class="streak-day ${d.filled ? 'filled' : 'empty'} ${d.isToday ? 'is-today' : ''}"
+              title="${d.date}${d.filled ? ' · 書いた' : ''}">
+          ${d.filled ? icons.check(11) : ''}
+        </span>
+      `).join('')}
+    </div>
+    <div class="streak-strip-num">
+      <span class="streak-num">${streak}</span>
+      <span class="streak-label">${streak === 1 ? '日連続' : streak === 0 ? '今日から始めよう' : '日連続'}</span>
+    </div>
+  `;
+  wrap.appendChild(streakStrip);
 
   // Today's 4-mode cards
   const today = todayStr();

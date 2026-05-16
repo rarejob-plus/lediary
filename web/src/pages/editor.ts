@@ -19,6 +19,12 @@ interface HintItem { english: string; japanese: string; note?: string; }
 
 const STOIC_KEY = 'lediary_v2_stoic';
 const FOCUS_KEY = 'lediary_editor_focus';
+const DIFF_MODE_KEY = 'lediary.diffMode';
+type DiffMode = 'word' | 'side-by-side' | 'inline';
+function readDiffMode(): DiffMode {
+  const v = localStorage.getItem(DIFF_MODE_KEY);
+  return v === 'side-by-side' || v === 'inline' ? v : 'word';
+}
 
 function todayStr(): string {
   const d = new Date();
@@ -236,14 +242,32 @@ export function renderEditor(root: HTMLElement): void {
 
     const toggleRow = document.createElement('div');
     toggleRow.className = 'correction-mode-toggle';
+    const diffMode = readDiffMode();
     toggleRow.innerHTML = `
       <span>修正案を ${stoic ? '隠す（自力モード）' : '表示する'}</span>
-      <button class="toggle-switch ${stoic ? 'on' : ''}" id="stoic-toggle"></button>
+      <div class="correction-toggle-right">
+        ${feedbackKind === 'correct' ? `
+          <div class="diff-seg" role="tablist" aria-label="diff モード">
+            <button data-m="word" class="${diffMode === 'word' ? 'on' : ''}">word</button>
+            <button data-m="side-by-side" class="${diffMode === 'side-by-side' ? 'on' : ''}">並列</button>
+            <button data-m="inline" class="${diffMode === 'inline' ? 'on' : ''}">統合</button>
+          </div>
+        ` : ''}
+        <button class="toggle-switch ${stoic ? 'on' : ''}" id="stoic-toggle" aria-label="自力モード切替"></button>
+      </div>
     `;
     toggleRow.querySelector('#stoic-toggle')!.addEventListener('click', () => {
       stoic = !stoic;
       localStorage.setItem(STOIC_KEY, stoic ? '1' : '0');
       renderCorrection();
+    });
+    toggleRow.querySelectorAll('.diff-seg button').forEach((b) => {
+      b.addEventListener('click', () => {
+        const m = (b as HTMLElement).dataset.m as DiffMode | undefined;
+        if (!m) return;
+        localStorage.setItem(DIFF_MODE_KEY, m);
+        renderCorrection();
+      });
     });
     correctionSection.appendChild(toggleRow);
 
@@ -258,14 +282,49 @@ export function renderEditor(root: HTMLElement): void {
       const isRevealed = !stoic || revealed[i];
       const card = document.createElement('div');
       card.className = 'correction-card';
-      // word-level diff: corrected を <del>/<ins> マークアップに置換し、original 行は薄く参考表示。
-      // flow（流れを整える）の場合は diff が読みにくいため従来の corrected ブロックを使う。
-      const diffHtml = feedbackKind === 'correct' && fb.original && fb.corrected
-        ? renderDiffHtml(diffWords(fb.original, fb.corrected))
-        : null;
-      const correctedBlock = diffHtml
-        ? `<div class="correction-diff">${diffHtml}</div>`
-        : `<div class="correction-corrected">${escapeHtml(fb.corrected)}</div>`;
+      // diff モードに応じてレンダリングを分岐 (handoff §4.7)。
+      // - word:         original→corrected を <del>/<ins> でインライン重ね合わせ。
+      // - side-by-side: original / corrected の 2 カラム並列。
+      // - inline:       corrected のみ、変更箇所に hover tooltip で original を表示。
+      // flow（流れを整える）は diff が読みにくいため従来の corrected ブロックを使う。
+      const mode = readDiffMode();
+      const usableDiff = feedbackKind === 'correct' && !!fb.original && !!fb.corrected;
+      let correctedBlock: string;
+      if (!usableDiff) {
+        correctedBlock = `<div class="correction-corrected">${escapeHtml(fb.corrected)}</div>`;
+      } else if (mode === 'word') {
+        correctedBlock = `<div class="correction-diff">${renderDiffHtml(diffWords(fb.original, fb.corrected))}</div>`;
+      } else if (mode === 'side-by-side') {
+        correctedBlock = `
+          <div class="correction-diff-sbs">
+            <div class="correction-diff-sbs-col">
+              <div class="correction-diff-sbs-label">Original</div>
+              <div class="correction-diff-sbs-text correction-diff-sbs-text--del">${escapeHtml(fb.original)}</div>
+            </div>
+            <div class="correction-diff-sbs-col">
+              <div class="correction-diff-sbs-label">Corrected</div>
+              <div class="correction-diff-sbs-text correction-diff-sbs-text--ins">${escapeHtml(fb.corrected)}</div>
+            </div>
+          </div>
+        `;
+      } else {
+        // inline: corrected を表示、ins / del 部分に title= で original を埋める。
+        const tokens = diffWords(fb.original, fb.corrected);
+        const inlineHtml = tokens.map((t) => {
+          if (t.type === 'eq') return escapeHtml(t.text);
+          if (t.type === 'del') return '';
+          // ins: 直近の del を tooltip に
+          const idx = tokens.indexOf(t);
+          let prevDel = '';
+          for (let k = idx - 1; k >= 0; k--) {
+            if (tokens[k]!.type === 'eq') break;
+            if (tokens[k]!.type === 'del') prevDel = tokens[k]!.text + prevDel;
+          }
+          const tip = prevDel ? ` title="元: ${escapeHtml(prevDel.trim())}"` : '';
+          return /^\s+$/.test(t.text) ? escapeHtml(t.text) : `<ins class="ld-diff__ins"${tip}>${escapeHtml(t.text)}</ins>`;
+        }).join('');
+        correctedBlock = `<div class="correction-diff">${inlineHtml}</div>`;
+      }
       card.innerHTML = `
         <div class="correction-step">${i + 1} / ${currentFeedback.length}</div>
         <div class="correction-original">${escapeHtml(fb.original)}</div>

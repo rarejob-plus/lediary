@@ -255,6 +255,23 @@ input {
   #app {
     padding: 0 0 120px;
   }
+  /* FloatingTodayCta (handoff §4.13): モバイル時は底固定の full-width バー */
+  .fab {
+    left: 16px;
+    right: 16px;
+    transform: none;
+    width: auto;
+    height: 56px;
+    border-radius: var(--ld-r-pill);
+    padding: 0 20px;
+    justify-content: center;
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    font-size: 15px;
+    font-weight: 500;
+  }
+  .fab:hover {
+    transform: translateY(-1px);
+  }
 }
 
 /* Floating "Flashcardに保存" button (text selection) */
