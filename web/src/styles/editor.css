@@ -105,7 +105,7 @@
   min-height: 160px;
 }
 
-/* 和文和訳 (plain JP) — JP と EN の間の言い換えステップ */
+/* ─ 和文和訳 (plain JP) — 学習者が自分で書き換える練習場 ─ */
 .plain-jp-block {
   margin-top: -8px;
   margin-bottom: 22px;
@@ -117,6 +117,64 @@
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.plain-jp-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* 指摘バッジ (ルールベース + LLM 主語チェック) */
+.plain-jp-lints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.plain-jp-lints:empty {
+  display: none;
+}
+
+.plain-jp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--ld-r-pill);
+  font-size: 11px;
+  font-family: var(--ld-sans);
+  background: color-mix(in srgb, var(--badge-color) 12%, var(--ld-bg));
+  color: var(--badge-color);
+  border: 1px solid color-mix(in srgb, var(--badge-color) 30%, transparent);
+  max-width: 100%;
+}
+
+.plain-jp-badge-kind {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.plain-jp-badge-label {
+  color: var(--ld-ink);
+  font-weight: 500;
+}
+
+.plain-jp-badge-snippet {
+  color: var(--ld-muted);
+  font-style: italic;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plain-jp-badge--ok {
+  background: var(--ld-accent-tint);
+  color: var(--ld-accent-deep);
+  border: 1px solid color-mix(in srgb, var(--ld-accent) 25%, transparent);
+  font-weight: 500;
 }
 
 .plain-jp-textarea {
@@ -133,8 +191,65 @@
   font-style: italic;
 }
 
+/* 言い換え例パネル (on-demand) */
+.plain-jp-variants {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.plain-jp-variants:empty {
+  display: none;
+}
+
+.plain-jp-variants-head {
+  font-family: var(--ld-sans);
+  font-size: 11px;
+  color: var(--ld-muted);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
+}
+
+.plain-jp-variant {
+  border: 1px solid var(--ld-rule);
+  border-radius: var(--ld-r-sm);
+  background: var(--ld-bg);
+  padding: 10px 12px;
+}
+
+.plain-jp-variant-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.plain-jp-variant-label {
+  font-family: var(--ld-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ld-secondary);
+  text-transform: uppercase;
+}
+
+.plain-jp-variant-text {
+  font-family: var(--ld-sans);
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--ld-ink);
+}
+
+.plain-jp-variants-empty {
+  font-size: 12px;
+  color: var(--ld-muted);
+}
+
 .plain-jp-note {
-  margin-top: 6px;
+  margin-top: 8px;
   font-size: 11px;
   color: var(--ld-muted);
   font-family: var(--ld-sans);

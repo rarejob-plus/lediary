@@ -14,6 +14,7 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { analyzeAndSavePost, savePostTextOnly } from '../data/posts';
 import { diffWords, renderDiffHtml } from '../diff';
+import { lintPlainJp, LINT_TYPE_META, type LintIssue } from '../plainJpLint';
 
 interface HintItem { english: string; japanese: string; note?: string; }
 
@@ -165,41 +166,140 @@ export function renderEditor(root: HTMLElement): void {
   `;
   left.appendChild(jpBlock);
 
-  // ── 和文和訳 (Plain JP): 英訳しやすい日本語に言い換えるステップ ──
-  // 主語補完・長修飾分割・抽象→動詞 の 3 操作を AI に依頼。
-  // 表示後は編集可能。EN を書くときも、ヒント生成時も plainJp を優先する。
+  // ── 和文和訳 (Plain JP) ── 学習者自身が書き換える練習場。
+  // AI は採点・自動書き換えしない。役割は以下の 2 つだけ:
+  //   (1) ルールベース指摘バッジ — 常時、textarea を debounce 監視 (LLM 不使用)
+  //   (2) on-demand LLM — 「主語チェック」「言い換え例を見る」ボタン押下時のみ
   const plainBlock = document.createElement('div');
   plainBlock.className = 'compose-block plain-jp-block';
   plainBlock.innerHTML = `
     <div class="plain-jp-row">
       <span class="compose-label" style="margin:0;">和文和訳（plain JP）</span>
-      <button class="btn btn-sm" id="plain-jp-btn">${icons.pen(12)} 言い換える</button>
+      <div class="plain-jp-actions">
+        <button class="btn btn-sm" id="subject-check-btn" type="button">${icons.eye(12)} 主語チェック</button>
+        <button class="btn btn-sm" id="variants-btn" type="button">${icons.pen(12)} 言い換え例を見る</button>
+      </div>
     </div>
-    <textarea id="plain-jp-input" class="compose-textarea plain-jp-textarea" placeholder="主語と動詞をはっきり立て、長い修飾を切り分けたシンプルな日本語。"></textarea>
-    <p class="plain-jp-note">英語に乗せやすい形に直してから EN を書くと、訳が引っかかりにくくなります。</p>
+    <div class="plain-jp-lints" id="plain-jp-lints" aria-live="polite"></div>
+    <textarea id="plain-jp-input" name="plain-jp" class="compose-textarea plain-jp-textarea"
+      placeholder="自分で書き換えてみよう。主語をはっきり、長い修飾を切り分け、抽象表現を動詞に。"></textarea>
+    <div class="plain-jp-variants" id="plain-jp-variants"></div>
+    <p class="plain-jp-note">AI は採点せず、求めたときだけ指摘・例示します。書くのは自分。</p>
   `;
   left.appendChild(plainBlock);
 
-  const plainBtn = plainBlock.querySelector('#plain-jp-btn') as HTMLButtonElement;
   const plainInput = plainBlock.querySelector('#plain-jp-input') as HTMLTextAreaElement;
-  plainBtn.addEventListener('click', async () => {
-    const jp = (jpBlock.querySelector('#jp-input') as HTMLTextAreaElement).value.trim();
-    if (!jp) {
-      alert('まず日本語を書いてください');
+  const lintsEl = plainBlock.querySelector('#plain-jp-lints') as HTMLElement;
+  const variantsEl = plainBlock.querySelector('#plain-jp-variants') as HTMLElement;
+  const subjectBtn = plainBlock.querySelector('#subject-check-btn') as HTMLButtonElement;
+  const variantsBtn = plainBlock.querySelector('#variants-btn') as HTMLButtonElement;
+
+  // ── (1) ルールベース指摘バッジ: JP textarea を 500ms debounce で監視 ──
+  let ruleIssues: LintIssue[] = [];
+  let llmSubjectIssues: SubjectIssue[] = []; // (c) LLM 結果。再 lint 時に保持する。
+  let lintTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function renderLints(): void {
+    const all: { kind: string; label: string; snippet: string; color: string }[] = [];
+    for (const it of ruleIssues) {
+      const meta = LINT_TYPE_META[it.type];
+      all.push({ kind: meta.label, label: it.message, snippet: it.snippet, color: meta.color });
+    }
+    for (const it of llmSubjectIssues) {
+      all.push({
+        kind: LINT_TYPE_META['subject-missing'].label,
+        label: it.suggested_subject ? `主語: ${it.suggested_subject}` : '主語省略',
+        snippet: it.sentence,
+        color: LINT_TYPE_META['subject-missing'].color,
+      });
+    }
+    if (all.length === 0) {
+      lintsEl.innerHTML = '';
       return;
     }
-    plainBtn.disabled = true;
-    const originalLabel = plainBtn.innerHTML;
-    plainBtn.textContent = '言い換え中…';
+    lintsEl.innerHTML = all.map((b) => `
+      <span class="plain-jp-badge" style="--badge-color:${b.color};">
+        <span class="plain-jp-badge-kind">${escapeHtml(b.kind)}</span>
+        <span class="plain-jp-badge-label">${escapeHtml(b.label)}</span>
+        <span class="plain-jp-badge-snippet">${escapeHtml(b.snippet)}</span>
+      </span>
+    `).join('');
+  }
+
+  function scheduleLint(): void {
+    if (lintTimer) clearTimeout(lintTimer);
+    lintTimer = setTimeout(() => {
+      const jp = (jpBlock.querySelector('#jp-input') as HTMLTextAreaElement).value;
+      ruleIssues = lintPlainJp(jp);
+      // JP 本文が変わったら、過去の LLM 主語チェック結果は古くなるので破棄。
+      llmSubjectIssues = [];
+      renderLints();
+    }, 500);
+  }
+  (jpBlock.querySelector('#jp-input') as HTMLTextAreaElement).addEventListener('input', scheduleLint);
+
+  // ── (c) on-demand LLM: 主語省略チェック ──
+  subjectBtn.addEventListener('click', async () => {
+    const jp = (jpBlock.querySelector('#jp-input') as HTMLTextAreaElement).value.trim();
+    if (!jp) { alert('まず日本語を書いてください'); return; }
+    subjectBtn.disabled = true;
+    const original = subjectBtn.innerHTML;
+    subjectBtn.textContent = '解析中…';
     try {
-      const plain = await generatePlainJp(jp);
-      plainInput.value = plain;
+      llmSubjectIssues = await detectSubjectOmissions(jp);
+      renderLints();
+      if (llmSubjectIssues.length === 0) {
+        // 0 件も「OK」シグナルとして見えるように 1 バッジ出す
+        lintsEl.insertAdjacentHTML('beforeend',
+          '<span class="plain-jp-badge plain-jp-badge--ok">主語省略は見当たらず</span>');
+      }
     } catch (e) {
-      console.error('[plainJp] generation failed', e);
-      alert('言い換えに失敗しました');
+      console.error('[subjectCheck] failed', e);
+      alert('主語チェックに失敗しました');
     } finally {
-      plainBtn.disabled = false;
-      plainBtn.innerHTML = originalLabel;
+      subjectBtn.disabled = false;
+      subjectBtn.innerHTML = original;
+    }
+  });
+
+  // ── (d) on-demand LLM: 言い換え例 (複数バリアント) ──
+  variantsBtn.addEventListener('click', async () => {
+    const jp = (jpBlock.querySelector('#jp-input') as HTMLTextAreaElement).value.trim();
+    if (!jp) { alert('まず日本語を書いてください'); return; }
+    variantsBtn.disabled = true;
+    const original = variantsBtn.innerHTML;
+    variantsBtn.textContent = '生成中…';
+    try {
+      const v = await generatePlainJpVariants(jp);
+      if (!v) { variantsEl.innerHTML = '<p class="plain-jp-variants-empty">取得に失敗しました</p>'; return; }
+      variantsEl.innerHTML = `
+        <div class="plain-jp-variants-head">言い換え例（参考。これだけが正解ではありません）</div>
+        ${[
+          { key: 'variant_subject', label: '主語をはっきり', text: v.variant_subject },
+          { key: 'variant_verb',    label: '動詞に戻す',    text: v.variant_verb },
+          { key: 'variant_split',   label: '短く分割',      text: v.variant_split },
+        ].map((row) => `
+          <div class="plain-jp-variant">
+            <div class="plain-jp-variant-head">
+              <span class="plain-jp-variant-label">${row.label}</span>
+              <button class="btn btn-sm btn-ghost" data-text="${escapeAttr(row.text || '')}" type="button">この案を採用</button>
+            </div>
+            <div class="plain-jp-variant-text">${escapeHtml(row.text || '')}</div>
+          </div>
+        `).join('')}
+      `;
+      variantsEl.querySelectorAll('button[data-text]').forEach((b) => {
+        b.addEventListener('click', () => {
+          plainInput.value = (b as HTMLElement).dataset.text || '';
+          plainInput.focus();
+        });
+      });
+    } catch (e) {
+      console.error('[variants] failed', e);
+      alert('言い換え例の取得に失敗しました');
+    } finally {
+      variantsBtn.disabled = false;
+      variantsBtn.innerHTML = original;
     }
   });
 
@@ -625,16 +725,29 @@ async function loadExisting(date: string, mode: Mode) {
   return fetchEntry(id);
 }
 
-const PLAIN_JP_SYSTEM_PROMPT = `あなたは日本語学習者向け英作文コーチです。学習者の日本語を、英語に翻訳しやすい「素直な日本語 (plain JP)」に書き換えてください。
+// 主語省略の検出 (on-demand)。client 側ルールでは精度が出ないため LLM に委譲。
+const SUBJECT_CHECK_PROMPT = `あなたは日本語学習者向け英作文コーチです。学習者の日本語日記から、英訳時に主語の補完が必要になりそうな文を検出してください。
 
 ルール:
-1. 主語を必ず補う（省略されていれば「私は / 雨は / 会議は」など明示）。
-2. 長い連体修飾は独立した文に分けて短くする。
-3. 抽象名詞・「〜になる」「〜という感じ」のような曖昧表現は、動詞 + 主語に戻す。
-4. 元の意味は変えない。情報を追加しない。
-5. 1 文ずつ「主語 → 動詞 → 目的語/補語」が見えるよう書く。
+1. 主語が省略されていて、英訳時に "I"/"It"/"They" などを補う必要がありそうな文だけを抽出。
+2. 文脈から主語が自明な場合 (直前の文と同じ主語など) は除外。
+3. JSON 配列で返す: [{"sentence": "対象文の抜粋", "suggested_subject": "想定される主語"}]
+4. 1 文も該当しなければ []。
+5. 説明文や前置きは一切付けず JSON のみ出力。`;
 
-出力は plain JP の本文のみ。前置きや説明は一切書かない。`;
+// 言い換え例 (on-demand)。複数バリアントを示すことで「唯一解感」を避け、学習者が選択する余地を残す。
+const PLAIN_JP_VARIANTS_PROMPT = `あなたは日本語学習者向け英作文コーチです。学習者の日本語日記を、英訳しやすい "plain JP" に書き換える例を 3 通り提示してください。
+
+3 通りのバリエーション:
+- variant_subject: 主語をはっきり補うことに重点を置いた書き換え
+- variant_verb:    抽象名詞や「〜になる/〜感じ」を具体的な動詞に戻すことに重点を置いた書き換え
+- variant_split:   1 文が長い場合に短く分割することに重点を置いた書き換え
+
+ルール:
+1. 元の意味を変えない。情報を勝手に足さない。
+2. 各バリアントの方針が分かるよう、明確な差を付ける。
+3. JSON で返す: {"variant_subject": "...", "variant_verb": "...", "variant_split": "..."}
+4. 説明文や前置きは一切付けず JSON のみ出力。`;
 
 const HINTS_SYSTEM_PROMPT = `Give the MINIMUM English building blocks a Japanese learner needs to translate their diary themselves. Do NOT translate the whole thing.
 
@@ -660,9 +773,36 @@ function parseHintsJsonArray(raw: string): HintItem[] {
   return parsed as HintItem[];
 }
 
-async function generatePlainJp(contentJp: string): Promise<string> {
-  const response = await callLLM(PLAIN_JP_SYSTEM_PROMPT, contentJp);
-  return response.trim();
+interface SubjectIssue { sentence: string; suggested_subject: string; }
+interface PlainJpVariants { variant_subject: string; variant_verb: string; variant_split: string; }
+
+async function detectSubjectOmissions(contentJp: string): Promise<SubjectIssue[]> {
+  const raw = await callLLM(SUBJECT_CHECK_PROMPT, contentJp);
+  try {
+    let s = raw.trim();
+    const first = s.indexOf('[');
+    const last = s.lastIndexOf(']');
+    if (first >= 0 && last > first) s = s.slice(first, last + 1);
+    const arr = JSON.parse(s);
+    return Array.isArray(arr) ? arr : [];
+  } catch (e) {
+    console.warn('[detectSubjectOmissions] parse fail', e);
+    return [];
+  }
+}
+
+async function generatePlainJpVariants(contentJp: string): Promise<PlainJpVariants | null> {
+  const raw = await callLLM(PLAIN_JP_VARIANTS_PROMPT, contentJp);
+  try {
+    let s = raw.trim();
+    const first = s.indexOf('{');
+    const last = s.lastIndexOf('}');
+    if (first >= 0 && last > first) s = s.slice(first, last + 1);
+    return JSON.parse(s) as PlainJpVariants;
+  } catch (e) {
+    console.warn('[generatePlainJpVariants] parse fail', e);
+    return null;
+  }
 }
 
 async function generateHintsClient(contentJp: string): Promise<HintItem[]> {
@@ -739,6 +879,10 @@ function iconFor(name: 'sun' | 'graduation' | 'moon' | 'bookOpen'): string {
   if (name === 'graduation') return icons.graduation(12);
   if (name === 'bookOpen') return icons.bookOpen(12);
   return icons.moon(12);
+}
+
+function escapeAttr(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 }
 
 function escapeHtml(s: string | undefined | null): string {
