@@ -13,10 +13,12 @@ import { flowCheck } from '../llm-diary';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { analyzeAndSavePost, savePostTextOnly } from '../data/posts';
+import { diffWords, renderDiffHtml } from '../diff';
 
 interface HintItem { english: string; japanese: string; note?: string; }
 
 const STOIC_KEY = 'lediary_v2_stoic';
+const FOCUS_KEY = 'lediary_editor_focus';
 
 function todayStr(): string {
   const d = new Date();
@@ -53,12 +55,44 @@ export function renderEditor(root: HTMLElement): void {
         <span>${dateObj.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
       </div>
     </div>
-    <div class="mode-pills">
-      ${(['morning', 'lesson', 'diary', 'story'] as Mode[]).map((m) => `
-        <button class="mode-pill ${m === currentMode ? 'active' : ''}" data-mode="${m}">${iconFor(MODE_META[m].icon)} ${MODE_META[m].label}</button>
-      `).join('')}
+    <div class="editor-meta-right">
+      <div class="mode-pills">
+        ${(['morning', 'lesson', 'diary', 'story'] as Mode[]).map((m) => `
+          <button class="mode-pill ${m === currentMode ? 'active' : ''}" data-mode="${m}">${iconFor(MODE_META[m].icon)} ${MODE_META[m].label}</button>
+        `).join('')}
+      </div>
+      <button class="editor-focus-btn" id="focus-toggle" type="button" aria-pressed="false" title="集中モード (Esc で解除)">
+        ${icons.eyeOff(14)} <span>集中</span>
+      </button>
     </div>
   `;
+
+  // ── focus mode: hide chrome / fade hints, persist toggle ──
+  const isFocus = localStorage.getItem(FOCUS_KEY) === '1';
+  function applyFocus(on: boolean): void {
+    document.body.classList.toggle('editor-focus', on);
+    const btn = meta.querySelector('#focus-toggle') as HTMLButtonElement | null;
+    if (btn) {
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      btn.classList.toggle('on', on);
+    }
+    localStorage.setItem(FOCUS_KEY, on ? '1' : '0');
+  }
+  applyFocus(isFocus);
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && document.body.classList.contains('editor-focus')) {
+      applyFocus(false);
+    }
+  };
+  document.addEventListener('keydown', onKey);
+  window.addEventListener('popstate', () => {
+    document.body.classList.remove('editor-focus');
+    document.removeEventListener('keydown', onKey);
+  }, { once: true });
+
+  meta.querySelector('#focus-toggle')!.addEventListener('click', () => {
+    applyFocus(!document.body.classList.contains('editor-focus'));
+  });
 
   meta.querySelectorAll('.mode-pill').forEach((b) => {
     b.addEventListener('click', () => {
@@ -224,19 +258,27 @@ export function renderEditor(root: HTMLElement): void {
       const isRevealed = !stoic || revealed[i];
       const card = document.createElement('div');
       card.className = 'correction-card';
+      // word-level diff: corrected を <del>/<ins> マークアップに置換し、original 行は薄く参考表示。
+      // flow（流れを整える）の場合は diff が読みにくいため従来の corrected ブロックを使う。
+      const diffHtml = feedbackKind === 'correct' && fb.original && fb.corrected
+        ? renderDiffHtml(diffWords(fb.original, fb.corrected))
+        : null;
+      const correctedBlock = diffHtml
+        ? `<div class="correction-diff">${diffHtml}</div>`
+        : `<div class="correction-corrected">${escapeHtml(fb.corrected)}</div>`;
       card.innerHTML = `
         <div class="correction-step">${i + 1} / ${currentFeedback.length}</div>
         <div class="correction-original">${escapeHtml(fb.original)}</div>
         ${stoic && !isRevealed ? `
           <div class="stoic-veil" data-idx="${i}">
-            <div class="correction-corrected">${escapeHtml(fb.corrected)}</div>
+            ${correctedBlock}
             <div class="stoic-veil-hint">タップで答えを見る</div>
           </div>
           <div class="correction-explanation">${escapeHtml(fb.explanation)}</div>
           <div class="correction-rewrite-label">自分で書き直す</div>
           <textarea name="correction-rewrite-${i}" class="correction-rewrite" data-idx="${i}" placeholder="ヒントだけで書き直してみよう">${escapeHtml(rewrites[i] || '')}</textarea>
         ` : `
-          <div class="correction-corrected">${escapeHtml(fb.corrected)}</div>
+          ${correctedBlock}
           <div class="correction-explanation">${escapeHtml(fb.explanation)}</div>
           <div class="correction-rewrite-label">自分で書き直す</div>
           <textarea name="correction-rewrite-${i}" class="correction-rewrite" data-idx="${i}" placeholder="${stoic ? 'ヒントだけで書き直してみよう' : '参考にして書き直してみよう'}">${escapeHtml(rewrites[i] || '')}</textarea>
@@ -246,9 +288,13 @@ export function renderEditor(root: HTMLElement): void {
       if (veil) {
         veil.addEventListener('click', () => {
           revealed[i] = true;
-          (veil.querySelector('.correction-corrected') as HTMLElement).style.filter = 'none';
-          (veil.querySelector('.correction-corrected') as HTMLElement).style.userSelect = 'auto';
-          (veil.querySelector('.stoic-veil-hint') as HTMLElement).style.display = 'none';
+          const block = veil.querySelector('.correction-corrected, .correction-diff') as HTMLElement | null;
+          if (block) {
+            block.style.filter = 'none';
+            block.style.userSelect = 'auto';
+          }
+          const hint = veil.querySelector('.stoic-veil-hint') as HTMLElement | null;
+          if (hint) hint.style.display = 'none';
           veil.style.cursor = 'auto';
         });
       }

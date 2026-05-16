@@ -459,3 +459,195 @@ input {
   display: inline-flex;
   align-items: center;
 }
+
+/* ─── Reduced-motion 対応 (handoff §5) ───
+   ユーザーが OS で「視差/モーション低減」を希望している場合、
+   transform / 変位アニメを無効化し、opacity 遷移は控えめに保つ。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 80ms !important;
+    transition-property: opacity, background-color, color, border-color !important;
+  }
+
+  .today-card:hover,
+  .entry-card:hover,
+  .fab:hover {
+    transform: none !important;
+  }
+}
+
+/* ─── Calendar (handoff §3.4) ─── */
+.ld-cal {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
+}
+
+.ld-cal__hd {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.ld-cal__title {
+  font-family: var(--ld-serif);
+  font-size: 32px;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  font-weight: 500;
+  color: var(--ld-ink);
+}
+
+.ld-cal__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+
+.ld-cal__wd {
+  text-align: center;
+  padding: 8px 0;
+  font-family: var(--ld-sans);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ld-muted);
+}
+
+.ld-cal__cell {
+  aspect-ratio: 1;
+  padding: 8px 10px 10px;
+  border: 1px solid var(--ld-rule);
+  border-radius: var(--ld-r-sm);
+  background: var(--ld-bg);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-start;
+  cursor: pointer;
+  transition: border-color var(--ld-dur-fast) var(--ld-ease),
+              background var(--ld-dur-fast) var(--ld-ease);
+  font-family: inherit;
+}
+
+.ld-cal__cell:hover {
+  border-color: var(--ld-rule-strong);
+}
+
+.ld-cal__cell--off {
+  background: var(--ld-surface);
+  border-color: transparent;
+  cursor: default;
+}
+
+.ld-cal__cell--has {
+  background: var(--ld-surface);
+}
+
+.ld-cal__cell--today {
+  border-color: var(--ld-ink);
+  border-width: 1.5px;
+  padding: 7.5px 9.5px 9.5px;
+}
+
+.ld-cal__cell--future {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ld-cal__num {
+  font-family: var(--ld-serif);
+  font-size: 18px;
+  line-height: 1;
+  color: var(--ld-ink);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.ld-cal__cell--off .ld-cal__num {
+  color: var(--ld-faint);
+}
+
+.ld-cal__dots {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.ld-cal__dots--score {
+  gap: 2px;
+}
+
+.ld-cal__sdot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ld-rule-strong);
+}
+
+.ld-cal__sdot.on {
+  background: var(--ld-accent);
+}
+
+.ld-cal__mdot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  cursor: pointer;
+}
+
+.ld-cal__legend {
+  display: flex;
+  gap: 18px;
+  margin-top: 24px;
+  font-size: 12px;
+  color: var(--ld-muted);
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.ld-cal__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ld-cal__legend-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+@media (max-width: 600px) {
+  .ld-cal {
+    padding: 24px 16px 48px;
+  }
+  .ld-cal__title {
+    font-size: 24px;
+  }
+  .ld-cal__grid {
+    gap: 4px;
+  }
+  .ld-cal__cell {
+    padding: 6px 7px 7px;
+  }
+  .ld-cal__num {
+    font-size: 15px;
+  }
+  .ld-cal__sdot {
+    width: 4px;
+    height: 4px;
+  }
+  .ld-cal__mdot {
+    width: 5px;
+    height: 5px;
+  }
+}

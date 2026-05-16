@@ -222,24 +222,59 @@
 }
 
 .correction-original {
-  font-family: var(--serif);
+  font-family: var(--ld-serif);
   font-size: 15px;
-  color: var(--text-muted);
+  color: var(--ld-muted);
   text-decoration: line-through;
-  text-decoration-color: rgba(192, 57, 43, 0.55);
+  text-decoration-color: rgba(192, 57, 43, 0.45);
   margin-bottom: 8px;
 }
 
 .correction-corrected {
-  font-family: var(--serif);
-  font-size: 16px;
-  color: var(--text);
-  font-weight: 500;
+  font-family: var(--ld-serif);
+  font-size: 17px;
+  line-height: 1.7;
+  color: var(--ld-ink);
+  font-weight: 400;
   margin-bottom: 12px;
-  padding: 8px 12px;
-  background: var(--surface-warm);
-  border-radius: var(--radius-sm);
-  border-left: 3px solid #5cb27a;
+  padding: 10px 14px;
+  background: var(--ld-surface);
+  border-radius: var(--ld-r-sm);
+  border-left: 3px solid var(--ld-accent);
+}
+
+/* word-level diff (handoff §4.7) — original→corrected を <del>/<ins> で重ねる */
+.correction-diff {
+  font-family: var(--ld-serif);
+  font-size: 17px;
+  line-height: 1.7;
+  color: var(--ld-ink);
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  background: var(--ld-surface);
+  border-radius: var(--ld-r-sm);
+  border-left: 3px solid var(--ld-accent);
+}
+
+.ld-diff__del {
+  color: #b94248;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  text-decoration-color: rgba(185, 66, 72, 0.55);
+  background: rgba(185, 66, 72, 0.08);
+  padding: 0 2px;
+  border-radius: 2px;
+  margin-right: 1px;
+}
+
+.ld-diff__ins {
+  color: var(--ld-accent-deep);
+  background: var(--ld-accent-tint);
+  border-bottom: 2px solid var(--ld-accent);
+  padding: 0 2px;
+  border-radius: 2px;
+  text-decoration: none;
+  font-weight: 500;
 }
 
 .correction-explanation {
@@ -281,7 +316,8 @@
   cursor: pointer;
 }
 
-.stoic-veil .correction-corrected {
+.stoic-veil .correction-corrected,
+.stoic-veil .correction-diff {
   filter: blur(8px);
   user-select: none;
 }
@@ -384,6 +420,90 @@
   }
 }
 
+
+/* ── Focus mode (handoff §3.2 §4 §5) ──
+   header / mode pill / hints column を fade-out して書く体験に集中。
+   Esc または右上ボタンで解除。 */
+.editor-meta-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.editor-focus-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border: 1px solid var(--ld-rule);
+  border-radius: 100px;
+  background: transparent;
+  font-size: 12px;
+  color: var(--ld-muted);
+  cursor: pointer;
+  transition: all var(--ld-dur-fast) var(--ld-ease);
+}
+
+.editor-focus-btn:hover {
+  border-color: var(--ld-rule-strong);
+  color: var(--ld-ink);
+}
+
+.editor-focus-btn.on {
+  background: var(--ld-ink);
+  color: #fff;
+  border-color: var(--ld-ink);
+}
+
+body.editor-focus .app-chrome {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--ld-dur) var(--ld-ease);
+}
+
+body.editor-focus .editor-meta {
+  border-bottom-color: transparent;
+  margin-bottom: 18px;
+  padding-bottom: 0;
+}
+
+body.editor-focus .mode-pills,
+body.editor-focus .editor-date-meta {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--ld-dur) var(--ld-ease);
+}
+
+body.editor-focus .hints-card,
+body.editor-focus .compose-third,
+body.editor-focus .compose-action-row {
+  opacity: 0.15;
+  transition: opacity var(--ld-dur) var(--ld-ease);
+}
+
+body.editor-focus .hints-card:hover,
+body.editor-focus .compose-third:hover {
+  opacity: 1;
+}
+
+body.editor-focus .compose-textarea {
+  background: transparent;
+  border-color: transparent;
+}
+
+body.editor-focus .compose-textarea:focus {
+  border-color: var(--ld-rule);
+  background: var(--ld-surface);
+}
+
+@media (min-width: 1100px) {
+  body.editor-focus .compose-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  body.editor-focus .compose-third {
+    grid-column: 1 / span 2;
+  }
+}
 
 /* 添削／流れを整える のリクエスト中、古いカードを隠して薄いプレースホルダだけ表示 */
 .correction-loading {
