@@ -125,16 +125,17 @@
   background: var(--ld-surface);
 }
 
-/* 左端の accent rail で「書いた」を強く示す */
+/* 左端の hairline accent rail で「書いた」をさりげなく示す */
 .today-card.filled::before {
   content: '';
   position: absolute;
   left: 0;
-  top: 14px;
-  bottom: 14px;
-  width: 2px;
-  background: var(--ld-accent-deep);
+  top: 16px;
+  bottom: 16px;
+  width: 1.5px;
+  background: var(--ld-accent);
   border-radius: 2px;
+  opacity: 0.7;
 }
 
 .today-card-row {
@@ -144,23 +145,23 @@
 }
 
 .today-card-icon {
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
   display: grid;
   place-items: center;
-  color: var(--ld-secondary);
+  color: var(--ld-muted);
 }
 
 .today-card.filled .today-card-icon {
-  color: var(--ld-accent-deep);
+  color: var(--ld-secondary);
 }
 
 .today-card-title {
   font-family: var(--ld-serif);
-  font-size: 22px;
-  line-height: 26px;
+  font-size: 17px;
+  line-height: 22px;
   font-weight: 500;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.005em;
   color: var(--ld-ink);
 }
 
@@ -196,9 +197,14 @@
 }
 
 .today-card-status.done {
-  background: var(--ld-accent-deep);
+  background: var(--ld-accent);
   color: #fff;
-  box-shadow: 0 0 0 3px var(--ld-accent-tint);
+  /* halo は廃止して dot 単体に。done カードはすでに bg + rail で示している。 */
+}
+
+.today-card-status.done svg {
+  width: 10px;
+  height: 10px;
 }
 
 @media (max-width: 600px) {

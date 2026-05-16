@@ -138,7 +138,7 @@ function renderBody(wrap: HTMLElement, entries: DiaryEntry[], days: Map<string, 
       : '';
     card.innerHTML = `
       <div class="today-card-row">
-        <span class="today-card-icon">${iconFor(meta.icon, 22)}</span>
+        <span class="today-card-icon">${iconFor(meta.icon, 17)}</span>
         <span class="today-card-status ${filled ? 'done' : 'todo'}"
               role="img" aria-label="${statusLabel}" title="${statusLabel}">${statusInner}</span>
       </div>
