@@ -165,6 +165,51 @@ export function renderEditor(root: HTMLElement): void {
   `;
   left.appendChild(jpBlock);
 
+  // ── 和文和訳 (Plain JP): 英訳しやすい日本語に言い換えるステップ ──
+  // 主語補完・長修飾分割・抽象→動詞 の 3 操作を AI に依頼。
+  // 表示後は編集可能。EN を書くときも、ヒント生成時も plainJp を優先する。
+  const plainBlock = document.createElement('div');
+  plainBlock.className = 'compose-block plain-jp-block';
+  plainBlock.innerHTML = `
+    <div class="plain-jp-row">
+      <span class="compose-label" style="margin:0;">和文和訳（plain JP）</span>
+      <button class="btn btn-sm" id="plain-jp-btn">${icons.pen(12)} 言い換える</button>
+    </div>
+    <textarea id="plain-jp-input" class="compose-textarea plain-jp-textarea" placeholder="主語と動詞をはっきり立て、長い修飾を切り分けたシンプルな日本語。"></textarea>
+    <p class="plain-jp-note">英語に乗せやすい形に直してから EN を書くと、訳が引っかかりにくくなります。</p>
+  `;
+  left.appendChild(plainBlock);
+
+  const plainBtn = plainBlock.querySelector('#plain-jp-btn') as HTMLButtonElement;
+  const plainInput = plainBlock.querySelector('#plain-jp-input') as HTMLTextAreaElement;
+  plainBtn.addEventListener('click', async () => {
+    const jp = (jpBlock.querySelector('#jp-input') as HTMLTextAreaElement).value.trim();
+    if (!jp) {
+      alert('まず日本語を書いてください');
+      return;
+    }
+    plainBtn.disabled = true;
+    const originalLabel = plainBtn.innerHTML;
+    plainBtn.textContent = '言い換え中…';
+    try {
+      const plain = await generatePlainJp(jp);
+      plainInput.value = plain;
+    } catch (e) {
+      console.error('[plainJp] generation failed', e);
+      alert('言い換えに失敗しました');
+    } finally {
+      plainBtn.disabled = false;
+      plainBtn.innerHTML = originalLabel;
+    }
+  });
+
+  // ヒント / 添削で使う「ソース JP」: plainJp に内容があればそちら、なければ生 JP。
+  function effectiveJp(): string {
+    const plain = plainInput.value.trim();
+    const raw = (jpBlock.querySelector('#jp-input') as HTMLTextAreaElement).value.trim();
+    return plain || raw;
+  }
+
   const hintToggleRow = document.createElement('div');
   hintToggleRow.className = 'compose-action-row';
   hintToggleRow.style.marginBottom = '24px';
@@ -178,7 +223,7 @@ export function renderEditor(root: HTMLElement): void {
 
   hintToggleRow.querySelector('#show-hints')!.addEventListener('click', async () => {
     const btn = hintToggleRow.querySelector('#show-hints') as HTMLButtonElement;
-    const jp = (jpBlock.querySelector('#jp-input') as HTMLTextAreaElement).value.trim();
+    const jp = effectiveJp();
     if (!jp) {
       alert('まず日本語を書いてください');
       return;
@@ -580,6 +625,17 @@ async function loadExisting(date: string, mode: Mode) {
   return fetchEntry(id);
 }
 
+const PLAIN_JP_SYSTEM_PROMPT = `あなたは日本語学習者向け英作文コーチです。学習者の日本語を、英語に翻訳しやすい「素直な日本語 (plain JP)」に書き換えてください。
+
+ルール:
+1. 主語を必ず補う（省略されていれば「私は / 雨は / 会議は」など明示）。
+2. 長い連体修飾は独立した文に分けて短くする。
+3. 抽象名詞・「〜になる」「〜という感じ」のような曖昧表現は、動詞 + 主語に戻す。
+4. 元の意味は変えない。情報を追加しない。
+5. 1 文ずつ「主語 → 動詞 → 目的語/補語」が見えるよう書く。
+
+出力は plain JP の本文のみ。前置きや説明は一切書かない。`;
+
 const HINTS_SYSTEM_PROMPT = `Give the MINIMUM English building blocks a Japanese learner needs to translate their diary themselves. Do NOT translate the whole thing.
 
 Each hint must map to a word/phrase that actually appears in the Japanese. Skip basics (family, today, go) — focus on idiomatic expressions, casual connectors, collocations, tricky verbs. Each Japanese concept once, no synonyms. Short diary → few hints (2-3 is fine).
@@ -602,6 +658,11 @@ function parseHintsJsonArray(raw: string): HintItem[] {
   const parsed = JSON.parse(s);
   if (!Array.isArray(parsed)) throw new Error('not an array');
   return parsed as HintItem[];
+}
+
+async function generatePlainJp(contentJp: string): Promise<string> {
+  const response = await callLLM(PLAIN_JP_SYSTEM_PROMPT, contentJp);
+  return response.trim();
 }
 
 async function generateHintsClient(contentJp: string): Promise<HintItem[]> {

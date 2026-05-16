@@ -105,6 +105,41 @@
   min-height: 160px;
 }
 
+/* 和文和訳 (plain JP) — JP と EN の間の言い換えステップ */
+.plain-jp-block {
+  margin-top: -8px;
+  margin-bottom: 22px;
+}
+
+.plain-jp-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.plain-jp-textarea {
+  min-height: 96px;
+  background: var(--ld-surface);
+  border: 1px dashed var(--ld-rule-strong);
+}
+
+.plain-jp-textarea:focus {
+  border-style: solid;
+}
+
+.plain-jp-textarea:placeholder-shown {
+  font-style: italic;
+}
+
+.plain-jp-note {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--ld-muted);
+  font-family: var(--ld-sans);
+}
+
 .compose-action-row {
   display: flex;
   gap: 8px;
