@@ -158,13 +158,28 @@ export function renderEditor(root: HTMLElement): void {
   third.className = 'compose-third';
   grid.appendChild(third);
 
+  // ── JP + plain JP を 1 つの collapsible として包む ──
+  // 既存エントリの再編集時 (もう一度添削 / 流れを整える 等) は、
+  // 大半のケースで JP は変えないため折りたたんでチャート (= EN + 添削) に集中させる。
+  // ユーザーが直したいときだけトグルで開ける。
+  const jpCollapse = document.createElement('div');
+  jpCollapse.className = 'jp-collapse';
+  const jpToggle = document.createElement('button');
+  jpToggle.className = 'jp-collapse-toggle';
+  jpToggle.type = 'button';
+  jpCollapse.appendChild(jpToggle);
+  const jpBody = document.createElement('div');
+  jpBody.className = 'jp-collapse-body';
+  jpCollapse.appendChild(jpBody);
+  left.appendChild(jpCollapse);
+
   const jpBlock = document.createElement('div');
   jpBlock.className = 'compose-block';
   jpBlock.innerHTML = `
     <div class="compose-label">日本語で書く</div>
     <textarea id="jp-input" class="compose-textarea" placeholder=""></textarea>
   `;
-  left.appendChild(jpBlock);
+  jpBody.appendChild(jpBlock);
 
   // ── 和文和訳 (Plain JP) ── 学習者自身が書き換える練習場。
   // AI は採点・自動書き換えしない。役割は以下の 2 つだけ:
@@ -186,7 +201,35 @@ export function renderEditor(root: HTMLElement): void {
     <div class="plain-jp-variants" id="plain-jp-variants"></div>
     <p class="plain-jp-note">AI は採点せず、求めたときだけ指摘・例示します。書くのは自分。</p>
   `;
-  left.appendChild(plainBlock);
+  jpBody.appendChild(plainBlock);
+
+  // collapse のトグル制御。
+  // - `has-existing`: 既存エントリ再編集モード。toggle ボタンを表示。
+  // - `collapsed`: body を非表示。toggle ボタンのラベルが「直す」「隠す」を切替。
+  function renderJpToggleLabel(): void {
+    const collapsed = jpCollapse.classList.contains('collapsed');
+    const previewRaw = (jpBlock.querySelector('#jp-input') as HTMLTextAreaElement).value.trim();
+    const preview = previewRaw.slice(0, 48) + (previewRaw.length > 48 ? '…' : '');
+    if (collapsed) {
+      jpToggle.innerHTML = `
+        <span class="jp-collapse-chevron">${icons.chevronDown(12)}</span>
+        <span class="jp-collapse-label">日本語を直す</span>
+        ${previewRaw ? `<span class="jp-collapse-preview">${escapeHtml(preview)}</span>` : '<span class="jp-collapse-preview jp-collapse-preview--empty">まだ書かれていません</span>'}
+      `;
+    } else {
+      jpToggle.innerHTML = `
+        <span class="jp-collapse-chevron jp-collapse-chevron--open">${icons.chevronDown(12)}</span>
+        <span class="jp-collapse-label">日本語を隠す</span>
+      `;
+    }
+  }
+  function setJpCollapsed(collapsed: boolean): void {
+    jpCollapse.classList.toggle('collapsed', collapsed);
+    // 既存エントリで一度でも collapsed=true になったら、以降は toggle を出し続ける。
+    if (collapsed) jpCollapse.classList.add('has-existing');
+    renderJpToggleLabel();
+  }
+  jpToggle.addEventListener('click', () => setJpCollapsed(!jpCollapse.classList.contains('collapsed')));
 
   const plainInput = plainBlock.querySelector('#plain-jp-input') as HTMLTextAreaElement;
   const lintsEl = plainBlock.querySelector('#plain-jp-lints') as HTMLElement;
@@ -675,10 +718,14 @@ export function renderEditor(root: HTMLElement): void {
       revealed = [];
       correctionSection.innerHTML = '';
       saveBtn.style.display = 'none';
+      setJpCollapsed(false); // 新規入力: JP を開く
       return;
     }
     (jpBlock.querySelector('#jp-input') as HTMLTextAreaElement).value = entry.contentJp;
     (enBlock.querySelector('#en-input') as HTMLTextAreaElement).value = entry.userTranslation;
+    // 既存エントリ再編集: JP / plain JP は折りたたみ、必要なときだけ直せる。
+    // 多くの再編集 (もう一度添削 / 流れを整える) で JP に手は入らないため、邪魔にならない位置に置く。
+    setJpCollapsed(!!entry.contentJp);
     // 既存エントリの過去添削は再表示しない。ユーザが必要なら「もう一度添削」を選ぶ。
     // 編集モードでは 完成 ボタンを露出して直接保存できるようにする。
     currentFeedback = [];
