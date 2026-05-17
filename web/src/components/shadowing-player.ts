@@ -13,8 +13,13 @@ function ctx(): AudioContext {
   return audioCtxRef.ctx;
 }
 
-// AudioBuffer をフレーズテキスト単位でキャッシュ (タブ存続中)。
+// AudioBuffer を「voice + テキスト」単位でキャッシュ (タブ存続中)。
+// voice を切替えると別の AudioBuffer が必要になるためキーに含める。
 const audioCache = new Map<string, AudioBuffer>();
+const DEFAULT_VOICE = 'Charon';
+function cacheKey(voice: string, text: string): string {
+  return `${voice}::${text}`;
+}
 
 export interface ShadowingPlayerOptions {
   text: string;
@@ -65,10 +70,11 @@ export function createShadowingPlayer(opts: ShadowingPlayerOptions): HTMLElement
   }
 
   async function ensureBuffer(): Promise<AudioBuffer> {
-    const cached = audioCache.get(opts.text);
+    const key = cacheKey(DEFAULT_VOICE, opts.text);
+    const cached = audioCache.get(key);
     if (cached) return cached;
-    const buf = await generateTtsAudioBuffer(opts.text, ctx());
-    audioCache.set(opts.text, buf);
+    const buf = await generateTtsAudioBuffer(opts.text, ctx(), DEFAULT_VOICE);
+    audioCache.set(key, buf);
     return buf;
   }
 

@@ -86,12 +86,13 @@ async function callGemini(systemPrompt: string, userMessage: string): Promise<st
 // 1 フレーズ・シャドーイング用。Web Speech API より自然な音声、AudioBuffer をクライアントで
 // キャッシュすればリピートはコスト 0。Free tier で動くかは preview モデル次第。
 const TTS_MODEL = 'gemini-3.1-flash-tts-preview';
-let _gemTts: ReturnType<typeof getGenerativeModel> | null = null;
+// voice 別にモデルインスタンスを保持 (generationConfig.speechConfig は model 構築時固定)。
+const _gemTtsByVoice = new Map<string, ReturnType<typeof getGenerativeModel>>();
 function ttsModel(voice: string) {
-  // voice 切替の都度モデルインスタンスを作り直す必要はない (generationConfig は instance に紐づく)
-  if (_gemTts) return _gemTts;
+  const cached = _gemTtsByVoice.get(voice);
+  if (cached) return cached;
   const ai = getAI(app, { backend: new GoogleAIBackend() });
-  _gemTts = getGenerativeModel(ai, {
+  const m = getGenerativeModel(ai, {
     model: TTS_MODEL,
     generationConfig: {
       // SDK の ResponseModality enum は TEXT / IMAGE のみ。AUDIO は underlying API では
@@ -106,7 +107,8 @@ function ttsModel(voice: string) {
       } as Record<string, unknown>),
     },
   });
-  return _gemTts;
+  _gemTtsByVoice.set(voice, m);
+  return m;
 }
 
 /** Gemini TTS でテキスト → PCM 音声を生成し、AudioBuffer にデコードして返す。
@@ -114,7 +116,7 @@ function ttsModel(voice: string) {
 export async function generateTtsAudioBuffer(
   text: string,
   audioCtx: AudioContext,
-  voice = 'Achird',
+  voice = 'Charon',
 ): Promise<AudioBuffer> {
   const model = ttsModel(voice);
   const result = await model.generateContent(text);
