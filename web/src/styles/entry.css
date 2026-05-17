@@ -557,3 +557,207 @@
   border-color: var(--text);
   background: var(--surface-warm);
 }
+
+/* ─── 今日の 1 フレーズ (英語日記 BOY 流) ─── */
+.picks-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.picks-intro {
+  font-size: 13px;
+  color: var(--ld-muted);
+  font-family: var(--ld-sans);
+  margin: 0;
+}
+
+.picks-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  background: var(--ld-surface);
+  border: 1px solid var(--ld-rule);
+  border-radius: var(--ld-r-md);
+}
+
+.picks-form-select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--ld-rule);
+  border-radius: var(--ld-r-sm);
+  background: #fff;
+  font-family: var(--ld-sans);
+  font-size: 13px;
+  color: var(--ld-ink);
+}
+
+.picks-form-text,
+.picks-form-note {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--ld-rule);
+  border-radius: var(--ld-r-sm);
+  background: #fff;
+  font-family: var(--ld-serif);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ld-ink);
+  resize: vertical;
+}
+
+.picks-form-note {
+  font-family: var(--ld-sans);
+  font-size: 13px;
+  font-style: italic;
+}
+
+.picks-form-btn {
+  align-self: flex-end;
+}
+
+.picks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pick-card {
+  border: 1px solid var(--ld-rule);
+  border-radius: var(--ld-r-md);
+  padding: 14px 16px;
+  background: var(--ld-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pick-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pick-card-num {
+  font-family: var(--ld-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--ld-muted);
+}
+
+.pick-card-del {
+  width: 28px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: var(--ld-r-sm);
+  color: var(--ld-muted);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  transition: background var(--ld-dur-fast), color var(--ld-dur-fast);
+}
+
+.pick-card-del:hover {
+  background: var(--ld-surface-2);
+  color: var(--ld-ink);
+}
+
+.pick-card-text {
+  font-family: var(--ld-serif);
+  font-size: 19px;
+  line-height: 1.5;
+  color: var(--ld-ink);
+  margin: 0;
+  letter-spacing: 0.005em;
+}
+
+.pick-card-note {
+  font-family: var(--ld-sans);
+  font-size: 12px;
+  color: var(--ld-muted);
+  font-style: italic;
+  margin: 0;
+}
+
+.pick-card-player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pick-play {
+  width: 36px;
+  height: 36px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--ld-ink);
+  color: #fff;
+  border: 0;
+  cursor: pointer;
+  transition: transform var(--ld-dur-fast);
+}
+
+.pick-play:hover {
+  transform: scale(1.05);
+}
+
+.pick-speeds {
+  display: inline-flex;
+  background: var(--ld-surface-2);
+  border-radius: var(--ld-r-pill);
+  padding: 2px;
+}
+
+.pick-speed {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 4px 10px;
+  font-family: var(--ld-mono);
+  font-size: 11px;
+  color: var(--ld-secondary);
+  border-radius: var(--ld-r-pill);
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+
+.pick-speed.active {
+  background: #fff;
+  color: var(--ld-ink);
+  box-shadow: var(--ld-shadow-1);
+  font-weight: 500;
+}
+
+.pick-repeat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--ld-sans);
+  font-size: 12px;
+  color: var(--ld-secondary);
+  cursor: pointer;
+}
+
+.pick-count {
+  margin-left: auto;
+  font-family: var(--ld-mono);
+  font-size: 11px;
+  color: var(--ld-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 540px) {
+  .pick-card-player {
+    gap: 8px;
+  }
+  .pick-count {
+    margin-left: 0;
+    flex-basis: 100%;
+    text-align: right;
+  }
+}

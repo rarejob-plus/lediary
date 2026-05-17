@@ -22,6 +22,17 @@ export interface FeedbackItem {
   explanation: string;
 }
 
+/** 英語日記 BOY メソッドの「今日の 1 フレーズ」を保存する型。
+ *  添削後にユーザーが選んだ覚えたいフレーズ（シャドーイング対象）。 */
+export interface PickedPhrase {
+  id: string;          // クライアント生成 UUID
+  text: string;        // 英文
+  note?: string;       // 日本語メモ / 言いたかったこと
+  createdAt: number;
+  /** シャドーイング回数の累積。SRS 復習や習得トラッキングに使う。 */
+  shadowingCount?: number;
+}
+
 export interface DiaryEntry {
   id: string;
   date: string; // YYYY-MM-DD
@@ -40,6 +51,8 @@ export interface DiaryEntry {
   feedback: FeedbackItem[];
   vocabulary: VocabItem[];
   expansionQuestions: ExpansionQuestion[];
+  /** 英語日記 BOY 流: 添削後にピックする「覚えたい 1 フレーズ」群。 */
+  picks?: PickedPhrase[];
   createdAt: number;
 }
 

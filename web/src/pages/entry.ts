@@ -1,14 +1,14 @@
 import { renderHeader } from '../components/header';
 import { icons } from '../components/icons';
 import { coverFor } from '../components/cover';
-import { MODE_META, type DiaryEntry } from '../data/mock';
+import { MODE_META, type DiaryEntry, type PickedPhrase } from '../data/mock';
 import { deleteEntry, fetchEntry, invalidateEntriesCache, moveEntryMode, stashForEditor } from '../data/entries';
 import { renderSekkiInline, dayOfYear, daysInYear } from '../data/dateInfo';
 import { getCurrentUser, getIdToken } from '../auth';
 import { navigate } from '../router';
 import { enableTextSelectionBookmark, bookmarkPhrase } from '../components/text-selection-bookmark';
 import { correctExpansionAnswer, generateExpansionQuestions, generateLessonSheetContent, generateShareId } from '../llm-diary';
-import { savePostTextOnly } from '../data/posts';
+import { savePostTextOnly, savePostPicks } from '../data/posts';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
@@ -206,7 +206,9 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
   }
   enableTextSelectionBookmark(body);
 
-  appendSection(content, '覚えたいフレーズ', renderVocabSection(entry.vocabulary), true);
+  // 英語日記 BOY 流: 添削後にユーザーが「覚えたい 1 フレーズ」を選び、専用シャドーイング
+  appendSection(content, '今日の 1 フレーズ', renderPicksSection(entry), true);
+  appendSection(content, '覚えたいフレーズ', renderVocabSection(entry.vocabulary), false);
   appendSection(content, '日記を膨らませる', renderExpansionSection(entry, body), false);
 
   root.appendChild(content);
@@ -230,6 +232,213 @@ function appendSection(parent: HTMLElement, title: string, body: HTMLElement, op
     header.querySelector('.section-chevron')!.classList.toggle('open');
   });
   parent.appendChild(sec);
+}
+
+/** 英語日記 BOY 流「今日の 1 フレーズ」セクション。
+ *  添削後のユーザー本文から覚えたいフレーズをピックし、専用シャドーイング player で繰り返す。
+ *  各 pick は post.picks に永続化される。 */
+function renderPicksSection(entry: DiaryEntry): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'picks-section';
+
+  // ローカル mutable コピー。Firestore への保存はその都度 savePostPicks に委譲。
+  const picks: PickedPhrase[] = Array.isArray(entry.picks) ? [...entry.picks] : [];
+
+  const intro = document.createElement('p');
+  intro.className = 'picks-intro';
+  intro.textContent = '言えるようになりたい 1 フレーズを選んで、TTS でシャドーイング。';
+  wrap.appendChild(intro);
+
+  // 入力フォーム: 「本文から選ぶ」「自由入力」の 2 経路
+  const form = document.createElement('div');
+  form.className = 'picks-form';
+  const sentences = splitIntoPickableSentences(entry.userTranslation || '');
+  form.innerHTML = `
+    ${sentences.length > 0 ? `
+      <select class="picks-form-select" aria-label="本文から選ぶ">
+        <option value="">— 本文の文から選ぶ —</option>
+        ${sentences.map((s, i) => `<option value="${escapeAttr(s)}">${i + 1}. ${escapeHtml(s.length > 60 ? s.slice(0, 58) + '…' : s)}</option>`).join('')}
+      </select>
+    ` : ''}
+    <textarea name="pick-text" class="picks-form-text" rows="2" placeholder="または自分で入力（添削後の英文を直接コピー可）"></textarea>
+    <textarea name="pick-note" class="picks-form-note" rows="1" placeholder="日本語メモ（任意）— 何を言いたかったか"></textarea>
+    <button class="btn btn-primary picks-form-btn" type="button">${icons.plus(14)} このフレーズを追加</button>
+  `;
+  wrap.appendChild(form);
+
+  const list = document.createElement('div');
+  list.className = 'picks-list';
+  wrap.appendChild(list);
+
+  function renderList(): void {
+    if (picks.length === 0) {
+      list.innerHTML = '<p class="expansion-empty">まだピックしていません。</p>';
+      return;
+    }
+    list.innerHTML = '';
+    picks.forEach((p, idx) => {
+      const card = renderSinglePick(entry.id, p, idx, () => {
+        picks.splice(idx, 1);
+        void savePostPicks(entry.id, picks);
+        renderList();
+      }, async (delta) => {
+        // shadowingCount の累積（再生終了時にインクリメント）
+        p.shadowingCount = (p.shadowingCount || 0) + delta;
+        await savePostPicks(entry.id, picks);
+      });
+      list.appendChild(card);
+    });
+  }
+  renderList();
+
+  const selectEl = form.querySelector('.picks-form-select') as HTMLSelectElement | null;
+  const textEl = form.querySelector('.picks-form-text') as HTMLTextAreaElement;
+  const noteEl = form.querySelector('.picks-form-note') as HTMLTextAreaElement;
+  const btnEl = form.querySelector('.picks-form-btn') as HTMLButtonElement;
+
+  if (selectEl) {
+    selectEl.addEventListener('change', () => {
+      if (selectEl.value) textEl.value = selectEl.value;
+    });
+  }
+
+  btnEl.addEventListener('click', async () => {
+    const text = textEl.value.trim();
+    if (!text) {
+      alert('フレーズを入力してください');
+      return;
+    }
+    const pick: PickedPhrase = {
+      id: cryptoRandomId(),
+      text,
+      note: noteEl.value.trim() || undefined,
+      createdAt: Date.now(),
+      shadowingCount: 0,
+    };
+    picks.push(pick);
+    btnEl.disabled = true;
+    try {
+      await savePostPicks(entry.id, picks);
+      textEl.value = '';
+      noteEl.value = '';
+      if (selectEl) selectEl.value = '';
+      renderList();
+    } catch (e) {
+      console.error('[picks] save failed', e);
+      alert('保存に失敗しました');
+      picks.pop();
+    } finally {
+      btnEl.disabled = false;
+    }
+  });
+
+  return wrap;
+}
+
+/** 1 件分の pick の表示 + シャドーイング player。 */
+function renderSinglePick(
+  _entryId: string,
+  pick: PickedPhrase,
+  index: number,
+  onDelete: () => void,
+  onShadowed: (delta: number) => void | Promise<void>,
+): HTMLElement {
+  const card = document.createElement('div');
+  card.className = 'pick-card';
+  card.innerHTML = `
+    <div class="pick-card-head">
+      <span class="pick-card-num">#${index + 1}</span>
+      <button class="pick-card-del" title="削除" aria-label="削除">${icons.trash(14)}</button>
+    </div>
+    <p class="pick-card-text">${escapeHtml(pick.text)}</p>
+    ${pick.note ? `<p class="pick-card-note">${escapeHtml(pick.note)}</p>` : ''}
+    <div class="pick-card-player">
+      <button class="pick-play" aria-label="再生">${icons.play(14)}</button>
+      <div class="pick-speeds">
+        ${[0.5, 0.75, 1].map((s) => `<button class="pick-speed${s === 1 ? ' active' : ''}" data-speed="${s}">${s === 0.5 ? '0.5x' : s === 0.75 ? '0.75x' : '1x'}</button>`).join('')}
+      </div>
+      <label class="pick-repeat" title="リピート">
+        <input type="checkbox" class="pick-repeat-cb"> リピート
+      </label>
+      <span class="pick-count" title="シャドーイング回数">${pick.shadowingCount || 0} 回</span>
+    </div>
+  `;
+  card.querySelector('.pick-card-del')!.addEventListener('click', () => {
+    if (confirm('この 1 フレーズを削除しますか?')) onDelete();
+  });
+
+  let rate = 1;
+  card.querySelectorAll<HTMLButtonElement>('.pick-speed').forEach((b) => {
+    b.addEventListener('click', () => {
+      rate = parseFloat(b.dataset.speed || '1');
+      card.querySelectorAll('.pick-speed').forEach((x) => x.classList.toggle('active', x === b));
+    });
+  });
+
+  const playBtn = card.querySelector('.pick-play') as HTMLButtonElement;
+  const repeatCb = card.querySelector('.pick-repeat-cb') as HTMLInputElement;
+  const countEl = card.querySelector('.pick-count') as HTMLElement;
+  let utterance: SpeechSynthesisUtterance | null = null;
+  let isPlaying = false;
+
+  function speak(): void {
+    if (!('speechSynthesis' in window)) {
+      alert('お使いのブラウザは TTS に未対応です');
+      return;
+    }
+    utterance = new SpeechSynthesisUtterance(pick.text);
+    utterance.lang = 'en-US';
+    utterance.rate = rate;
+    utterance.onend = () => {
+      void onShadowed(1);
+      const next = (parseInt(countEl.textContent || '0') || 0) + 1;
+      countEl.textContent = `${next} 回`;
+      if (repeatCb.checked) {
+        speak();
+      } else {
+        isPlaying = false;
+        playBtn.innerHTML = icons.play(14);
+      }
+    };
+    utterance.onerror = () => {
+      isPlaying = false;
+      playBtn.innerHTML = icons.play(14);
+    };
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+  }
+
+  playBtn.addEventListener('click', () => {
+    if (isPlaying) {
+      window.speechSynthesis.cancel();
+      isPlaying = false;
+      playBtn.innerHTML = icons.play(14);
+      return;
+    }
+    isPlaying = true;
+    playBtn.innerHTML = icons.pause(14);
+    speak();
+  });
+
+  return card;
+}
+
+/** 本文を「pickable な文」に分解（. ! ? . で区切る、空白除く）。 */
+function splitIntoPickableSentences(text: string): string[] {
+  if (!text) return [];
+  const out: string[] = [];
+  const re = /[^.!?]+[.!?]?/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const s = m[0].trim();
+    if (s.length >= 4) out.push(s);
+  }
+  return out;
+}
+
+function cryptoRandomId(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return (crypto as Crypto).randomUUID();
+  return `pick-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function renderVocabSection(vocab: { word: string; definition: string; example: string }[]): HTMLElement {
@@ -633,6 +842,10 @@ function deriveHeroTitle(entry: DiaryEntry): string {
   const first = (m ? m[0] : source).trim();
   // 80 文字を超えたら省略
   return first.length > 80 ? first.slice(0, 78).trimEnd() + '…' : first;
+}
+
+function escapeAttr(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 }
 
 function escapeHtml(s: string | undefined | null): string {

@@ -36,6 +36,17 @@ export async function savePostTextOnly(input: TextOnlySaveInput): Promise<void> 
   invalidateEntriesCache();
 }
 
+/** 「今日の 1 フレーズ」リストを上書き保存。 */
+export async function savePostPicks(entryId: string, picks: unknown[]): Promise<void> {
+  const user = getCurrentUser();
+  if (!user) throw new Error('not authenticated');
+  await updateDoc(doc(db, 'lediary-posts', entryId), {
+    picks,
+    updatedAt: Date.now(),
+  });
+  invalidateEntriesCache();
+}
+
 export interface AnalyzeSaveInput {
   contentJp: string;
   userTranslation: string;
