@@ -310,12 +310,14 @@ function renderPicksSection(entry: DiaryEntry): HTMLElement {
       alert('フレーズを入力してください');
       return;
     }
+    const noteVal = noteEl.value.trim();
+    // Firestore は undefined を弾くので、空のときは note を含めない。
     const pick: PickedPhrase = {
       id: cryptoRandomId(),
       text,
-      note: noteEl.value.trim() || undefined,
       createdAt: Date.now(),
       shadowingCount: 0,
+      ...(noteVal ? { note: noteVal } : {}),
     };
     picks.push(pick);
     btnEl.disabled = true;

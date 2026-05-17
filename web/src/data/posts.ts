@@ -36,15 +36,25 @@ export async function savePostTextOnly(input: TextOnlySaveInput): Promise<void> 
   invalidateEntriesCache();
 }
 
-/** 「今日の 1 フレーズ」リストを上書き保存。 */
+/** 「今日の 1 フレーズ」リストを上書き保存。
+ *  Firestore は undefined を弾くため、各 pick オブジェクトから undefined フィールドを除去する。 */
 export async function savePostPicks(entryId: string, picks: unknown[]): Promise<void> {
   const user = getCurrentUser();
   if (!user) throw new Error('not authenticated');
+  const sanitized = picks.map((p) => stripUndefined(p as Record<string, unknown>));
   await updateDoc(doc(db, 'lediary-posts', entryId), {
-    picks,
+    picks: sanitized,
     updatedAt: Date.now(),
   });
   invalidateEntriesCache();
+}
+
+function stripUndefined(o: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(o)) {
+    if (v !== undefined) out[k] = v;
+  }
+  return out;
 }
 
 export interface AnalyzeSaveInput {
