@@ -31,6 +31,8 @@ export interface PickedPhrase {
   createdAt: number;
   /** シャドーイング回数の累積。SRS 復習や習得トラッキングに使う。 */
   shadowingCount?: number;
+  /** 最終シャドーイング時刻 (epoch ms)。SRS の due 判定に使う。未定義なら createdAt を流用。 */
+  lastShadowedAt?: number;
 }
 
 export interface DiaryEntry {

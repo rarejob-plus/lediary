@@ -2,7 +2,7 @@ import { navigate, render as routerRender } from '../router';
 import { icons } from './icons';
 import { getCurrentUser, loginWithGoogle, logout } from '../auth';
 
-export function renderHeader(active: 'timeline' | 'calendar' | 'editor' | null): HTMLElement {
+export function renderHeader(active: 'timeline' | 'calendar' | 'editor' | 'phrases' | null): HTMLElement {
   const user = getCurrentUser();
 
   const header = document.createElement('header');
@@ -12,6 +12,7 @@ export function renderHeader(active: 'timeline' | 'calendar' | 'editor' | null):
       <div class="brand" data-nav="/">Lediary</div>
       <nav class="app-nav">
         <button class="icon-btn ${active === 'timeline' ? 'active' : ''}" data-nav="/" title="タイムライン">${icons.pen(18)}</button>
+        <button class="icon-btn ${active === 'phrases' ? 'active' : ''}" data-nav="/phrases" title="私のフレーズ集">${icons.sparkles(18)}</button>
         <button class="icon-btn ${active === 'calendar' ? 'active' : ''}" data-nav="/calendar" title="カレンダー">${icons.calendar(18)}</button>
         ${user
           ? `<button class="icon-btn" id="auth-btn" title="ログアウト (${escapeAttr(user.email || '')})">

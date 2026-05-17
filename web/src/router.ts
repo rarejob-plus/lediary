@@ -3,12 +3,14 @@ import { renderEditor } from './pages/editor';
 import { renderEntry } from './pages/entry';
 import { renderCalendar } from './pages/calendar';
 import { renderSheet } from './pages/sheet';
+import { renderPhrases } from './pages/phrases';
 
 export type Route =
   | { name: 'timeline' }
   | { name: 'editor' }
   | { name: 'entry'; id: string }
   | { name: 'calendar' }
+  | { name: 'phrases' }
   | { name: 'sheet'; id: string };
 
 function parseRoute(): Route {
@@ -16,6 +18,7 @@ function parseRoute(): Route {
   if (path === '/' || path === '') return { name: 'timeline' };
   if (path === '/editor') return { name: 'editor' };
   if (path === '/calendar') return { name: 'calendar' };
+  if (path === '/phrases') return { name: 'phrases' };
   const sheetMatch = path.match(/^\/s\/(.+)$/);
   if (sheetMatch) return { name: 'sheet', id: sheetMatch[1]! };
   const m = path.match(/^\/entry\/(.+)$/);
@@ -45,6 +48,9 @@ export function render(): void {
       break;
     case 'calendar':
       renderCalendar(root);
+      break;
+    case 'phrases':
+      renderPhrases(root);
       break;
     case 'sheet':
       renderSheet(root, route.id);

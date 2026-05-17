@@ -282,8 +282,9 @@ function renderPicksSection(entry: DiaryEntry): HTMLElement {
         void savePostPicks(entry.id, picks);
         renderList();
       }, async (delta) => {
-        // shadowingCount の累積（再生終了時にインクリメント）
+        // shadowingCount の累積（再生終了時にインクリメント）+ SRS 用に lastShadowedAt を更新
         p.shadowingCount = (p.shadowingCount || 0) + delta;
+        p.lastShadowedAt = Date.now();
         await savePostPicks(entry.id, picks);
       });
       list.appendChild(card);
