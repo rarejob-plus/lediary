@@ -39,7 +39,9 @@ async function callClaudeCode(
   opts: LLMOptions,
 ): Promise<string> {
   if (!auth.currentUser) throw new Error('not authenticated');
-  const idToken = await getIdToken();
+  // 長時間タブを開きっぱなしの保険: claude_code 経路は毎回フレッシュなトークンで叩く。
+  // SDK は token 残時間 5 分未満で自動更新するが、それでも 401 を踏むケースがあるため強制。
+  const idToken = await getIdToken(true);
   const body: Record<string, unknown> = { prompt: userMessage };
   if (systemPrompt) body.system_prompt = systemPrompt;
   if (opts.jsonSchema) body.json_schema = opts.jsonSchema;

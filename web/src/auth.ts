@@ -14,9 +14,9 @@ export function getCurrentUser(): User | null {
   return currentUser;
 }
 
-export async function getIdToken(): Promise<string> {
+export async function getIdToken(forceRefresh = false): Promise<string> {
   if (!currentUser) throw new Error('Not authenticated');
-  return currentUser.getIdToken();
+  return currentUser.getIdToken(forceRefresh);
 }
 
 export function loginWithGoogle(): Promise<User> {
