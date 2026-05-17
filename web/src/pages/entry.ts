@@ -9,6 +9,7 @@ import { navigate } from '../router';
 import { enableTextSelectionBookmark, bookmarkPhrase } from '../components/text-selection-bookmark';
 import { correctExpansionAnswer, generateExpansionQuestions, generateLessonSheetContent, generateShareId } from '../llm-diary';
 import { savePostTextOnly, savePostPicks } from '../data/posts';
+import { createShadowingPlayer } from '../components/shadowing-player';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
@@ -353,74 +354,18 @@ function renderSinglePick(
     </div>
     <p class="pick-card-text">${escapeHtml(pick.text)}</p>
     ${pick.note ? `<p class="pick-card-note">${escapeHtml(pick.note)}</p>` : ''}
-    <div class="pick-card-player">
-      <button class="pick-play" aria-label="再生">${icons.play(14)}</button>
-      <div class="pick-speeds">
-        ${[0.5, 0.75, 1].map((s) => `<button class="pick-speed${s === 1 ? ' active' : ''}" data-speed="${s}">${s === 0.5 ? '0.5x' : s === 0.75 ? '0.75x' : '1x'}</button>`).join('')}
-      </div>
-      <label class="pick-repeat" title="リピート">
-        <input type="checkbox" class="pick-repeat-cb"> リピート
-      </label>
-      <span class="pick-count" title="シャドーイング回数">${pick.shadowingCount || 0} 回</span>
-    </div>
   `;
   card.querySelector('.pick-card-del')!.addEventListener('click', () => {
     if (confirm('この 1 フレーズを削除しますか?')) onDelete();
   });
-
-  let rate = 1;
-  card.querySelectorAll<HTMLButtonElement>('.pick-speed').forEach((b) => {
-    b.addEventListener('click', () => {
-      rate = parseFloat(b.dataset.speed || '1');
-      card.querySelectorAll('.pick-speed').forEach((x) => x.classList.toggle('active', x === b));
-    });
-  });
-
-  const playBtn = card.querySelector('.pick-play') as HTMLButtonElement;
-  const repeatCb = card.querySelector('.pick-repeat-cb') as HTMLInputElement;
-  const countEl = card.querySelector('.pick-count') as HTMLElement;
-  let utterance: SpeechSynthesisUtterance | null = null;
-  let isPlaying = false;
-
-  function speak(): void {
-    if (!('speechSynthesis' in window)) {
-      alert('お使いのブラウザは TTS に未対応です');
-      return;
-    }
-    utterance = new SpeechSynthesisUtterance(pick.text);
-    utterance.lang = 'en-US';
-    utterance.rate = rate;
-    utterance.onend = () => {
-      void onShadowed(1);
-      const next = (parseInt(countEl.textContent || '0') || 0) + 1;
-      countEl.textContent = `${next} 回`;
-      if (repeatCb.checked) {
-        speak();
-      } else {
-        isPlaying = false;
-        playBtn.innerHTML = icons.play(14);
-      }
-    };
-    utterance.onerror = () => {
-      isPlaying = false;
-      playBtn.innerHTML = icons.play(14);
-    };
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
-  }
-
-  playBtn.addEventListener('click', () => {
-    if (isPlaying) {
-      window.speechSynthesis.cancel();
-      isPlaying = false;
-      playBtn.innerHTML = icons.play(14);
-      return;
-    }
-    isPlaying = true;
-    playBtn.innerHTML = icons.pause(14);
-    speak();
-  });
-
+  card.appendChild(
+    createShadowingPlayer({
+      text: pick.text,
+      initialCount: pick.shadowingCount || 0,
+      classPrefix: 'pick',
+      onShadowed,
+    }),
+  );
   return card;
 }
 

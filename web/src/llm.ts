@@ -2,6 +2,7 @@
 // Firebase AI Logic (Gemini) にフォールバック。サーバ側プロキシは経由しない。
 
 import { getAI, GoogleAIBackend, getGenerativeModel } from 'firebase/ai';
+import type { ResponseModality } from 'firebase/ai';
 import { app, auth } from './firebase';
 import { getIdToken } from './auth';
 
@@ -79,6 +80,72 @@ async function callGemini(systemPrompt: string, userMessage: string): Promise<st
   const combined = systemPrompt ? `${systemPrompt}\n\n---\n\n${userMessage}` : userMessage;
   const result = await model.generateContent(combined);
   return result.response.text();
+}
+
+// ─── TTS (Gemini 3.1 Flash TTS preview, Firebase AI Logic 経由) ───
+// 1 フレーズ・シャドーイング用。Web Speech API より自然な音声、AudioBuffer をクライアントで
+// キャッシュすればリピートはコスト 0。Free tier で動くかは preview モデル次第。
+const TTS_MODEL = 'gemini-3.1-flash-tts-preview';
+let _gemTts: ReturnType<typeof getGenerativeModel> | null = null;
+function ttsModel(voice: string) {
+  // voice 切替の都度モデルインスタンスを作り直す必要はない (generationConfig は instance に紐づく)
+  if (_gemTts) return _gemTts;
+  const ai = getAI(app, { backend: new GoogleAIBackend() });
+  _gemTts = getGenerativeModel(ai, {
+    model: TTS_MODEL,
+    generationConfig: {
+      // SDK の ResponseModality enum は TEXT / IMAGE のみ。AUDIO は underlying API では
+      // 受け付けるため、文字列リテラルを cast で流し込む。
+      responseModalities: ['AUDIO' as unknown as ResponseModality],
+      // speechConfig は firebase/ai の TS 型に未定義だが、underlying API は受け付ける。
+      // 型を緩めて inject する。
+      ...({
+        speechConfig: {
+          voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } },
+        },
+      } as Record<string, unknown>),
+    },
+  });
+  return _gemTts;
+}
+
+/** Gemini TTS でテキスト → PCM 音声を生成し、AudioBuffer にデコードして返す。
+ *  Gemini TTS の出力は L16 PCM 24kHz mono (little-endian)。 */
+export async function generateTtsAudioBuffer(
+  text: string,
+  audioCtx: AudioContext,
+  voice = 'Achird',
+): Promise<AudioBuffer> {
+  const model = ttsModel(voice);
+  const result = await model.generateContent(text);
+  // response.candidates[0].content.parts[0].inlineData.data (base64) を取り出す
+  const candidates = (result.response as { candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { data?: string; mimeType?: string } }> } }> }).candidates;
+  const inline = candidates?.[0]?.content?.parts?.find((p) => p.inlineData)?.inlineData;
+  if (!inline?.data) throw new Error('TTS response missing inlineData');
+  const sampleRate = parseTtsSampleRate(inline.mimeType || '') || 24000;
+  return pcm16leBase64ToAudioBuffer(inline.data, sampleRate, audioCtx);
+}
+
+function parseTtsSampleRate(mime: string): number | null {
+  // 例: "audio/L16;rate=24000;codec=pcm"
+  const m = mime.match(/rate=(\d+)/);
+  return m ? parseInt(m[1]!, 10) : null;
+}
+
+function pcm16leBase64ToAudioBuffer(b64: string, sampleRate: number, audioCtx: AudioContext): AudioBuffer {
+  const bin = atob(b64);
+  const len = bin.length;
+  const buf = new ArrayBuffer(len);
+  const bytes = new Uint8Array(buf);
+  for (let i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
+  const dv = new DataView(buf);
+  const samples = len >>> 1;
+  const audioBuffer = audioCtx.createBuffer(1, samples, sampleRate);
+  const channel = audioBuffer.getChannelData(0);
+  for (let i = 0; i < samples; i++) {
+    channel[i] = dv.getInt16(i * 2, true) / 32768;
+  }
+  return audioBuffer;
 }
 
 export async function callLLM(

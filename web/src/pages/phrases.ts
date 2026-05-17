@@ -10,6 +10,7 @@ import { MODE_META } from '../data/mock';
 import { navigate } from '../router';
 import { isPushSupported, isSubscribed, subscribePush, unsubscribePush } from '../push';
 import { getCurrentUser } from '../auth';
+import { createShadowingPlayer } from '../components/shadowing-player';
 
 type Filter = 'all' | 'due' | 'mastered';
 
@@ -141,16 +142,6 @@ function renderPhraseCard(
     </div>
     <p class="phrase-card-text">${escapeHtml(pick.text)}</p>
     ${pick.note ? `<p class="phrase-card-note">${escapeHtml(pick.note)}</p>` : ''}
-    <div class="phrase-card-player">
-      <button class="phrase-play" aria-label="再生">${icons.play(14)}</button>
-      <div class="phrase-speeds">
-        ${[0.5, 0.75, 1].map((s) => `<button class="phrase-speed${s === 1 ? ' active' : ''}" data-speed="${s}">${s === 0.5 ? '0.5x' : s === 0.75 ? '0.75x' : '1x'}</button>`).join('')}
-      </div>
-      <label class="phrase-repeat" title="リピート">
-        <input type="checkbox" class="phrase-repeat-cb"> リピート
-      </label>
-      <span class="phrase-count" title="シャドーイング回数">${pick.shadowingCount || 0} 回</span>
-    </div>
   `;
 
   card.querySelector('.phrase-card-meta')!.addEventListener('click', (e) => {
@@ -158,57 +149,14 @@ function renderPhraseCard(
     navigate(`/entry/${pick.entryId}`);
   });
 
-  let rate = 1;
-  card.querySelectorAll<HTMLButtonElement>('.phrase-speed').forEach((b) => {
-    b.addEventListener('click', () => {
-      rate = parseFloat(b.dataset.speed || '1');
-      card.querySelectorAll('.phrase-speed').forEach((x) => x.classList.toggle('active', x === b));
-    });
-  });
-
-  const playBtn = card.querySelector('.phrase-play') as HTMLButtonElement;
-  const repeatCb = card.querySelector('.phrase-repeat-cb') as HTMLInputElement;
-  const countEl = card.querySelector('.phrase-count') as HTMLElement;
-  let isPlaying = false;
-
-  function speak(): void {
-    if (!('speechSynthesis' in window)) {
-      alert('お使いのブラウザは TTS に未対応です');
-      return;
-    }
-    const u = new SpeechSynthesisUtterance(pick.text);
-    u.lang = 'en-US';
-    u.rate = rate;
-    u.onend = () => {
-      const next = (parseInt(countEl.textContent || '0') || 0) + 1;
-      countEl.textContent = `${next} 回`;
-      void onShadowed(1);
-      if (repeatCb.checked) {
-        speak();
-      } else {
-        isPlaying = false;
-        playBtn.innerHTML = icons.play(14);
-      }
-    };
-    u.onerror = () => {
-      isPlaying = false;
-      playBtn.innerHTML = icons.play(14);
-    };
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(u);
-  }
-
-  playBtn.addEventListener('click', () => {
-    if (isPlaying) {
-      window.speechSynthesis.cancel();
-      isPlaying = false;
-      playBtn.innerHTML = icons.play(14);
-      return;
-    }
-    isPlaying = true;
-    playBtn.innerHTML = icons.pause(14);
-    speak();
-  });
+  card.appendChild(
+    createShadowingPlayer({
+      text: pick.text,
+      initialCount: pick.shadowingCount || 0,
+      classPrefix: 'phrase',
+      onShadowed,
+    }),
+  );
 
   return card;
 }
