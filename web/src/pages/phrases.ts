@@ -8,6 +8,8 @@ import { savePostPicks } from '../data/posts';
 import { fetchEntries } from '../data/entries';
 import { MODE_META } from '../data/mock';
 import { navigate } from '../router';
+import { isPushSupported, isSubscribed, subscribePush, unsubscribePush } from '../push';
+import { getCurrentUser } from '../auth';
 
 type Filter = 'all' | 'due' | 'mastered';
 
@@ -42,10 +44,17 @@ function renderBody(wrap: HTMLElement, allPicks: PickWithContext[]): void {
         <span class="phrases-title-text">私のフレーズ集</span>
         <span class="phrases-title-sub">${working.length} 件 · 今日の復習 ${dueCount} 件</span>
       </div>
-      <div class="phrases-filter">
-        <button class="phrases-filter-btn ${filter === 'all' ? 'on' : ''}" data-f="all">すべて</button>
-        <button class="phrases-filter-btn ${filter === 'due' ? 'on' : ''}" data-f="due">復習 (${dueCount})</button>
-        <button class="phrases-filter-btn ${filter === 'mastered' ? 'on' : ''}" data-f="mastered">習得 (${masteredCount})</button>
+      <div class="phrases-head-right">
+        ${isPushSupported() ? `
+          <button class="phrases-notify-btn ${isSubscribed() ? 'on' : ''}" type="button" title="毎朝の通知">
+            ${isSubscribed() ? icons.check(12) : ''} 通知 ${isSubscribed() ? 'オン' : ''}
+          </button>
+        ` : ''}
+        <div class="phrases-filter">
+          <button class="phrases-filter-btn ${filter === 'all' ? 'on' : ''}" data-f="all">すべて</button>
+          <button class="phrases-filter-btn ${filter === 'due' ? 'on' : ''}" data-f="due">復習 (${dueCount})</button>
+          <button class="phrases-filter-btn ${filter === 'mastered' ? 'on' : ''}" data-f="mastered">習得 (${masteredCount})</button>
+        </div>
       </div>
     `;
     wrap.appendChild(head);
@@ -55,6 +64,28 @@ function renderBody(wrap: HTMLElement, allPicks: PickWithContext[]): void {
         refresh();
       });
     });
+
+    const notifyBtn = head.querySelector('.phrases-notify-btn') as HTMLButtonElement | null;
+    if (notifyBtn) {
+      notifyBtn.addEventListener('click', async () => {
+        const u = getCurrentUser();
+        if (!u) { alert('ログインが必要です'); return; }
+        notifyBtn.disabled = true;
+        try {
+          if (isSubscribed()) {
+            await unsubscribePush();
+          } else {
+            const ok = await subscribePush(u.uid);
+            if (!ok) {
+              alert('通知の許可が得られませんでした。ブラウザの設定をご確認ください。');
+            }
+          }
+        } finally {
+          notifyBtn.disabled = false;
+          refresh();
+        }
+      });
+    }
 
     // リスト
     if (working.length === 0) {

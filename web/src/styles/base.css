@@ -1001,3 +1001,42 @@ input {
   /* TTS player (entry) を 1 行に押し込まない */
   .entry-tts { flex-wrap: wrap; gap: 8px; }
 }
+
+/* /phrases — 通知トグル + 右側固まり */
+.phrases-head-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.phrases-notify-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  font-family: var(--ld-sans);
+  font-size: 12px;
+  color: var(--ld-secondary);
+  background: transparent;
+  border: 1px solid var(--ld-rule);
+  border-radius: var(--ld-r-pill);
+  cursor: pointer;
+  transition: all var(--ld-dur-fast);
+}
+
+.phrases-notify-btn:hover {
+  border-color: var(--ld-rule-strong);
+  color: var(--ld-ink);
+}
+
+.phrases-notify-btn.on {
+  background: var(--ld-accent-tint);
+  color: var(--ld-accent-deep);
+  border-color: color-mix(in srgb, var(--ld-accent) 30%, transparent);
+}
+
+.phrases-notify-btn:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
