@@ -375,13 +375,6 @@ export function renderEditor(root: HTMLElement): void {
     }
   });
 
-  // ヒント / 添削で使う「ソース JP」: plainJp に内容があればそちら、なければ生 JP。
-  function effectiveJp(): string {
-    const plain = plainInput.value.trim();
-    const raw = (jpBlock.querySelector('#jp-input') as HTMLTextAreaElement).value.trim();
-    return plain || raw;
-  }
-
   // ヒントは EN textarea の直上 (right 列内) に置く。
   // 学習者が「JP を見ながら英作する」流れで、ヒント / EN を同じ視線で扱えるようにする。
   // left に置くと、JP が長いとヒントが下に押し下げられて見えない問題が出る。
@@ -398,15 +391,17 @@ export function renderEditor(root: HTMLElement): void {
 
   hintToggleRow.querySelector('#show-hints')!.addEventListener('click', async () => {
     const btn = hintToggleRow.querySelector('#show-hints') as HTMLButtonElement;
-    const jp = effectiveJp();
-    if (!jp) {
+    const rawJp = (jpBlock.querySelector('#jp-input') as HTMLTextAreaElement).value.trim();
+    const plainJp = plainInput.value.trim();
+    const sourceJp = plainJp || rawJp; // hint 生成は plain があればそちらを優先
+    if (!rawJp) {
       alert('まず日本語を書いてください');
       return;
     }
     btn.disabled = true;
     btn.textContent = '生成中…';
     try {
-      const hints = await loadHints(jp, dateStr, currentMode);
+      const hints = await loadHints(sourceJp, rawJp, plainJp, dateStr, currentMode);
       renderHintsInto(hintsCard, hints);
       hintsCard.style.display = '';
       hintToggleRow.style.display = 'none';
@@ -609,6 +604,7 @@ export function renderEditor(root: HTMLElement): void {
             userTranslation: finalText,
             date: dateStr,
             mode: currentMode,
+            plainJp: plainInput.value.trim(),
           });
         }
         if (user) {
@@ -644,7 +640,13 @@ export function renderEditor(root: HTMLElement): void {
     btn.disabled = true;
     btn.textContent = '保存中…';
     try {
-      await savePostTextOnly({ contentJp: jp, userTranslation: en, date: dateStr, mode: currentMode });
+      await savePostTextOnly({
+        contentJp: jp,
+        userTranslation: en,
+        date: dateStr,
+        mode: currentMode,
+        plainJp: plainInput.value.trim(),
+      });
       navigate(`/entry/${user.uid}_${dateStr}_${currentMode}`);
     } catch (err) {
       console.error(err);
@@ -677,7 +679,7 @@ export function renderEditor(root: HTMLElement): void {
     showCorrectionLoading();
     try {
       feedbackKind = 'correct';
-      currentFeedback = await loadFeedback(jp, en, dateStr, currentMode);
+      currentFeedback = await loadFeedback(jp, en, dateStr, currentMode, plainInput.value.trim());
       rewrites = [];
       revealed = [];
       renderCorrection();
@@ -756,6 +758,8 @@ export function renderEditor(root: HTMLElement): void {
     }
     (jpBlock.querySelector('#jp-input') as HTMLTextAreaElement).value = entry.contentJp;
     (enBlock.querySelector('#en-input') as HTMLTextAreaElement).value = entry.userTranslation;
+    // 保存されている plainJp があれば復元 (上書きしないようにここで埋める)
+    plainInput.value = entry.plainJp || '';
     // 既存エントリ再編集: JP / plain JP は折りたたみ、必要なときだけ直せる。
     // 多くの再編集 (もう一度添削 / 流れを整える) で JP に手は入らないため、邪魔にならない位置に置く。
     setJpCollapsed(!!entry.contentJp);
@@ -898,32 +902,46 @@ async function generateHintsClient(contentJp: string): Promise<HintItem[]> {
   return [];
 }
 
-async function loadHints(contentJp: string, date: string, mode: Mode): Promise<HintItem[]> {
+/** ヒント生成 + Firestore 保存。
+ *  contentJp は **常に元の生 JP** を書き戻す (和文和訳で上書きしてはいけない)。
+ *  plain JP は別フィールド plainJp として併存させる。 */
+async function loadHints(
+  sourceJp: string,       // LLM に渡す source (plainJp があれば plainJp、なければ rawJp)
+  rawContentJp: string,   // post.contentJp に書き戻す元の日本語日記
+  plainJp: string,        // post.plainJp に保存する和文和訳。空なら保存しない
+  date: string,
+  mode: Mode,
+): Promise<HintItem[]> {
   const user = getCurrentUser();
   if (!user) return [];
-  const hints = await generateHintsClient(contentJp);
-  // 旧サーバ実装と同じく lediary-posts に merge 保存。createdAt は新規作成時のみ書く
-  // (merge:true でも明示フィールドは上書きされるので、既存 doc では含めない)。
+  const hints = await generateHintsClient(sourceJp);
   const docID = `${user.uid}_${date}_${mode}`;
   const ref = doc(db, 'lediary-posts', docID);
   const existing = await getDoc(ref);
   const now = Date.now();
   const payload: Record<string, unknown> = {
     userId: user.uid,
-    contentJp,
+    contentJp: rawContentJp,
     mode,
     date,
     hints,
     updatedAt: now,
   };
+  if (plainJp) payload.plainJp = plainJp;
   if (!existing.exists()) payload.createdAt = now;
   await setDoc(ref, payload, { merge: true });
   return hints;
 }
 
-async function loadFeedback(contentJp: string, userTranslation: string, date: string, mode: Mode): Promise<FeedbackItem[]> {
+async function loadFeedback(
+  contentJp: string,
+  userTranslation: string,
+  date: string,
+  mode: Mode,
+  plainJp?: string,
+): Promise<FeedbackItem[]> {
   if (!getCurrentUser()) return [];
-  const res = await analyzeAndSavePost({ contentJp, userTranslation, date, mode });
+  const res = await analyzeAndSavePost({ contentJp, userTranslation, date, mode, plainJp });
   return res.feedback || [];
 }
 

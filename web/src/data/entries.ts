@@ -21,10 +21,12 @@ interface RawPost {
   date: string;
   mode: Mode;
   contentJp: string;
+  plainJp?: string;
   userTranslation?: string;
   feedback?: DiaryEntry['feedback'];
   vocabulary?: DiaryEntry['vocabulary'];
   expansionQuestions?: DiaryEntry['expansionQuestions'];
+  picks?: DiaryEntry['picks'];
   hints?: unknown[];
   createdAt?: number | { _seconds: number };
   updatedAt?: number | { _seconds: number };
@@ -54,10 +56,12 @@ function toEntry(raw: RawPost): DiaryEntry {
     time: timeFromCreatedAt(raw.createdAt),
     mode,
     contentJp: raw.contentJp || '',
+    plainJp: raw.plainJp,
     userTranslation: raw.userTranslation || '',
     feedback: raw.feedback || [],
     vocabulary: raw.vocabulary || [],
     expansionQuestions: raw.expansionQuestions || [],
+    picks: raw.picks || [],
     mood: raw.mood,
     lessonSheetId: raw.lessonSheetId,
     coverImageUrl: raw.coverImageUrl,

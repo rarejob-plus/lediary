@@ -53,6 +53,8 @@ export interface DiaryEntry {
   mood?: string; // 感情語（AI feedback 解析結果想定）— "はずむ" "穏やか" 等
   lessonSheetId?: string; // 共有レッスンシート ID（生成済みなら）
   contentJp: string;
+  /** 和文和訳 (plain JP)。学習者が任意で書いた英訳しやすい言い換え。 */
+  plainJp?: string;
   userTranslation: string;
   feedback: FeedbackItem[];
   vocabulary: VocabItem[];

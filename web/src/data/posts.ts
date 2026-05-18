@@ -17,6 +17,8 @@ export interface TextOnlySaveInput {
   mode: Mode;
   expansionQuestions?: unknown[];
   dismissedVocab?: unknown[];
+  /** 和文和訳 (plain JP)。空文字なら更新しない (上書き防止)。 */
+  plainJp?: string;
 }
 
 export async function savePostTextOnly(input: TextOnlySaveInput): Promise<void> {
@@ -29,6 +31,9 @@ export async function savePostTextOnly(input: TextOnlySaveInput): Promise<void> 
   };
   if (typeof input.contentJp === 'string' && input.contentJp.length > 0) {
     updates.contentJp = input.contentJp;
+  }
+  if (typeof input.plainJp === 'string' && input.plainJp.length > 0) {
+    updates.plainJp = input.plainJp;
   }
   if (input.expansionQuestions) updates.expansionQuestions = input.expansionQuestions;
   if (input.dismissedVocab) updates.dismissedVocab = input.dismissedVocab;
@@ -64,6 +69,8 @@ export interface AnalyzeSaveInput {
   mode: Mode;
   previousFeedback?: FeedbackItem[];
   attemptCount?: number;
+  /** 和文和訳 (plain JP)。post.plainJp に保持。空なら更新しない。 */
+  plainJp?: string;
 }
 
 export interface AnalyzeSaveResult extends DiaryAnalysis {
@@ -111,6 +118,15 @@ export async function analyzeAndSavePost(input: AnalyzeSaveInput): Promise<Analy
     }
   }
 
+  // 既存 doc に保存されていて、再添削で消えてほしくないフィールドを引き継ぐ。
+  const existingPlainJp = (existing?.plainJp as string | undefined) || '';
+  const existingPicks = Array.isArray(existing?.picks) ? (existing!.picks as unknown[]) : [];
+  const existingHints = Array.isArray(existing?.hints) ? (existing!.hints as unknown[]) : [];
+  const existingDismissedVocab = Array.isArray(existing?.dismissedVocab)
+    ? (existing!.dismissedVocab as unknown[])
+    : [];
+  const existingLessonSheetId = (existing?.lessonSheetId as string | undefined) || '';
+
   const post: Record<string, unknown> = {
     userId: user.uid,
     contentJp: input.contentJp,
@@ -129,6 +145,17 @@ export async function analyzeAndSavePost(input: AnalyzeSaveInput): Promise<Analy
     createdAt,
     updatedAt: Date.now(),
   };
+
+  // 引き継ぎフィールド: 入力に明示があれば優先、なければ existing を保つ。
+  // setDoc 全置換でも picks / plainJp / hints / 共有 sheet 等が消えないようにする。
+  const plainJp = typeof input.plainJp === 'string' && input.plainJp.length > 0
+    ? input.plainJp
+    : existingPlainJp;
+  if (plainJp) post.plainJp = plainJp;
+  if (existingPicks.length > 0) post.picks = existingPicks;
+  if (existingHints.length > 0) post.hints = existingHints;
+  if (existingDismissedVocab.length > 0) post.dismissedVocab = existingDismissedVocab;
+  if (existingLessonSheetId) post.lessonSheetId = existingLessonSheetId;
 
   await setDoc(ref, post);
   invalidateEntriesCache();
