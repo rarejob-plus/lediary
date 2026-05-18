@@ -382,16 +382,19 @@ export function renderEditor(root: HTMLElement): void {
     return plain || raw;
   }
 
+  // ヒントは EN textarea の直上 (right 列内) に置く。
+  // 学習者が「JP を見ながら英作する」流れで、ヒント / EN を同じ視線で扱えるようにする。
+  // left に置くと、JP が長いとヒントが下に押し下げられて見えない問題が出る。
   const hintToggleRow = document.createElement('div');
   hintToggleRow.className = 'compose-action-row';
-  hintToggleRow.style.marginBottom = '24px';
+  hintToggleRow.style.marginBottom = '16px';
   hintToggleRow.innerHTML = `<button class="btn" id="show-hints">英訳ヒントを見る</button>`;
-  left.appendChild(hintToggleRow);
+  right.appendChild(hintToggleRow);
 
   const hintsCard = document.createElement('div');
   hintsCard.className = 'hints-card';
   hintsCard.style.display = 'none';
-  left.appendChild(hintsCard);
+  right.appendChild(hintsCard);
 
   hintToggleRow.querySelector('#show-hints')!.addEventListener('click', async () => {
     const btn = hintToggleRow.querySelector('#show-hints') as HTMLButtonElement;
