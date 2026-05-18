@@ -166,8 +166,10 @@
 }
 
 /* toggle は has-existing (= 既存エントリ再編集) のときだけ表示。
-   新規入力時は従来通り JP / plain JP がそのまま見える。 */
-.jp-collapse.has-existing > .jp-collapse-toggle {
+   新規入力時の jpCollapse は従来通り JP がそのまま見える。
+   ただし plain-collapse は「任意」の位置付けで toggle を常に表示。 */
+.jp-collapse.has-existing > .jp-collapse-toggle,
+.jp-collapse.plain-collapse > .jp-collapse-toggle {
   display: flex;
 }
 

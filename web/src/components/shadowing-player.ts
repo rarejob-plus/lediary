@@ -1,34 +1,40 @@
-// 1 フレーズ・シャドーイング player。Gemini TTS で AudioBuffer を 1 回生成 → メモリキャッシュ。
-// リピート再生・速度変更はその AudioBuffer を AudioBufferSourceNode で再生して行う (追加コスト 0)。
-//
-// pick / phrase card 双方で利用。Web Speech API より自然な音声を狙う。
+// 1 フレーズ・シャドーイング player。
+// 動作モード:
+//   1. pick.audioPath が既に Storage 上にあれば fetch → AudioBuffer
+//   2. なければ Gemini TTS で生成 → AudioBuffer + WAV → Storage upload → audioPath を返却
+//   3. メモリキャッシュ (タブ存続中) で再フェッチ抑止
+// 速度・リピートは AudioBuffer を AudioBufferSourceNode で再生して制御。
 
-import { generateTtsAudioBuffer } from '../llm';
+import { generateTtsAudio, pcm16leToWav } from '../llm';
+import { uploadPickAudio, fetchPickAudioBuffer } from '../data/picksAudio';
 import { icons } from './icons';
 
 const RATES = [0.5, 0.75, 1];
+const DEFAULT_VOICE = 'Charon';
+
 const audioCtxRef: { ctx: AudioContext | null } = { ctx: null };
 function ctx(): AudioContext {
   if (!audioCtxRef.ctx) audioCtxRef.ctx = new AudioContext();
   return audioCtxRef.ctx;
 }
 
-// AudioBuffer を「voice + テキスト」単位でキャッシュ (タブ存続中)。
-// voice を切替えると別の AudioBuffer が必要になるためキーに含める。
+// AudioBuffer をテキスト + voice 単位でメモリキャッシュ。
 const audioCache = new Map<string, AudioBuffer>();
-const DEFAULT_VOICE = 'Charon';
-function cacheKey(voice: string, text: string): string {
-  return `${voice}::${text}`;
-}
+function cacheKey(voice: string, text: string): string { return `${voice}::${text}`; }
 
 export interface ShadowingPlayerOptions {
+  pickId: string;
   text: string;
+  audioPath?: string;
+  audioVoice?: string;
   initialCount?: number;
-  classPrefix?: string;        // 既存 CSS との互換: 'pick' or 'phrase'
+  classPrefix?: string;
+  /** 累積回数を持つ呼び出し元へ通知。 */
   onShadowed?: (delta: number) => void | Promise<void>;
+  /** Storage upload 成功時に呼ばれる。entry / phrases 側で pick.audioPath を Firestore に保存する。 */
+  onPersisted?: (audioPath: string, voice: string) => void | Promise<void>;
 }
 
-/** 単発のシャドーイング player UI を返す。再生・停止・速度・リピート・回数表示・カウント。 */
 export function createShadowingPlayer(opts: ShadowingPlayerOptions): HTMLElement {
   const prefix = opts.classPrefix || 'pick';
   const root = document.createElement('div');
@@ -49,6 +55,12 @@ export function createShadowingPlayer(opts: ShadowingPlayerOptions): HTMLElement
   const countEl = root.querySelector(`.${prefix}-count`) as HTMLElement;
 
   let rate = 1;
+  let currentSource: AudioBufferSourceNode | null = null;
+  let isPlaying = false;
+  let audioPath = opts.audioPath;
+  // voice が pick に保存されてれば優先、なければ現行デフォルト。
+  const voice = opts.audioVoice || DEFAULT_VOICE;
+
   root.querySelectorAll<HTMLButtonElement>(`.${prefix}-speed`).forEach((b) => {
     b.addEventListener('click', () => {
       rate = parseFloat(b.dataset.speed || '1');
@@ -56,9 +68,6 @@ export function createShadowingPlayer(opts: ShadowingPlayerOptions): HTMLElement
       if (currentSource) currentSource.playbackRate.value = rate;
     });
   });
-
-  let currentSource: AudioBufferSourceNode | null = null;
-  let isPlaying = false;
 
   function stop(): void {
     if (currentSource) {
@@ -70,12 +79,31 @@ export function createShadowingPlayer(opts: ShadowingPlayerOptions): HTMLElement
   }
 
   async function ensureBuffer(): Promise<AudioBuffer> {
-    const key = cacheKey(DEFAULT_VOICE, opts.text);
+    const key = cacheKey(voice, opts.text);
     const cached = audioCache.get(key);
     if (cached) return cached;
-    const buf = await generateTtsAudioBuffer(opts.text, ctx(), DEFAULT_VOICE);
-    audioCache.set(key, buf);
-    return buf;
+
+    // (1) Storage に既にあれば fetch
+    if (audioPath) {
+      const buf = await fetchPickAudioBuffer(audioPath, ctx());
+      if (buf) {
+        audioCache.set(key, buf);
+        return buf;
+      }
+      // 失敗したら再生成にフォールバック
+    }
+
+    // (2) Gemini TTS で生成 + (3) Storage に upload (best-effort、失敗してもメモリ再生は継続)
+    const tts = await generateTtsAudio(opts.text, ctx(), voice);
+    audioCache.set(key, tts.audioBuffer);
+    const wav = pcm16leToWav(tts.pcm, tts.sampleRate);
+    void uploadPickAudio(opts.pickId, wav).then((path) => {
+      if (path && path !== audioPath) {
+        audioPath = path;
+        void opts.onPersisted?.(path, voice);
+      }
+    });
+    return tts.audioBuffer;
   }
 
   function play(buf: AudioBuffer): void {
@@ -84,7 +112,6 @@ export function createShadowingPlayer(opts: ShadowingPlayerOptions): HTMLElement
     src.playbackRate.value = rate;
     src.connect(ctx().destination);
     src.onended = () => {
-      // ユーザーが手動 stop した場合はカウントしない (currentSource をクリア済)
       if (currentSource !== src) return;
       currentSource = null;
       const next = (parseInt(countEl.textContent || '0') || 0) + 1;

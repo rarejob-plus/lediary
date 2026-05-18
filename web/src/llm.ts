@@ -111,21 +111,49 @@ function ttsModel(voice: string) {
   return m;
 }
 
-/** Gemini TTS でテキスト → PCM 音声を生成し、AudioBuffer にデコードして返す。
- *  Gemini TTS の出力は L16 PCM 24kHz mono (little-endian)。 */
-export async function generateTtsAudioBuffer(
+export interface TtsResult {
+  audioBuffer: AudioBuffer;
+  pcm: ArrayBuffer;        // Int16 little-endian PCM、Storage 保存用 (WAV ヘッダ付加して上げる)
+  sampleRate: number;
+  voice: string;
+}
+
+/** Gemini TTS でテキスト → PCM 音声を生成し、AudioBuffer + 生 PCM の両方を返す。
+ *  Gemini TTS の出力は L16 PCM 24kHz mono (little-endian)。
+ *  AudioBuffer は即時再生用、pcm は永続化 (WAV エンコードして Cloud Storage upload) 用。 */
+export async function generateTtsAudio(
   text: string,
   audioCtx: AudioContext,
   voice = 'Charon',
-): Promise<AudioBuffer> {
+): Promise<TtsResult> {
   const model = ttsModel(voice);
   const result = await model.generateContent(text);
-  // response.candidates[0].content.parts[0].inlineData.data (base64) を取り出す
   const candidates = (result.response as { candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { data?: string; mimeType?: string } }> } }> }).candidates;
   const inline = candidates?.[0]?.content?.parts?.find((p) => p.inlineData)?.inlineData;
   if (!inline?.data) throw new Error('TTS response missing inlineData');
   const sampleRate = parseTtsSampleRate(inline.mimeType || '') || 24000;
-  return pcm16leBase64ToAudioBuffer(inline.data, sampleRate, audioCtx);
+  const pcm = base64ToArrayBuffer(inline.data);
+  const audioBuffer = pcm16leToAudioBuffer(pcm, sampleRate, audioCtx);
+  return { audioBuffer, pcm, sampleRate, voice };
+}
+
+function base64ToArrayBuffer(b64: string): ArrayBuffer {
+  const bin = atob(b64);
+  const buf = new ArrayBuffer(bin.length);
+  const bytes = new Uint8Array(buf);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return buf;
+}
+
+function pcm16leToAudioBuffer(pcm: ArrayBuffer, sampleRate: number, audioCtx: AudioContext): AudioBuffer {
+  const dv = new DataView(pcm);
+  const samples = pcm.byteLength >>> 1;
+  const audioBuffer = audioCtx.createBuffer(1, samples, sampleRate);
+  const channel = audioBuffer.getChannelData(0);
+  for (let i = 0; i < samples; i++) {
+    channel[i] = dv.getInt16(i * 2, true) / 32768;
+  }
+  return audioBuffer;
 }
 
 function parseTtsSampleRate(mime: string): number | null {
@@ -134,20 +162,29 @@ function parseTtsSampleRate(mime: string): number | null {
   return m ? parseInt(m[1]!, 10) : null;
 }
 
-function pcm16leBase64ToAudioBuffer(b64: string, sampleRate: number, audioCtx: AudioContext): AudioBuffer {
-  const bin = atob(b64);
-  const len = bin.length;
-  const buf = new ArrayBuffer(len);
-  const bytes = new Uint8Array(buf);
-  for (let i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
-  const dv = new DataView(buf);
-  const samples = len >>> 1;
-  const audioBuffer = audioCtx.createBuffer(1, samples, sampleRate);
-  const channel = audioBuffer.getChannelData(0);
-  for (let i = 0; i < samples; i++) {
-    channel[i] = dv.getInt16(i * 2, true) / 32768;
-  }
-  return audioBuffer;
+/** 生 PCM (Int16 LE) を WAV (RIFF) コンテナに包む。Storage / decodeAudioData 用。 */
+export function pcm16leToWav(pcm: ArrayBuffer, sampleRate: number): Uint8Array {
+  const dataLen = pcm.byteLength;
+  const buf = new ArrayBuffer(44 + dataLen);
+  const v = new DataView(buf);
+  const writeStr = (offset: number, s: string) => {
+    for (let i = 0; i < s.length; i++) v.setUint8(offset + i, s.charCodeAt(i));
+  };
+  writeStr(0, 'RIFF');
+  v.setUint32(4, 36 + dataLen, true);
+  writeStr(8, 'WAVE');
+  writeStr(12, 'fmt ');
+  v.setUint32(16, 16, true);          // fmt chunk size
+  v.setUint16(20, 1, true);           // PCM
+  v.setUint16(22, 1, true);           // mono
+  v.setUint32(24, sampleRate, true);
+  v.setUint32(28, sampleRate * 2, true); // byte rate = sampleRate * channels * bitsPerSample/8
+  v.setUint16(32, 2, true);           // block align = channels * bitsPerSample/8
+  v.setUint16(34, 16, true);          // bits per sample
+  writeStr(36, 'data');
+  v.setUint32(40, dataLen, true);
+  new Uint8Array(buf, 44).set(new Uint8Array(pcm));
+  return new Uint8Array(buf);
 }
 
 export async function callLLM(

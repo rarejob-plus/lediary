@@ -1,0 +1,13 @@
+rules_version = '2';
+
+// Firebase Storage rules for otokichi-app.
+// 用途: lediary の「今日の 1 フレーズ」TTS 永続化。
+// パターン: lediary-picks/{userId}/{anyFile} を当該 userId のみが read/write/delete できる。
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /lediary-picks/{userId}/{file=**} {
+      allow read, write, delete: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}

@@ -33,6 +33,10 @@ export interface PickedPhrase {
   shadowingCount?: number;
   /** 最終シャドーイング時刻 (epoch ms)。SRS の due 判定に使う。未定義なら createdAt を流用。 */
   lastShadowedAt?: number;
+  /** Firebase Storage 上の WAV パス。生成済 TTS をデバイス横断で再利用。 */
+  audioPath?: string;
+  /** TTS 生成時のボイス名。voice 変更時に audio を再生成すべきか判定する。 */
+  audioVoice?: string;
 }
 
 export interface DiaryEntry {

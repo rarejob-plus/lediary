@@ -10,6 +10,7 @@ import { enableTextSelectionBookmark, bookmarkPhrase } from '../components/text-
 import { correctExpansionAnswer, generateExpansionQuestions, generateLessonSheetContent, generateShareId } from '../llm-diary';
 import { savePostTextOnly, savePostPicks } from '../data/posts';
 import { createShadowingPlayer } from '../components/shadowing-player';
+import { deletePickAudio } from '../data/picksAudio';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
@@ -278,16 +279,27 @@ function renderPicksSection(entry: DiaryEntry): HTMLElement {
     }
     list.innerHTML = '';
     picks.forEach((p, idx) => {
-      const card = renderSinglePick(entry.id, p, idx, () => {
-        picks.splice(idx, 1);
-        void savePostPicks(entry.id, picks);
-        renderList();
-      }, async (delta) => {
-        // shadowingCount の累積（再生終了時にインクリメント）+ SRS 用に lastShadowedAt を更新
-        p.shadowingCount = (p.shadowingCount || 0) + delta;
-        p.lastShadowedAt = Date.now();
-        await savePostPicks(entry.id, picks);
-      });
+      const card = renderSinglePick(entry.id, p, idx,
+        // onDelete: Storage 上の WAV も best-effort で削除
+        () => {
+          const removed = picks.splice(idx, 1)[0];
+          void savePostPicks(entry.id, picks);
+          if (removed?.audioPath) void deletePickAudio(removed.audioPath);
+          renderList();
+        },
+        // onShadowed: SRS 更新
+        async (delta) => {
+          p.shadowingCount = (p.shadowingCount || 0) + delta;
+          p.lastShadowedAt = Date.now();
+          await savePostPicks(entry.id, picks);
+        },
+        // onPersisted: Storage upload 成功時に audioPath / voice を pick に焼き込む
+        async (audioPath, voice) => {
+          p.audioPath = audioPath;
+          p.audioVoice = voice;
+          await savePostPicks(entry.id, picks);
+        },
+      );
       list.appendChild(card);
     });
   }
@@ -346,6 +358,7 @@ function renderSinglePick(
   index: number,
   onDelete: () => void,
   onShadowed: (delta: number) => void | Promise<void>,
+  onPersisted: (audioPath: string, voice: string) => void | Promise<void>,
 ): HTMLElement {
   const card = document.createElement('div');
   card.className = 'pick-card';
@@ -362,10 +375,14 @@ function renderSinglePick(
   });
   card.appendChild(
     createShadowingPlayer({
+      pickId: pick.id,
       text: pick.text,
+      audioPath: pick.audioPath,
+      audioVoice: pick.audioVoice,
       initialCount: pick.shadowingCount || 0,
       classPrefix: 'pick',
       onShadowed,
+      onPersisted,
     }),
   );
   return card;

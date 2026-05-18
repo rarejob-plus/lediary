@@ -151,10 +151,19 @@ function renderPhraseCard(
 
   card.appendChild(
     createShadowingPlayer({
+      pickId: pick.id,
       text: pick.text,
+      audioPath: pick.audioPath,
+      audioVoice: pick.audioVoice,
       initialCount: pick.shadowingCount || 0,
       classPrefix: 'phrase',
       onShadowed,
+      onPersisted: async (audioPath, voice) => {
+        pick.audioPath = audioPath;
+        pick.audioVoice = voice;
+        // 当該エントリの picks 配列に焼き込んで Firestore に保存
+        await persistPickUpdate(pick);
+      },
     }),
   );
 
@@ -175,7 +184,13 @@ async function persistPickUpdate(pick: PickWithContext): Promise<void> {
   if (!entry || !Array.isArray(entry.picks)) return;
   const updated = entry.picks.map((p) =>
     p.id === pick.id
-      ? { ...p, shadowingCount: pick.shadowingCount, lastShadowedAt: pick.lastShadowedAt }
+      ? {
+          ...p,
+          shadowingCount: pick.shadowingCount,
+          lastShadowedAt: pick.lastShadowedAt,
+          ...(pick.audioPath ? { audioPath: pick.audioPath } : {}),
+          ...(pick.audioVoice ? { audioVoice: pick.audioVoice } : {}),
+        }
       : p,
   );
   await savePostPicks(pick.entryId, updated);
