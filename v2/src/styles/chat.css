@@ -356,3 +356,76 @@
   overflow-y: auto;
   background: #fafaf7;
 }
+
+/* ─── IF option cards ─── */
+.option-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 78%;
+}
+.bubble--option-prompt {
+  font-size: 13px;
+  color: #86868b;
+  padding: 6px 12px;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+}
+.option-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.option-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid rgba(15, 15, 17, 0.12);
+  border-radius: 14px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, transform 0.15s;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #1d1d1f;
+}
+.option-card:hover:not(:disabled) {
+  border-color: #2563eb;
+  background: #eff5ff;
+  transform: translateY(-1px);
+}
+.option-card:disabled { cursor: default; }
+.option-card--inactive { opacity: 0.55; }
+.option-card--chosen {
+  border-color: #2563eb;
+  background: #eff5ff;
+  color: #1d4ed8;
+  font-weight: 500;
+  opacity: 1;
+}
+.option-label {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #f5f4f1;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #4a4a4f;
+  flex-shrink: 0;
+}
+.option-card--chosen .option-label {
+  background: #2563eb;
+  color: #fff;
+}
+.option-text { flex: 1; min-width: 0; }
+
+.bubble--story {
+  border-left: 3px solid #2563eb;
+  background: linear-gradient(180deg, #fff 0%, #f8fbff 100%);
+}
+.bubble--option-pick { font-style: italic; }
