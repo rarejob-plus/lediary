@@ -1,0 +1,19 @@
+/* lediary-next 基本スタイル。後で v2 デザイントークンを足す。 */
+:root {
+  --bg: #ffffff;
+  --ink: #1d1d1f;
+  --muted: #86868b;
+  --accent: #2563eb;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text',
+    'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}

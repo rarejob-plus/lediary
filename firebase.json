@@ -2,32 +2,62 @@
   "storage": {
     "rules": "storage.rules"
   },
-  "hosting": {
-    "target": "lediary",
-    "public": "web/dist",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "headers": [
-      {
-        "source": "**",
-        "headers": [{"key": "Cross-Origin-Opener-Policy", "value": "same-origin-allow-popups"}]
-      },
-      {
-        "source": "index.html",
-        "headers": [{"key": "Cache-Control", "value": "no-cache"}]
-      }
-    ],
-    "rewrites": [
-      {
-        "source": "/api/**",
-        "run": {
-          "serviceId": "rarejob-plus-api",
-          "region": "asia-northeast1"
+  "hosting": [
+    {
+      "target": "lediary",
+      "public": "web/dist",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "headers": [
+        {
+          "source": "**",
+          "headers": [{"key": "Cross-Origin-Opener-Policy", "value": "same-origin-allow-popups"}]
+        },
+        {
+          "source": "index.html",
+          "headers": [{"key": "Cache-Control", "value": "no-cache"}]
         }
-      },
-      {
-        "source": "**",
-        "destination": "/index.html"
-      }
-    ]
-  }
+      ],
+      "rewrites": [
+        {
+          "source": "/api/**",
+          "run": {
+            "serviceId": "rarejob-plus-api",
+            "region": "asia-northeast1"
+          }
+        },
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ]
+    },
+    {
+      "target": "lediary-next",
+      "public": "v2/dist",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+      "headers": [
+        {
+          "source": "**",
+          "headers": [{"key": "Cross-Origin-Opener-Policy", "value": "same-origin-allow-popups"}]
+        },
+        {
+          "source": "index.html",
+          "headers": [{"key": "Cache-Control", "value": "no-cache"}]
+        }
+      ],
+      "rewrites": [
+        {
+          "source": "/api/**",
+          "run": {
+            "serviceId": "rarejob-plus-api",
+            "region": "asia-northeast1"
+          }
+        },
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ]
+    }
+  ]
 }
