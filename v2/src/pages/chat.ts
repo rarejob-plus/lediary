@@ -1,37 +1,36 @@
-// LINE 風 1 対 1 チャット画面。
-// レイアウト:
-//   [header]  Lediary Next / 友達アバター
-//   [scroll]  メッセージタイムライン (古→新)
-//   [input]   3 行日記入力 + 送信
-//
-// 現状: AI 返信は mock (3 秒のタイピング演出後、定型文)。
-//        次フェーズ (b) で Gemini と人格システムプロンプトに繋ぐ。
+// LINE 風チャット画面。
+// - persona は users doc の personaId から決まる。未設定なら呼び出し元 (main) が onboarding に振り分ける。
+// - 投稿 → タイピング演出 → Gemini で返信 → Firestore append → realtime で UI 更新。
+// - chat ヘッダーをタップで友達変更画面へ。
 
-import { appendMessages, newMessageId, subscribeChat, type ChatMessage } from '../data/chat';
-import { getCurrentUser } from '../auth';
-import { DEFAULT_PERSONA_ID, getPersona } from '../data/personas';
+import { appendMessages, newMessageId, subscribeChat, type ChatMessage, type ChatThread } from '../data/chat';
+import { getCurrentUser, logout } from '../auth';
+import { getPersona } from '../data/personas';
+import { generateFriendReply } from '../data/llm';
+import { renderOnboarding } from './onboarding';
 
-export function renderChat(root: HTMLElement): void {
+interface RenderChatOptions {
+  personaId: string;
+}
+
+export function renderChat(root: HTMLElement, opts: RenderChatOptions): void {
   const user = getCurrentUser();
-  if (!user) {
-    root.innerHTML = '<p style="padding:24px;text-align:center;color:#86868b;">ログインが必要です。</p>';
-    return;
-  }
-
-  // 後で users doc から personaId を読む。当面はデフォルト固定。
-  const persona = getPersona(DEFAULT_PERSONA_ID);
+  if (!user) return;
+  const persona = getPersona(opts.personaId);
 
   const wrap = document.createElement('div');
   wrap.className = 'chat-screen';
   wrap.innerHTML = `
     <header class="chat-header">
-      <div class="chat-friend">
+      <button class="chat-friend" id="open-persona" type="button" aria-label="友達を変える">
         <div class="chat-avatar">${persona.emoji}</div>
         <div class="chat-friend-meta">
-          <div class="chat-friend-name">${persona.name}</div>
-          <div class="chat-friend-sub">${persona.city} · ${persona.vibe}</div>
+          <div class="chat-friend-name">${escapeHtml(persona.name)}</div>
+          <div class="chat-friend-sub">${escapeHtml(persona.city)} · ${escapeHtml(persona.vibe)}</div>
         </div>
-      </div>
+        <div class="chat-friend-chevron">›</div>
+      </button>
+      <button class="chat-header-logout" id="logout-btn" type="button" title="ログアウト">×</button>
     </header>
     <div class="chat-scroll" id="chat-scroll"></div>
     <form class="chat-input-bar" id="chat-input-bar">
@@ -51,19 +50,38 @@ export function renderChat(root: HTMLElement): void {
   const formEl = wrap.querySelector('#chat-input-bar') as HTMLFormElement;
   const inputEl = wrap.querySelector('#chat-input') as HTMLTextAreaElement;
 
+  wrap.querySelector('#logout-btn')!.addEventListener('click', async () => {
+    if (!confirm('ログアウトしますか?')) return;
+    await logout();
+  });
+
+  // ヘッダクリック → friend 変更 modal (簡易: フル画面オーバーレイ)
+  wrap.querySelector('#open-persona')!.addEventListener('click', () => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `<div class="modal-close-bar"><button id="modal-close" type="button">閉じる</button></div>`;
+    const overlayBody = document.createElement('div');
+    overlayBody.className = 'modal-body';
+    overlay.appendChild(overlayBody);
+    document.body.appendChild(overlay);
+    renderOnboarding(overlayBody, { changeMode: true });
+    overlay.querySelector('#modal-close')!.addEventListener('click', () => overlay.remove());
+    // persona 切替成功 → main の subscribeUser で chat 再描画されるので overlay を閉じる
+    const cleanup = subscribeUserPersonaForClose(user.uid, () => overlay.remove());
+    overlay.addEventListener('remove', cleanup as EventListener);
+  });
+
   let currentMessages: ChatMessage[] = [];
-  let typingTimer: ReturnType<typeof setTimeout> | null = null;
+  let typing = false;
 
   function render(): void {
     const html = currentMessages.map((m) => renderBubble(m, persona.emoji)).join('');
-    const typingHtml = typingTimer ? renderTypingBubble(persona.emoji) : '';
+    const typingHtml = typing ? renderTypingBubble(persona.emoji) : '';
     scrollEl.innerHTML = html + typingHtml;
-    // 最下部にスクロール
     scrollEl.scrollTop = scrollEl.scrollHeight;
   }
 
-  // Firestore 購読
-  subscribeChat(user.uid, (thread) => {
+  const unsubChat = subscribeChat(user.uid, (thread: ChatThread | null) => {
     currentMessages = thread?.messages || [];
     render();
   });
@@ -84,32 +102,59 @@ export function renderChat(root: HTMLElement): void {
     };
     await appendMessages(user.uid, [diaryMsg]);
 
-    // タイピング演出 → mock AI 返信。(b) で Gemini に差し替え。
-    typingTimer = setTimeout(async () => {
+    // タイピング演出を見せつつ Gemini と並走 — どちらが先に終わっても自然に見えるよう
+    // 最低 1.4 秒は typing を見せる。
+    typing = true;
+    render();
+    const minTypingMs = 1400;
+    const startedAt = Date.now();
+    try {
+      const replyText = await generateFriendReply(persona, currentMessages, text);
+      const elapsed = Date.now() - startedAt;
+      if (elapsed < minTypingMs) await sleep(minTypingMs - elapsed);
       const reply: ChatMessage = {
         id: newMessageId(),
         role: 'ai',
-        text: `Oh, that's interesting! Tell me more about it 😊 (mock reply — AI persona coming soon)`,
+        text: replyText,
         type: 'reply',
         createdAt: Date.now(),
       };
-      typingTimer = null;
       await appendMessages(user.uid, [reply]);
+    } catch (err) {
+      console.error('[chat] reply failed', err);
+      const fallback: ChatMessage = {
+        id: newMessageId(),
+        role: 'ai',
+        text: `Hmm, my brain glitched 😅 try sending that again?`,
+        type: 'reply',
+        createdAt: Date.now(),
+      };
+      await appendMessages(user.uid, [fallback]);
+    } finally {
+      typing = false;
       inputEl.disabled = false;
       inputEl.focus();
-    }, 2200);
-    render();
+      render();
+    }
   });
+
+  // 画面離脱時に unsub (SPA で書き換わったら main 側が新しい root に置き換えるので一応保険)
+  window.addEventListener('beforeunload', () => unsubChat(), { once: true });
+}
+
+function subscribeUserPersonaForClose(_uid: string, onChange: () => void): () => void {
+  // overlay を閉じるトリガとして persona 変更を検知する。
+  // ただし subscribeChat で十分 reactive なので、ここでは setTimeout-based の polling は避け
+  // 単純に「overlay を残したまま」main 側に任せる → cleanup は no-op で OK。
+  // (将来 personaId のみ変化したケースを別途検知する余地のためフックは残す)
+  void onChange;
+  return () => { /* no-op */ };
 }
 
 function renderBubble(m: ChatMessage, friendEmoji: string): string {
   const safeText = escapeHtml(m.text);
   if (m.role === 'user') {
-    return `
-      <div class="msg msg--user">
-        <div class="bubble bubble--user">${safeText}</div>
-      </div>
-    `;
+    return `<div class="msg msg--user"><div class="bubble bubble--user">${safeText}</div></div>`;
   }
   return `
     <div class="msg msg--ai">
@@ -132,4 +177,8 @@ function renderTypingBubble(friendEmoji: string): string {
 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
 }
