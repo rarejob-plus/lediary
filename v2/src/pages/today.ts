@@ -8,8 +8,8 @@ import { getCurrentUser, logout } from '../auth';
 import { getPersona } from '../data/personas';
 import { MODES, defaultModeForNow, getMode, todayStr, type DiaryMode } from '../data/modes';
 import {
-  appendExpansionMessage, createDraftDiary, deleteDiary, fetchTodayStatus, setPhase,
-  subscribeDiary, updateExpandedJp, updateEnglishDraft, updateCorrections,
+  appendExpansionMessage, createDraftDiary, deleteDiary, fetchTodayStatus, markExpandReady,
+  setPhase, subscribeDiary, updateExpandedJp, updateEnglishDraft, updateCorrections,
   type DiaryArtifact, type DiaryStatus, type ExpansionMessage,
 } from '../data/diaries';
 import { renderArchive } from './archive';
@@ -246,6 +246,9 @@ export function renderToday(root: HTMLElement, opts: RenderTodayOptions): void {
             createdAt: Date.now(),
           });
         }
+        if (step.readyForEnglish) {
+          await markExpandReady(userId, dateStr, selectedMode);
+        }
       } catch (err) {
         console.error('[intake] failed', err);
         alert('保存に失敗しました');
@@ -278,8 +281,8 @@ export function renderToday(root: HTMLElement, opts: RenderTodayOptions): void {
           <button type="submit" class="chat-send" aria-label="送信">${icons.send(18)}</button>
         </form>
         <div class="expand-actions">
-          <button class="expand-finish" id="finish-expand" type="button">
-            これで充分 → 次へ進む
+          <button class="expand-finish ${a.expandReadyAt ? 'expand-finish--ready' : ''}" id="finish-expand" type="button">
+            ${a.expandReadyAt ? `英訳を始める ${icons.chevronRight(12)}` : 'これで充分 → 次へ進む'}
           </button>
         </div>
       </div>
@@ -328,6 +331,9 @@ export function renderToday(root: HTMLElement, opts: RenderTodayOptions): void {
             text: step.question,
             createdAt: Date.now(),
           });
+        }
+        if (step.readyForEnglish && !a.expandReadyAt) {
+          await markExpandReady(userId, dateStr, selectedMode);
         }
       } catch (err) {
         console.error('[expand] step failed', err);

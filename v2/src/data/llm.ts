@@ -71,12 +71,20 @@ function expansionSystemPrompt(persona: Persona): string {
 - ✅ "気分が乗らなかったのは雨のせい? それとも会議の内容?"
 - ✅ "会議では何の議題が話された?"
 
+[英作タイミングの判断]
+- 日記の expandedJp が **5 文以上** 揃った、または **2-4 往復** 質問できて具体的な細部が複数入った時点で、英作してもらう方が学習効果が高い。
+- そう判断したら readyForEnglish: true にする。
+- そのときの question は普通の追加質問ではなく、**「この辺で英作してみる?」的な軽い誘い** にする。
+  例: "結構詳しくなったね。この辺で英作してみる?" / "今日の日記、いい感じ。英訳いってみる?"
+- まだ薄い (1-2 往復、expandedJp が 2-3 文程度) なら readyForEnglish: false でいつも通り掘り下げ質問。
+
 [出力] 必ず JSON で:
 {
   "updatedDiary": "<新しい JP 日記 (元 + 直近回答を自然に統合。改行 OK)>",
-  "question": "<次に聞きたい 1 文 — 日記の語を必ず含める>"
+  "question": "<次の質問 or 英作を促す軽い誘い — 日記の語を含める>",
+  "readyForEnglish": <true | false>
 }
-これ以上掘り下げる余地がないなら question を空文字にする。`;
+これ以上聞くことが本当に無いなら question を空文字 + readyForEnglish: true にする。`;
 }
 
 const _expansionModelMap = new Map<string, ReturnType<typeof getGenerativeModel>>();
@@ -96,6 +104,8 @@ function expansionModel() {
 export interface ExpandStep {
   updatedDiary: string;
   question: string;       // 空文字なら「もう質問なし」シグナル
+  /** AI が「もう英作してもいいよ」と判断したとき true。UI 側で CTA を強調する用。 */
+  readyForEnglish: boolean;
 }
 
 /** 拡張ステップ: 既存日記 + 直近 Q&A を渡し、{更新後日記, 次の質問} を返す。
@@ -217,14 +227,15 @@ function parseExpandStep(raw: string, fallbackDiary: string): ExpandStep {
   const last = s.lastIndexOf('}');
   if (first >= 0 && last > first) s = s.slice(first, last + 1);
   try {
-    const obj = JSON.parse(s) as { updatedDiary?: string; question?: string };
+    const obj = JSON.parse(s) as { updatedDiary?: string; question?: string; readyForEnglish?: boolean };
     return {
       updatedDiary: (obj.updatedDiary && obj.updatedDiary.trim()) || fallbackDiary,
       question: (obj.question || '').trim(),
+      readyForEnglish: !!obj.readyForEnglish,
     };
   } catch (e) {
     console.warn('[expand] parse failed', e, raw);
-    return { updatedDiary: fallbackDiary, question: '' };
+    return { updatedDiary: fallbackDiary, question: '', readyForEnglish: false };
   }
 }
 

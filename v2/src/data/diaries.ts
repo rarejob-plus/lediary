@@ -43,6 +43,8 @@ export interface DiaryArtifact {
   englishDraft?: string;
   /** Stage B: teacher persona による添削。 */
   corrections?: CorrectionItem[];
+  /** AI が「もう英作していい」と判断したタイミング (epoch ms)。UI で CTA を強調する用。 */
+  expandReadyAt?: number;
   phase: DiaryPhase;
   status: DiaryStatus;
   createdAt: number;
@@ -97,6 +99,12 @@ export async function updateExpandedJp(
   userId: string, date: string, mode: DiaryMode, expandedJp: string,
 ): Promise<void> {
   await updateDoc(diaryRef(userId, date, mode), { expandedJp, updatedAt: Date.now() });
+}
+
+export async function markExpandReady(
+  userId: string, date: string, mode: DiaryMode,
+): Promise<void> {
+  await updateDoc(diaryRef(userId, date, mode), { expandReadyAt: Date.now(), updatedAt: Date.now() });
 }
 
 export async function setPhase(
