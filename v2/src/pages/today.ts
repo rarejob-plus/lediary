@@ -165,10 +165,13 @@ export function renderToday(root: HTMLElement, opts: RenderTodayOptions): void {
 
   // ── body: phase に応じて UI を切り替え ──
   function renderBody(): void {
-    if (!artifact || artifact.phase === 'draft') return renderPhaseIntake();
-    if (artifact.phase === 'expanding') return renderPhaseExpanding();
-    if (artifact.phase === 'englishing') return renderPhaseEnglishing();
-    if (artifact.phase === 'correcting') return renderPhaseCorrecting();
+    if (!artifact) return renderPhaseIntake();
+    // 旧 schema (phase 未設定) 救済: status='completed' なら completed、それ以外は expanding 扱い
+    const phase = artifact.phase || (artifact.status === 'completed' ? 'completed' : 'expanding');
+    if (phase === 'draft') return renderPhaseIntake();
+    if (phase === 'expanding') return renderPhaseExpanding();
+    if (phase === 'englishing') return renderPhaseEnglishing();
+    if (phase === 'correcting') return renderPhaseCorrecting();
     return renderPhaseCompleted();
   }
 
@@ -572,10 +575,10 @@ function newId(): string {
   return `m-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+function escapeHtml(s: string | undefined | null): string {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }
 
-function escapeAttr(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+function escapeAttr(s: string | undefined | null): string {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 }
