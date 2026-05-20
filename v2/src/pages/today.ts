@@ -8,7 +8,7 @@ import { getCurrentUser, logout } from '../auth';
 import { getPersona } from '../data/personas';
 import { MODES, defaultModeForNow, getMode, todayStr, type DiaryMode } from '../data/modes';
 import {
-  appendExpansionMessage, createDraftDiary, fetchTodayStatus, setPhase,
+  appendExpansionMessage, createDraftDiary, deleteDiary, fetchTodayStatus, setPhase,
   subscribeDiary, updateExpandedJp, updateEnglishDraft, updateCorrections,
   type DiaryArtifact, type DiaryStatus, type ExpansionMessage,
 } from '../data/diaries';
@@ -166,13 +166,32 @@ export function renderToday(root: HTMLElement, opts: RenderTodayOptions): void {
   // ── body: phase に応じて UI を切り替え ──
   function renderBody(): void {
     if (!artifact) return renderPhaseIntake();
-    // 旧 schema (phase 未設定) 救済: status='completed' なら completed、それ以外は expanding 扱い
     const phase = artifact.phase || (artifact.status === 'completed' ? 'completed' : 'expanding');
     if (phase === 'draft') return renderPhaseIntake();
-    if (phase === 'expanding') return renderPhaseExpanding();
-    if (phase === 'englishing') return renderPhaseEnglishing();
-    if (phase === 'correcting') return renderPhaseCorrecting();
-    return renderPhaseCompleted();
+    if (phase === 'expanding') renderPhaseExpanding();
+    else if (phase === 'englishing') renderPhaseEnglishing();
+    else if (phase === 'correcting') renderPhaseCorrecting();
+    else renderPhaseCompleted();
+    bindResetButton();
+  }
+
+  function bindResetButton(): void {
+    const btn = bodyEl.querySelector<HTMLButtonElement>('.diary-reset-btn');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+      if (!artifact) return;
+      if (!confirm('今日の日記をリセット (削除) しますか? チャット履歴も全部消えます。')) return;
+      btn.disabled = true;
+      try {
+        await deleteDiary(userId, artifact.date, artifact.mode);
+        await refreshTodayStatus();
+        // subscribeDiary が null を吹くので renderPhaseIntake に戻る
+      } catch (e) {
+        console.error(e);
+        alert('削除に失敗しました');
+        btn.disabled = false;
+      }
+    });
   }
 
   function renderPhaseIntake(): void {
@@ -248,6 +267,7 @@ export function renderToday(root: HTMLElement, opts: RenderTodayOptions): void {
           <div class="expand-diary-head">
             <span class="expand-diary-label">今日の日記</span>
             <span class="expand-diary-mode">${getMode(a.mode).label}</span>
+            ${resetButtonHtml()}
           </div>
           <div class="expand-diary-text" id="expand-diary-text">${escapeHtml(a.expandedJp)}</div>
         </section>
@@ -344,6 +364,7 @@ export function renderToday(root: HTMLElement, opts: RenderTodayOptions): void {
             <span class="expand-diary-label">今日の日記 (拡張済)</span>
             <span class="expand-diary-mode">${getMode(a.mode).label}</span>
             <button class="expand-back" id="back-to-expand" type="button">${icons.chevronRight(12)} 戻る</button>
+            ${resetButtonHtml()}
           </div>
           <div class="expand-diary-text">${escapeHtml(a.expandedJp)}</div>
         </section>
@@ -415,6 +436,7 @@ export function renderToday(root: HTMLElement, opts: RenderTodayOptions): void {
           <div class="expand-diary-head">
             <span class="expand-diary-label">今日の日記</span>
             <span class="expand-diary-mode">${getMode(a.mode).label}</span>
+            ${resetButtonHtml()}
           </div>
           <div class="expand-diary-text">${escapeHtml(a.expandedJp)}</div>
         </section>
@@ -471,6 +493,7 @@ export function renderToday(root: HTMLElement, opts: RenderTodayOptions): void {
         <section class="expand-diary">
           <div class="expand-diary-head">
             <span class="expand-diary-label">日本語日記</span>
+            ${resetButtonHtml()}
           </div>
           <div class="expand-diary-text">${escapeHtml(a.expandedJp)}</div>
         </section>
@@ -515,6 +538,15 @@ export function renderToday(root: HTMLElement, opts: RenderTodayOptions): void {
     unsubUser();
     if (unsubDiary) unsubDiary();
   }, { once: true });
+}
+
+function resetButtonHtml(): string {
+  return `
+    <button class="diary-reset-btn" type="button" title="今日の日記を削除してやり直し" aria-label="リセット">
+      <span class="diary-reset-icon">${icons.refresh(12)}</span>
+      リセット
+    </button>
+  `;
 }
 
 function renderCorrectionCard(c: { original: string; corrected: string; explanation: string }, i: number): string {

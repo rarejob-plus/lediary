@@ -9,7 +9,7 @@
 // チャット (expansionMessages) はこの artifact の中に持つ。日が変わると別 artifact になり、
 // 表示上 1 日ごとに「リセット」される (過去のチャットは archive で読める)。
 
-import { collection, doc, getDoc, getDocs, query, setDoc, updateDoc, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db, V2_COLLECTIONS } from '../firebase';
 import type { DiaryMode } from './modes';
 
@@ -116,6 +116,13 @@ export async function updateCorrections(
   userId: string, date: string, mode: DiaryMode, corrections: CorrectionItem[],
 ): Promise<void> {
   await updateDoc(diaryRef(userId, date, mode), { corrections, updatedAt: Date.now() });
+}
+
+/** 試験中の使い捨て: 指定 (date, mode) の artifact を物理削除。Intake からやり直しになる。 */
+export async function deleteDiary(
+  userId: string, date: string, mode: DiaryMode,
+): Promise<void> {
+  await deleteDoc(diaryRef(userId, date, mode));
 }
 
 export function subscribeDiary(
