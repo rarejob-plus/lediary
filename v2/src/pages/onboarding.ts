@@ -4,6 +4,7 @@
 import { PERSONAS } from '../data/personas';
 import { setPersona } from '../data/user';
 import { getCurrentUser } from '../auth';
+import { icons } from '../components/icons';
 
 export function renderOnboarding(root: HTMLElement, opts?: { changeMode?: boolean }): void {
   const user = getCurrentUser();
@@ -21,7 +22,7 @@ export function renderOnboarding(root: HTMLElement, opts?: { changeMode?: boolea
       <div class="persona-grid">
         ${PERSONAS.map((p) => `
           <button class="persona-card" data-id="${p.id}" type="button">
-            <div class="persona-emoji">${p.emoji}</div>
+            <div class="persona-avatar" style="background:${p.color};">${icons[p.icon](24)}</div>
             <div class="persona-name">${p.name}, ${p.age}</div>
             <div class="persona-city">${p.city}</div>
             <div class="persona-vibe">${p.vibe}</div>

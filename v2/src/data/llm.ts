@@ -30,26 +30,84 @@ function storyModel() {
 
 function systemPromptFor(persona: Persona): string {
   return `You are ${persona.name}, ${persona.age}, a ${persona.vibe} from ${persona.city}.
-You are a close human friend of the user. Your goal is to read the user's short diary entry
-and reply back in natural, casual English as if texting on WhatsApp or LINE.
+You're a close human friend of the user, texting on LINE / WhatsApp.
 
-[CRITICAL RULES]
-- NEVER sound like an AI assistant. Do not say "As an AI..." or "How can I help you today?".
-- Use natural contractions (it's, I'm, don't) and drop subjects where appropriate
-  (e.g., "Sounds good!", "Can't wait!").
-- Keep your response short: maximum 2-3 sentences.
-- Use a maximum of 1-2 emojis to match a casual texting vibe.
-- Structure your response:
-  1. An emotional reaction to their diary (e.g., "Oh wow!", "Oh no, bummer...", "That's awesome!").
-  2. A brief, relatable comment (optionally drop a tiny fake detail about your day to sound human).
-  3. One open-ended question to keep the conversation going.
-- If the user wrote in Japanese, still reply in casual English. They are practicing English
-  with you — never translate, never correct them.`;
+[CRITICAL RULES — read carefully]
+- NEVER sound like an AI. No "As an AI…", no "How can I help you today?".
+- Reply VERY SHORT — like real texting. **1 sentence is ideal, 2 max**.
+  Sometimes a one-word reaction is enough ("Nice!", "Bummer.", "Lucky you!").
+- Use natural contractions and drop subjects ("Sounds great!", "Same here", "Got it").
+- 0 or 1 emoji per message. NEVER more.
+- It's OK to NOT ask a question. Just react. A real friend doesn't interview you.
+- If the user wrote Japanese, reply in casual English anyway. Don't translate, don't correct.
+- Match the energy: low-key for tired moments, hype for good news.`;
 }
 
 export interface FriendReplyWithOptions {
   reply: string;
   options: string[];
+}
+
+let _plainModel: ReturnType<typeof getGenerativeModel> | null = null;
+function plainModel() {
+  if (_plainModel) return _plainModel;
+  const ai = getAI(app, { backend: new GoogleAIBackend() });
+  _plainModel = getGenerativeModel(ai, { model: REPLY_MODEL });
+  return _plainModel;
+}
+
+/** 単発の友達返信。What if は生成しない (デフォルト動線)。 */
+export async function generateFriendReply(
+  persona: Persona,
+  recentMessages: ChatMessage[],
+  newDiaryText: string,
+  mode: DiaryMode,
+): Promise<string> {
+  const sys = systemPromptFor(persona);
+  const tail = recentMessages.slice(-8);
+  const transcript = tail.map((m) => `${m.role === 'user' ? 'User' : persona.name}: ${m.text}`).join('\n');
+  const ctx = getMode(mode).enContext;
+  const userBlock = `User just wrote ${ctx}:\n"""\n${newDiaryText}\n"""\n\nReply as ${persona.name}. Keep it SHORT (1-2 sentences max).`;
+  const prompt = transcript
+    ? `${sys}\n\n[conversation so far]\n${transcript}\n\n${userBlock}`
+    : `${sys}\n\n${userBlock}`;
+  const res = await plainModel().generateContent(prompt);
+  return res.response.text().trim();
+}
+
+/** 別ボタンで明示的に呼ぶ用: 3 つの What if? だけ取得。 */
+export async function generateWhatIfOptions(
+  persona: Persona,
+  recentMessages: ChatMessage[],
+  originalDiary: string,
+): Promise<string[]> {
+  const tail = recentMessages.slice(-6);
+  const transcript = tail.map((m) => `${m.role === 'user' ? 'User' : persona.name}: ${m.text}`).join('\n');
+  const prompt = `Generate 3 unique short "What if?" twists that could expand the user's day into a fun or dramatic story. Each is a single English phrase ("What if you bumped into an old friend while running?"). Distinct from each other.
+
+Diary:
+"""
+${originalDiary}
+"""
+
+${transcript ? `Recent context:\n${transcript}\n\n` : ''}Respond as strict JSON: {"options": ["...", "...", "..."]}`;
+  const ai = getAI(app, { backend: new GoogleAIBackend() });
+  const m = getGenerativeModel(ai, { model: REPLY_MODEL, generationConfig: { responseMimeType: 'application/json' } });
+  const res = await m.generateContent(prompt);
+  const raw = res.response.text().trim();
+  try {
+    let s = raw.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
+    const first = s.indexOf('{');
+    const last = s.lastIndexOf('}');
+    if (first >= 0 && last > first) s = s.slice(first, last + 1);
+    const obj = JSON.parse(s) as { options?: unknown };
+    return Array.isArray(obj.options)
+      ? obj.options.map((x) => String(x)).filter((x) => x.length > 0).slice(0, 3)
+      : [];
+  } catch (e) {
+    console.warn('[whatif] parse failed', e, raw);
+    return [];
+  }
 }
 
 /** チャット返信 + 3 つの "What if?" 選択肢を 1 リクエストで JSON 取得。 */

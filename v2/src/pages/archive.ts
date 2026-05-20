@@ -3,6 +3,7 @@
 
 import { fetchUserDiaries, type DiaryArtifact } from '../data/diaries';
 import { getMode, MODES } from '../data/modes';
+import { icons } from '../components/icons';
 
 export async function renderArchive(root: HTMLElement, userId: string): Promise<void> {
   root.innerHTML = '<p class="archive-loading">読み込み中…</p>';
@@ -31,7 +32,7 @@ export async function renderArchive(root: HTMLElement, userId: string): Promise<
     wrap.innerHTML = `
       <header class="archive-header">
         <h2 class="archive-title">過去の日記</h2>
-        ${streak > 0 ? `<div class="archive-streak">🔥 ${streak} 日連続</div>` : ''}
+        ${streak > 0 ? `<div class="archive-streak">${icons.flame(14)} ${streak} 日連続</div>` : ''}
       </header>
       <div class="archive-list" id="archive-list"></div>
     `;
@@ -58,7 +59,7 @@ function renderDateGroup(date: string, items: DiaryArtifact[]): HTMLElement {
         ${MODES.map((m) => {
           const it = itemsByMode.get(m.id);
           const s = it?.status === 'completed' ? 'done' : it?.status === 'in-progress' ? 'prog' : 'empty';
-          return `<span class="archive-day-mode-dot archive-day-mode-dot--${s}" title="${m.label}">${m.emoji}</span>`;
+          return `<span class="archive-day-mode-dot archive-day-mode-dot--${s}" title="${m.label}">${icons[m.icon](12)}</span>`;
         }).join('')}
       </div>
     </div>
@@ -80,7 +81,7 @@ function renderArtifactCard(a: DiaryArtifact): HTMLElement {
   card.className = `archive-card archive-card--${a.status}`;
   card.innerHTML = `
     <header class="archive-card-head">
-      <span class="archive-card-emoji">${meta.emoji}</span>
+      <span class="archive-card-icon">${icons[meta.icon](16)}</span>
       <span class="archive-card-label">${meta.label}</span>
       <span class="archive-card-status">${a.status === 'completed' ? '完成' : '途中'}</span>
     </header>
@@ -90,7 +91,7 @@ function renderArtifactCard(a: DiaryArtifact): HTMLElement {
     </div>
     ${a.friendReply ? `
       <div class="archive-card-reply">
-        <div class="archive-card-section-label">${meta.emoji ? '' : ''}友達の返信</div>
+        <div class="archive-card-section-label">友達の返信</div>
         <p>${escapeHtml(a.friendReply)}</p>
       </div>
     ` : ''}

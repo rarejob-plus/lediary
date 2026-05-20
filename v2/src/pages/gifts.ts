@@ -3,6 +3,7 @@
 
 import { GIFTS, type Gift } from '../data/gifts';
 import { redeemGift, subscribeUser, type V2User } from '../data/user';
+import { icons } from '../components/icons';
 
 export function renderGifts(root: HTMLElement, userId: string): void {
   const wrap = document.createElement('div');
@@ -63,7 +64,7 @@ function renderGiftCard(g: Gift, u: V2User | null): string {
   const buttonClass = owned ? 'gift-redeem gift-redeem--owned' : enough ? 'gift-redeem' : 'gift-redeem gift-redeem--locked';
   return `
     <article class="gift-card${owned ? ' gift-card--owned' : ''}">
-      <div class="gift-emoji">${g.emoji}</div>
+      <div class="gift-icon" style="background:${g.color};">${icons[g.icon](24)}</div>
       <div class="gift-meta">
         <div class="gift-name">${g.name}</div>
         <div class="gift-desc">${g.description}</div>

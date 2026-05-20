@@ -616,3 +616,126 @@
 .gift-redeem:disabled { opacity: 0.5; cursor: default; }
 .gift-redeem--owned { background: rgba(37,99,235,0.15); color: #1d4ed8; }
 .gift-redeem--locked { background: #f5f4f1; color: #86868b; }
+
+/* ─── Lucide icon adaptations (override prior emoji-based avatars) ─── */
+.chat-avatar {
+  background: #2563eb;
+  color: #fff;
+  font-size: 0;
+}
+.chat-avatar svg { color: #fff; }
+
+.msg-avatar {
+  background: #2563eb;
+  color: #fff;
+  box-shadow: none;
+}
+.msg-avatar svg { color: #fff; }
+
+.msg-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+  max-width: 78%;
+}
+/* msg-content の bubble は親の max-width 縛りで OK */
+.msg-content .bubble { max-width: 100%; }
+
+.whatif-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: #2563eb;
+  background: transparent;
+  border: 1px solid rgba(37, 99, 235, 0.3);
+  border-radius: 100px;
+  cursor: pointer;
+  align-self: flex-start;
+  transition: background 0.15s;
+}
+.whatif-btn:hover {
+  background: #eff5ff;
+}
+
+/* mode chip — Lucide icon */
+.mode-chip-icon { display: inline-flex; align-items: center; }
+.mode-chip-marker { display: inline-flex; align-items: center; color: #2563eb; }
+.mode-chip--selected .mode-chip-marker { color: #fff; }
+
+/* persona avatar (onboarding) */
+.persona-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 4px;
+  color: #fff;
+}
+
+/* gift icon (Lucide) */
+.gift-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+}
+
+/* archive card icon */
+.archive-card-icon {
+  display: inline-flex;
+  align-items: center;
+  color: #4a4a4f;
+}
+.archive-day-mode-dot {
+  color: #4a4a4f;
+}
+.archive-day-mode-dot--done { color: #1d4ed8; }
+.archive-day-mode-dot--empty svg { opacity: 0.3; }
+
+/* header buttons */
+.chat-header-icon {
+  background: transparent;
+  border: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  color: #4a4a4f;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.chat-header-icon:hover { background: rgba(15, 15, 17, 0.06); color: #1d1d1f; }
+
+.chat-friend-chevron { display: inline-flex; align-items: center; }
+
+/* send button: Lucide arrow shape */
+.chat-send { display: inline-grid; place-items: center; }
+.chat-send:hover { transform: translateY(-1px); }
+
+/* bubble-mode-icon */
+.bubble-mode-icon {
+  display: inline-flex;
+  align-items: center;
+  color: #86868b;
+  margin-right: 4px;
+  align-self: flex-end;
+  margin-bottom: 4px;
+}
+
+/* placeholder を Visible しないようにスタイルだけ整える (chat-input-bar textarea 自体は placeholder 無いので影響なし) */
+.chat-input-bar textarea::placeholder { color: transparent; }
+
+/* modal close button (Lucide x + label) */
+.modal-close-bar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
