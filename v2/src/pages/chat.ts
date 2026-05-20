@@ -3,7 +3,7 @@
 //   モード選択 (Morning/Lesson/Diary/Story) → 日記投稿 (date+mode タグ付き)
 //   → AI 返信 + IF 候補 → 1 つ選択 → 拡張ストーリー → 日記 artifact が "completed"
 
-import { appendMessages, newMessageId, subscribeChat, type ChatMessage, type ChatThread } from '../data/chat';
+import { appendMessages, migrateLegacyChat, newMessageId, subscribeChat, type ChatMessage, type ChatThread } from '../data/chat';
 import { getCurrentUser, logout } from '../auth';
 import { getPersona } from '../data/personas';
 import { generateFriendReplyAndOptions, generateExpandedStory } from '../data/llm';
@@ -159,6 +159,9 @@ export function renderChat(root: HTMLElement, opts: RenderChatOptions): void {
   renderModeBar();
   renderTodayProgress();
   void refreshTodayStatus();
+  // 既存の `lediary-v2-chats/{uid}` (旧 single thread) があれば、現在の persona の thread にコピー。
+  // 1 回成功すれば legacy doc は消える。失敗しても新規 thread として何もない状態で始まるだけ。
+  void migrateLegacyChat(userId, persona.id);
 
   let currentMessages: ChatMessage[] = [];
   let typing = false;
@@ -224,7 +227,7 @@ export function renderChat(root: HTMLElement, opts: RenderChatOptions): void {
       date: pickDate,
       createdAt: Date.now(),
     };
-    await appendMessages(userId, [pickMsg]);
+    await appendMessages(userId, persona.id, [pickMsg]);
     // What if 選択 +5MP
     void addPoints(userId, 5).catch(console.warn);
 
@@ -244,7 +247,7 @@ export function renderChat(root: HTMLElement, opts: RenderChatOptions): void {
         date: pickDate,
         createdAt: Date.now(),
       };
-      await appendMessages(userId, [storyMsg]);
+      await appendMessages(userId, persona.id, [storyMsg]);
       // artifact を completed に
       await completeDiary(userId, pickDate, pickMode, optionText, story);
       await refreshTodayStatus();
@@ -259,7 +262,7 @@ export function renderChat(root: HTMLElement, opts: RenderChatOptions): void {
         date: pickDate,
         createdAt: Date.now(),
       };
-      await appendMessages(userId, [fallback]);
+      await appendMessages(userId, persona.id, [fallback]);
     } finally {
       typing = false;
       pickInFlight = false;
@@ -267,7 +270,7 @@ export function renderChat(root: HTMLElement, opts: RenderChatOptions): void {
     }
   }
 
-  const unsubChat = subscribeChat(userId, (thread: ChatThread | null) => {
+  const unsubChat = subscribeChat(userId, persona.id, (thread: ChatThread | null) => {
     currentMessages = thread?.messages || [];
     render();
   });
@@ -291,7 +294,7 @@ export function renderChat(root: HTMLElement, opts: RenderChatOptions): void {
       date: dateStr,
       createdAt: Date.now(),
     };
-    await appendMessages(userId, [diaryMsg]);
+    await appendMessages(userId, persona.id, [diaryMsg]);
     // artifact (in-progress) 作成 + 日記投稿 +10MP
     void upsertDiaryStart(userId, dateStr, mode, text).catch(console.warn);
     void addPoints(userId, 10).catch(console.warn);
@@ -326,7 +329,7 @@ export function renderChat(root: HTMLElement, opts: RenderChatOptions): void {
           createdAt: Date.now() + 1,
         });
       }
-      await appendMessages(userId, toAppend);
+      await appendMessages(userId, persona.id, toAppend);
       void updateDiaryReply(userId, dateStr, mode, reply).catch(console.warn);
       await refreshTodayStatus();
     } catch (err) {
@@ -340,7 +343,7 @@ export function renderChat(root: HTMLElement, opts: RenderChatOptions): void {
         date: dateStr,
         createdAt: Date.now(),
       };
-      await appendMessages(userId, [fallback]);
+      await appendMessages(userId, persona.id, [fallback]);
     } finally {
       typing = false;
       inputEl.disabled = false;
