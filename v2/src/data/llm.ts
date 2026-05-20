@@ -5,6 +5,7 @@ import { getAI, GoogleAIBackend, getGenerativeModel } from 'firebase/ai';
 import { app } from '../firebase';
 import type { Persona } from './personas';
 import type { ChatMessage } from './chat';
+import { getMode, type DiaryMode } from './modes';
 
 const REPLY_MODEL = 'gemini-3.1-flash-lite';
 
@@ -56,11 +57,13 @@ export async function generateFriendReplyAndOptions(
   persona: Persona,
   recentMessages: ChatMessage[],
   newDiaryText: string,
+  mode: DiaryMode,
 ): Promise<FriendReplyWithOptions> {
   const sys = systemPromptFor(persona);
   const tail = recentMessages.slice(-8);
   const transcript = tail.map((m) => `${m.role === 'user' ? 'User' : persona.name}: ${m.text}`).join('\n');
-  const userBlock = `User just wrote this short diary:\n"""\n${newDiaryText}\n"""`;
+  const ctx = getMode(mode).enContext;
+  const userBlock = `User just wrote ${ctx}:\n"""\n${newDiaryText}\n"""`;
   const optionsBlock = `After the reply, also generate 3 unique "What if?" options that could expand the user's day into a fun or dramatic story. Each option must be a short English phrase (e.g., "What if you bumped into an old friend while running?"). Keep them distinct from each other.`;
   const jsonBlock = `Respond with strict JSON in this shape and nothing else:
 {
@@ -107,7 +110,9 @@ export async function generateExpandedStory(
   recentMessages: ChatMessage[],
   originalDiary: string,
   chosenOption: string,
+  mode: DiaryMode,
 ): Promise<string> {
+  void mode; // 現状は文脈差分なく扱う。後で mode ごとに語り口を変えたい時のためのフック。
   const sys = `You are ${persona.name}, ${persona.age}, a friend of the user. Switch to a slightly more imaginative
 "storyteller" voice while keeping the friendly LINE-texting tone.
 The user shared a short diary and just picked a "What if?" twist. Write a single short story (3-5 sentences)

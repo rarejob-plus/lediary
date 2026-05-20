@@ -21,6 +21,7 @@ export const db = getFirestore(app);
 export const V2_COLLECTIONS = {
   chats: 'lediary-v2-chats',
   users: 'lediary-v2-users',
+  diaries: 'lediary-v2-diaries',
   gifts: 'lediary-v2-gifts',
 } as const;
 

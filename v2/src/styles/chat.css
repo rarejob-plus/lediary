@@ -429,3 +429,132 @@
   background: linear-gradient(180deg, #fff 0%, #f8fbff 100%);
 }
 .bubble--option-pick { font-style: italic; }
+
+/* ─── today progress strip ─── */
+.today-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.7);
+  border-bottom: 1px solid rgba(15, 15, 17, 0.06);
+  font-size: 12px;
+  color: #4a4a4f;
+}
+.progress-label { color: #86868b; font-size: 11px; }
+.progress-dots { display: inline-flex; gap: 4px; }
+.progress-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(15, 15, 17, 0.12); }
+.progress-dot.half { background: rgba(37, 99, 235, 0.45); }
+.progress-dot.on   { background: #2563eb; }
+.progress-count { margin-left: auto; font-variant-numeric: tabular-nums; }
+
+/* ─── mode selector bar ─── */
+.mode-bar {
+  display: flex; gap: 6px;
+  padding: 8px 12px 4px;
+  background: #fff;
+  border-top: 1px solid rgba(15, 15, 17, 0.06);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.mode-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 6px 12px;
+  border: 1px solid rgba(15, 15, 17, 0.12);
+  border-radius: 100px;
+  background: #fafaf7;
+  cursor: pointer;
+  font-size: 12px;
+  color: #4a4a4f;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.mode-chip:hover { border-color: rgba(15, 15, 17, 0.2); }
+.mode-chip--selected {
+  background: #1d1d1f; border-color: #1d1d1f; color: #fff;
+}
+.mode-chip--done { color: #1d4ed8; border-color: rgba(37, 99, 235, 0.3); background: #eff5ff; }
+.mode-chip--done.mode-chip--selected { background: #2563eb; border-color: #2563eb; color: #fff; }
+.mode-chip-emoji { font-size: 14px; }
+.mode-chip-marker { font-size: 11px; opacity: 0.7; }
+
+.msg--user .bubble-mode {
+  font-size: 13px;
+  opacity: 0.7;
+  align-self: flex-end;
+  margin-right: 4px;
+}
+
+.chat-header-archive {
+  background: transparent; border: 0;
+  font-size: 18px; width: 32px; height: 32px; border-radius: 50%;
+  cursor: pointer; color: #4a4a4f; flex-shrink: 0;
+}
+.chat-header-archive:hover { background: rgba(15,15,17,0.06); color: #1d1d1f; }
+
+/* ─── archive view ─── */
+.archive-screen { max-width: 720px; margin: 0 auto; padding: 16px 16px 64px; }
+.archive-loading, .archive-empty {
+  text-align: center; color: #86868b; padding: 48px 16px; font-size: 13px;
+}
+.archive-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 24px;
+}
+.archive-title { font-family: 'Lora', serif; font-size: 24px; font-weight: 500; }
+.archive-streak { font-size: 13px; color: #d97757; font-weight: 500; }
+.archive-list { display: flex; flex-direction: column; gap: 28px; }
+.archive-day-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin-bottom: 10px; padding-bottom: 8px;
+  border-bottom: 1px solid rgba(15,15,17,0.08);
+}
+.archive-day-date { font-family: 'Lora', serif; font-size: 16px; font-weight: 500; }
+.archive-day-modes { display: inline-flex; gap: 6px; }
+.archive-day-mode-dot {
+  display: inline-grid; place-items: center;
+  width: 22px; height: 22px;
+  border-radius: 50%; font-size: 11px;
+  background: #f5f4f1;
+}
+.archive-day-mode-dot--done  { background: #eff5ff; }
+.archive-day-mode-dot--prog  { background: #fffbeb; }
+.archive-day-mode-dot--empty { opacity: 0.35; }
+.archive-day-cards { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.archive-card {
+  background: #fff;
+  border: 1px solid rgba(15,15,17,0.08);
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.archive-card--in-progress { opacity: 0.7; }
+.archive-card-head {
+  display: flex; align-items: center; gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed rgba(15,15,17,0.08);
+}
+.archive-card-emoji { font-size: 18px; }
+.archive-card-label { font-family: 'Lora', serif; font-size: 15px; font-weight: 500; color: #1d1d1f; }
+.archive-card-status {
+  margin-left: auto; font-size: 11px; color: #86868b; letter-spacing: 0.04em;
+}
+.archive-card--completed .archive-card-status { color: #1d4ed8; }
+.archive-card-section-label {
+  font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: #86868b; margin-bottom: 4px; font-weight: 600;
+}
+.archive-card-original p,
+.archive-card-reply p,
+.archive-card-twist p,
+.archive-card-story p {
+  font-size: 14px; line-height: 1.65; color: #1d1d1f; margin: 0; white-space: pre-wrap;
+}
+.archive-card-twist p { color: #4a4a4f; }
+.archive-card-story {
+  padding: 10px 12px;
+  background: linear-gradient(180deg, #fff 0%, #f8fbff 100%);
+  border-left: 3px solid #2563eb;
+  border-radius: 0 8px 8px 0;
+}

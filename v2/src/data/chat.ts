@@ -20,6 +20,11 @@ export interface ChatMessage {
   type: MessageType;
   /** option-prompt 時の 3 つの候補文。 */
   options?: string[];
+  /** diary / reply / expanded-story がどの日記モードに属するか。
+   *  diary 送信時に決まり、後続の reply / option-prompt / expanded-story は同じ mode を引き継ぐ。 */
+  mode?: import('./modes').DiaryMode;
+  /** mode 起点となる日付 (YYYY-MM-DD)。同じく diary 投稿時にセットして引き継ぐ。 */
+  date?: string;
   createdAt: number;
 }
 

@@ -1,14 +1,19 @@
-// LINE 風チャット画面 + IF ストーリー選択肢。
+// LINE 風チャット画面 + IF ストーリー選択肢 + 4 モード日記。
 // フロー:
-//   ユーザー投稿 → AI 返信 + 3 つの IF 候補 (1 リクエスト) → ユーザーが 1 つタップ
-//   → AI が "拡張ストーリー" を返す。
-// "active" な option-prompt は「未消化の最後の 1 つ」のみ。古いものは選んだ案だけハイライトして読み専用。
+//   モード選択 (Morning/Lesson/Diary/Story) → 日記投稿 (date+mode タグ付き)
+//   → AI 返信 + IF 候補 → 1 つ選択 → 拡張ストーリー → 日記 artifact が "completed"
 
 import { appendMessages, newMessageId, subscribeChat, type ChatMessage, type ChatThread } from '../data/chat';
 import { getCurrentUser, logout } from '../auth';
 import { getPersona } from '../data/personas';
 import { generateFriendReplyAndOptions, generateExpandedStory } from '../data/llm';
 import { renderOnboarding } from './onboarding';
+import { MODES, defaultModeForNow, getMode, todayStr, type DiaryMode } from '../data/modes';
+import {
+  upsertDiaryStart, updateDiaryReply, completeDiary, fetchTodayStatus,
+  type DiaryStatus,
+} from '../data/diaries';
+import { renderArchive } from './archive';
 
 interface RenderChatOptions {
   personaId: string;
@@ -19,6 +24,11 @@ export function renderChat(root: HTMLElement, opts: RenderChatOptions): void {
   if (!authUser) return;
   const userId = authUser.uid;
   const persona = getPersona(opts.personaId);
+
+  let selectedMode: DiaryMode = defaultModeForNow();
+  let todayStatus: Record<DiaryMode, DiaryStatus | null> = {
+    morning: null, lesson: null, diary: null, story: null,
+  };
 
   const wrap = document.createElement('div');
   wrap.className = 'chat-screen';
@@ -32,17 +42,14 @@ export function renderChat(root: HTMLElement, opts: RenderChatOptions): void {
         </div>
         <div class="chat-friend-chevron">›</div>
       </button>
+      <button class="chat-header-archive" id="archive-btn" type="button" title="過去の日記">📓</button>
       <button class="chat-header-logout" id="logout-btn" type="button" title="ログアウト">×</button>
     </header>
+    <div class="today-progress" id="today-progress"></div>
     <div class="chat-scroll" id="chat-scroll"></div>
+    <div class="mode-bar" id="mode-bar"></div>
     <form class="chat-input-bar" id="chat-input-bar">
-      <textarea
-        id="chat-input"
-        name="diary"
-        rows="2"
-        placeholder="今日のひとこと日記を英語または日本語で…"
-        required
-      ></textarea>
+      <textarea id="chat-input" name="diary" rows="2" placeholder="" required></textarea>
       <button type="submit" class="chat-send" aria-label="送信">→</button>
     </form>
   `;
@@ -51,10 +58,24 @@ export function renderChat(root: HTMLElement, opts: RenderChatOptions): void {
   const scrollEl = wrap.querySelector('#chat-scroll') as HTMLElement;
   const formEl = wrap.querySelector('#chat-input-bar') as HTMLFormElement;
   const inputEl = wrap.querySelector('#chat-input') as HTMLTextAreaElement;
+  const modeBarEl = wrap.querySelector('#mode-bar') as HTMLElement;
+  const progressEl = wrap.querySelector('#today-progress') as HTMLElement;
 
   wrap.querySelector('#logout-btn')!.addEventListener('click', async () => {
     if (!confirm('ログアウトしますか?')) return;
     await logout();
+  });
+
+  wrap.querySelector('#archive-btn')!.addEventListener('click', () => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `<div class="modal-close-bar"><button id="modal-close" type="button">閉じる</button></div>`;
+    const body = document.createElement('div');
+    body.className = 'modal-body';
+    overlay.appendChild(body);
+    document.body.appendChild(overlay);
+    renderArchive(body, userId);
+    overlay.querySelector('#modal-close')!.addEventListener('click', () => overlay.remove());
   });
 
   wrap.querySelector('#open-persona')!.addEventListener('click', () => {
@@ -69,18 +90,69 @@ export function renderChat(root: HTMLElement, opts: RenderChatOptions): void {
     overlay.querySelector('#modal-close')!.addEventListener('click', () => overlay.remove());
   });
 
+  function renderModeBar(): void {
+    modeBarEl.innerHTML = MODES.map((m) => {
+      const status = todayStatus[m.id];
+      const stateClass = m.id === selectedMode ? ' mode-chip--selected' : '';
+      const doneClass = status === 'completed' ? ' mode-chip--done' : status === 'in-progress' ? ' mode-chip--prog' : '';
+      const marker = status === 'completed' ? '✓' : status === 'in-progress' ? '•' : '';
+      return `
+        <button class="mode-chip${stateClass}${doneClass}" type="button" data-mode="${m.id}" title="${escapeAttr(m.jaShort)}">
+          <span class="mode-chip-emoji">${m.emoji}</span>
+          <span class="mode-chip-label">${m.label}</span>
+          ${marker ? `<span class="mode-chip-marker">${marker}</span>` : ''}
+        </button>
+      `;
+    }).join('');
+    modeBarEl.querySelectorAll<HTMLButtonElement>('.mode-chip').forEach((b) => {
+      b.addEventListener('click', () => {
+        selectedMode = (b.dataset.mode as DiaryMode) || 'diary';
+        inputEl.placeholder = getMode(selectedMode).jaPrompt;
+        renderModeBar();
+      });
+    });
+  }
+
+  function renderTodayProgress(): void {
+    const completedCount = MODES.filter((m) => todayStatus[m.id] === 'completed').length;
+    progressEl.innerHTML = `
+      <div class="progress-label">今日の進捗</div>
+      <div class="progress-dots">
+        ${MODES.map((m) => {
+          const s = todayStatus[m.id];
+          const cls = s === 'completed' ? 'on' : s === 'in-progress' ? 'half' : '';
+          return `<span class="progress-dot ${cls}" title="${m.label}: ${s || '未着手'}"></span>`;
+        }).join('')}
+      </div>
+      <div class="progress-count">${completedCount} / ${MODES.length}</div>
+    `;
+  }
+
+  async function refreshTodayStatus(): Promise<void> {
+    try {
+      todayStatus = await fetchTodayStatus(userId, todayStr());
+      renderModeBar();
+      renderTodayProgress();
+    } catch (e) {
+      console.warn('[today-status] fetch failed', e);
+    }
+  }
+
+  inputEl.placeholder = getMode(selectedMode).jaPrompt;
+  renderModeBar();
+  renderTodayProgress();
+  void refreshTodayStatus();
+
   let currentMessages: ChatMessage[] = [];
   let typing = false;
-  let pickInFlight = false; // option クリック後の二重発火防止
+  let pickInFlight = false;
 
   function render(): void {
-    // 「最新の未消化 option-prompt」を割り出す: option-prompt 以降に option-pick が来ていなければ active
     let activeOptionPromptId: string | null = null;
     for (let i = currentMessages.length - 1; i >= 0; i--) {
       const m = currentMessages[i]!;
       if (m.type === 'option-prompt') {
         activeOptionPromptId = m.id;
-        // この後 (= 配列上の index > i) に option-pick があれば消化済
         for (let j = i + 1; j < currentMessages.length; j++) {
           if (currentMessages[j]!.type === 'option-pick') { activeOptionPromptId = null; break; }
         }
@@ -88,7 +160,6 @@ export function renderChat(root: HTMLElement, opts: RenderChatOptions): void {
       }
     }
 
-    // 各 option-prompt について「どの案を選んだか」を逆引き
     const chosenByPromptId = new Map<string, string>();
     for (let i = 0; i < currentMessages.length; i++) {
       const m = currentMessages[i]!;
@@ -109,7 +180,6 @@ export function renderChat(root: HTMLElement, opts: RenderChatOptions): void {
     scrollEl.innerHTML = html + typingHtml;
     scrollEl.scrollTop = scrollEl.scrollHeight;
 
-    // option ボタンに handler を bind
     if (activeOptionPromptId && !pickInFlight) {
       const cardsEl = scrollEl.querySelector(`[data-options-for="${activeOptionPromptId}"]`);
       cardsEl?.querySelectorAll<HTMLButtonElement>('.option-card').forEach((b) => {
@@ -121,23 +191,29 @@ export function renderChat(root: HTMLElement, opts: RenderChatOptions): void {
   async function onPickOption(promptId: string, optionText: string): Promise<void> {
     if (!optionText || pickInFlight) return;
     pickInFlight = true;
+
+    // option-prompt から逆引きで mode / date / 元の diary を取得
+    const ctx = findContextForPrompt(currentMessages, promptId);
+    const pickMode: DiaryMode = (ctx?.mode as DiaryMode) || selectedMode;
+    const pickDate: string = ctx?.date || todayStr();
+    const originalDiary = ctx?.diaryText || optionText;
+
     const pickMsg: ChatMessage = {
       id: newMessageId(),
       role: 'user',
       text: optionText,
       type: 'option-pick',
+      mode: pickMode,
+      date: pickDate,
       createdAt: Date.now(),
     };
     await appendMessages(userId, [pickMsg]);
 
-    // 拡張ストーリー生成
     typing = true; render();
     const minTypingMs = 1400;
     const startedAt = Date.now();
-    // 元の日記テキストを option-prompt の前の最新 diary から探す
-    const originalDiary = findOriginalDiaryBefore(currentMessages, promptId) || optionText;
     try {
-      const story = await generateExpandedStory(persona, currentMessages, originalDiary, optionText);
+      const story = await generateExpandedStory(persona, currentMessages, originalDiary, optionText, pickMode);
       const elapsed = Date.now() - startedAt;
       if (elapsed < minTypingMs) await sleep(minTypingMs - elapsed);
       const storyMsg: ChatMessage = {
@@ -145,9 +221,14 @@ export function renderChat(root: HTMLElement, opts: RenderChatOptions): void {
         role: 'ai',
         text: story,
         type: 'expanded-story',
+        mode: pickMode,
+        date: pickDate,
         createdAt: Date.now(),
       };
       await appendMessages(userId, [storyMsg]);
+      // artifact を completed に
+      await completeDiary(userId, pickDate, pickMode, optionText, story);
+      await refreshTodayStatus();
     } catch (err) {
       console.error('[chat] expanded story failed', err);
       const fallback: ChatMessage = {
@@ -155,6 +236,8 @@ export function renderChat(root: HTMLElement, opts: RenderChatOptions): void {
         role: 'ai',
         text: `Whoa, my imagination froze for a sec 😅 try picking another option?`,
         type: 'reply',
+        mode: pickMode,
+        date: pickDate,
         createdAt: Date.now(),
       };
       await appendMessages(userId, [fallback]);
@@ -177,21 +260,28 @@ export function renderChat(root: HTMLElement, opts: RenderChatOptions): void {
     inputEl.value = '';
     inputEl.disabled = true;
 
+    const dateStr = todayStr();
+    const mode: DiaryMode = selectedMode;
+
     const diaryMsg: ChatMessage = {
       id: newMessageId(),
       role: 'user',
       text,
       type: 'diary',
+      mode,
+      date: dateStr,
       createdAt: Date.now(),
     };
     await appendMessages(userId, [diaryMsg]);
+    // artifact (in-progress) 作成
+    void upsertDiaryStart(userId, dateStr, mode, text).catch(console.warn);
 
     typing = true;
     render();
     const minTypingMs = 1400;
     const startedAt = Date.now();
     try {
-      const { reply, options } = await generateFriendReplyAndOptions(persona, currentMessages, text);
+      const { reply, options } = await generateFriendReplyAndOptions(persona, currentMessages, text, mode);
       const elapsed = Date.now() - startedAt;
       if (elapsed < minTypingMs) await sleep(minTypingMs - elapsed);
       const replyMsg: ChatMessage = {
@@ -199,6 +289,8 @@ export function renderChat(root: HTMLElement, opts: RenderChatOptions): void {
         role: 'ai',
         text: reply,
         type: 'reply',
+        mode,
+        date: dateStr,
         createdAt: Date.now(),
       };
       const toAppend: ChatMessage[] = [replyMsg];
@@ -209,10 +301,14 @@ export function renderChat(root: HTMLElement, opts: RenderChatOptions): void {
           text: 'Or, what if…?',
           type: 'option-prompt',
           options,
+          mode,
+          date: dateStr,
           createdAt: Date.now() + 1,
         });
       }
       await appendMessages(userId, toAppend);
+      void updateDiaryReply(userId, dateStr, mode, reply).catch(console.warn);
+      await refreshTodayStatus();
     } catch (err) {
       console.error('[chat] reply failed', err);
       const fallback: ChatMessage = {
@@ -220,6 +316,8 @@ export function renderChat(root: HTMLElement, opts: RenderChatOptions): void {
         role: 'ai',
         text: `Hmm, my brain glitched 😅 try sending that again?`,
         type: 'reply',
+        mode,
+        date: dateStr,
         createdAt: Date.now(),
       };
       await appendMessages(userId, [fallback]);
@@ -234,21 +332,25 @@ export function renderChat(root: HTMLElement, opts: RenderChatOptions): void {
   window.addEventListener('beforeunload', () => unsubChat(), { once: true });
 }
 
-/** option-prompt より時系列で前にある最新の diary テキストを引く。なければ undefined。 */
-function findOriginalDiaryBefore(messages: ChatMessage[], promptId: string): string | undefined {
+/** option-prompt から「元の diary テキスト」「mode」「date」を引く。 */
+function findContextForPrompt(messages: ChatMessage[], promptId: string): { diaryText?: string; mode?: string; date?: string } | null {
   const idx = messages.findIndex((m) => m.id === promptId);
-  if (idx < 0) return undefined;
+  if (idx < 0) return null;
+  const prompt = messages[idx]!;
   for (let i = idx - 1; i >= 0; i--) {
-    if (messages[i]!.type === 'diary') return messages[i]!.text;
+    if (messages[i]!.type === 'diary') {
+      return { diaryText: messages[i]!.text, mode: messages[i]!.mode ?? prompt.mode, date: messages[i]!.date ?? prompt.date };
+    }
   }
-  return undefined;
+  return { mode: prompt.mode, date: prompt.date };
 }
 
 function renderBubble(m: ChatMessage, friendEmoji: string): string {
   const safeText = escapeHtml(m.text);
+  const modeLabel = m.mode ? `<span class="bubble-mode" title="${escapeAttr(getMode(m.mode).jaShort)}">${getMode(m.mode).emoji}</span>` : '';
   if (m.role === 'user') {
     const extra = m.type === 'option-pick' ? ' bubble--option-pick' : '';
-    return `<div class="msg msg--user"><div class="bubble bubble--user${extra}">${safeText}</div></div>`;
+    return `<div class="msg msg--user">${modeLabel}<div class="bubble bubble--user${extra}">${safeText}</div></div>`;
   }
   const extra = m.type === 'expanded-story' ? ' bubble--story' : '';
   return `
@@ -271,9 +373,7 @@ function renderOptionPromptBubble(
     const isChosen = chosen && opt === chosen;
     return `
       <button class="option-card${active ? '' : ' option-card--inactive'}${isChosen ? ' option-card--chosen' : ''}"
-        type="button"
-        data-text="${escapeAttr(opt)}"
-        ${active ? '' : 'disabled'}>
+        type="button" data-text="${escapeAttr(opt)}" ${active ? '' : 'disabled'}>
         <span class="option-label">${labels[i] || '?'}</span>
         <span class="option-text">${escapeHtml(opt)}</span>
       </button>
@@ -285,9 +385,7 @@ function renderOptionPromptBubble(
       <div class="msg-avatar">${friendEmoji}</div>
       <div class="option-wrap">
         ${header}
-        <div class="option-cards" data-options-for="${m.id}">
-          ${cardsHtml}
-        </div>
+        <div class="option-cards" data-options-for="${m.id}">${cardsHtml}</div>
       </div>
     </div>
   `;
