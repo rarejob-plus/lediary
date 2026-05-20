@@ -9,15 +9,16 @@ import { getPersona } from '../data/personas';
 import { MODES, defaultModeForNow, getMode, todayStr, type DiaryMode } from '../data/modes';
 import {
   appendExpansionMessage, createDraftDiary, fetchTodayStatus, setPhase,
-  subscribeDiary, updateExpandedJp, type DiaryArtifact, type DiaryStatus,
-  type ExpansionMessage,
+  subscribeDiary, updateExpandedJp, updateEnglishDraft, updateCorrections,
+  type DiaryArtifact, type DiaryStatus, type ExpansionMessage,
 } from '../data/diaries';
 import { renderArchive } from './archive';
 import { renderGifts } from './gifts';
 import { renderOnboarding } from './onboarding';
 import { addPoints, subscribeUser } from '../data/user';
 import { icons } from '../components/icons';
-import { stepExpand } from '../data/llm';
+import { stepExpand, correctEnglish } from '../data/llm';
+import { getTeacher } from '../data/teachers';
 
 interface RenderTodayOptions {
   personaId: string;
@@ -166,8 +167,9 @@ export function renderToday(root: HTMLElement, opts: RenderTodayOptions): void {
   function renderBody(): void {
     if (!artifact || artifact.phase === 'draft') return renderPhaseIntake();
     if (artifact.phase === 'expanding') return renderPhaseExpanding();
-    // Phase 3-4 (Stage B) はまだ。読み取り専用で「次は英訳・添削 (近日)」と表示。
-    return renderPhaseStub();
+    if (artifact.phase === 'englishing') return renderPhaseEnglishing();
+    if (artifact.phase === 'correcting') return renderPhaseCorrecting();
+    return renderPhaseCompleted();
   }
 
   function renderPhaseIntake(): void {
@@ -327,29 +329,182 @@ export function renderToday(root: HTMLElement, opts: RenderTodayOptions): void {
     });
   }
 
-  function renderPhaseStub(): void {
+  // ── Phase 3: 英訳 ──
+  function renderPhaseEnglishing(): void {
     if (!artifact) return;
     const a = artifact;
+    const teacher = getTeacher();
     bodyEl.innerHTML = `
-      <div class="expand">
+      <div class="english">
         <section class="expand-diary">
           <div class="expand-diary-head">
             <span class="expand-diary-label">今日の日記 (拡張済)</span>
             <span class="expand-diary-mode">${getMode(a.mode).label}</span>
+            <button class="expand-back" id="back-to-expand" type="button">${icons.chevronRight(12)} 戻る</button>
           </div>
           <div class="expand-diary-text">${escapeHtml(a.expandedJp)}</div>
         </section>
-        <div class="phase-stub">
-          <p>次のステップ「英訳 → 添削」はもうすぐ実装します。</p>
-          <button id="back-to-expand" type="button" class="expand-finish">戻って拡張を続ける</button>
+        <section class="english-pane">
+          <div class="english-head">
+            <span class="english-label">英訳</span>
+            <span class="english-sub">日本語を見ながら、自分の言葉で英語にしてみよう。</span>
+          </div>
+          <textarea id="english-input" name="englishDraft" rows="8"
+            placeholder="Write your English here...">${escapeHtml(a.englishDraft || '')}</textarea>
+          <div class="english-actions">
+            <button id="ask-correction" type="button" class="english-submit">
+              <span class="english-teacher-icon" style="color:${teacher.color};">${icons[teacher.icon](14)}</span>
+              ${teacher.name} に添削してもらう
+            </button>
+          </div>
+        </section>
+      </div>
+    `;
+    const taEl = bodyEl.querySelector('#english-input') as HTMLTextAreaElement;
+    taEl.focus();
+    let saveTimer: ReturnType<typeof setTimeout> | null = null;
+    taEl.addEventListener('input', () => {
+      if (saveTimer) clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => {
+        void updateEnglishDraft(userId, dateStr, selectedMode, taEl.value).catch(console.warn);
+      }, 600);
+    });
+    taEl.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        (bodyEl.querySelector('#ask-correction') as HTMLButtonElement).click();
+      }
+    });
+    bodyEl.querySelector('#back-to-expand')!.addEventListener('click', async () => {
+      await setPhase(userId, dateStr, selectedMode, 'expanding');
+    });
+    bodyEl.querySelector('#ask-correction')!.addEventListener('click', async () => {
+      const en = taEl.value.trim();
+      if (!en) { alert('英訳を書いてください'); return; }
+      const btn = bodyEl.querySelector('#ask-correction') as HTMLButtonElement;
+      btn.disabled = true;
+      btn.textContent = '添削中…';
+      try {
+        await updateEnglishDraft(userId, dateStr, selectedMode, en);
+        void addPoints(userId, 5).catch(console.warn);
+        const items = await correctEnglish(teacher, a.expandedJp, en);
+        await updateCorrections(userId, dateStr, selectedMode, items);
+        await setPhase(userId, dateStr, selectedMode, 'correcting');
+      } catch (err) {
+        console.error('[correct] failed', err);
+        alert('添削に失敗しました');
+        btn.disabled = false;
+        btn.textContent = `${teacher.name} に添削してもらう`;
+      }
+    });
+  }
+
+  // ── Phase 4: 添削レビュー ──
+  function renderPhaseCorrecting(): void {
+    if (!artifact) return;
+    const a = artifact;
+    const teacher = getTeacher();
+    const items = a.corrections || [];
+    const allClean = items.length > 0 && items.every((c) => normalizeText(c.original) === normalizeText(c.corrected));
+    bodyEl.innerHTML = `
+      <div class="correcting">
+        <section class="expand-diary">
+          <div class="expand-diary-head">
+            <span class="expand-diary-label">今日の日記</span>
+            <span class="expand-diary-mode">${getMode(a.mode).label}</span>
+          </div>
+          <div class="expand-diary-text">${escapeHtml(a.expandedJp)}</div>
+        </section>
+        <section class="english-pane english-pane--readonly">
+          <div class="english-head">
+            <span class="english-label">あなたの英訳</span>
+          </div>
+          <div class="english-readonly">${escapeHtml(a.englishDraft || '')}</div>
+        </section>
+        <section class="corrections">
+          <div class="corrections-head">
+            <span class="corrections-teacher" style="background:${teacher.color};">${icons[teacher.icon](14)}</span>
+            <span class="corrections-teacher-name">${teacher.name}</span>
+            <span class="corrections-sub">${allClean ? 'よく書けています。直すところは見つかりませんでした。' : `${items.filter((c) => normalizeText(c.original) !== normalizeText(c.corrected)).length} 文に提案があります。`}</span>
+          </div>
+          ${items.map((c, i) => renderCorrectionCard(c, i)).join('')}
+        </section>
+        <div class="expand-actions" style="gap:8px;">
+          <button class="expand-finish" id="back-to-english" type="button">英訳をやり直す</button>
+          <button class="finish-day" id="finish-day" type="button">${icons.check(14)} 今日の ${getMode(a.mode).label} を完成にする</button>
         </div>
       </div>
     `;
-    bodyEl.querySelector('#back-to-expand')!.addEventListener('click', async () => {
-      try {
-        await setPhase(userId, dateStr, selectedMode, 'expanding');
-      } catch (e) { console.error(e); }
+    bodyEl.querySelector('#back-to-english')!.addEventListener('click', async () => {
+      await setPhase(userId, dateStr, selectedMode, 'englishing');
     });
+    bodyEl.querySelector('#finish-day')!.addEventListener('click', async () => {
+      try {
+        await setPhase(userId, dateStr, selectedMode, 'completed');
+        void addPoints(userId, 10).catch(console.warn);
+        await refreshTodayStatus();
+      } catch (e) {
+        console.error(e);
+        alert('保存に失敗しました');
+      }
+    });
+  }
+
+  // ── Phase 5: 完成 ──
+  function renderPhaseCompleted(): void {
+    if (!artifact) return;
+    const a = artifact;
+    const items = a.corrections || [];
+    const nextMode = MODES.find((m) => todayStatus[m.id] !== 'completed' && m.id !== a.mode);
+    bodyEl.innerHTML = `
+      <div class="completed">
+        <div class="completed-banner">
+          <div class="completed-check">${icons.check(20)}</div>
+          <div>
+            <div class="completed-title">今日の ${getMode(a.mode).label} 完成</div>
+            <div class="completed-sub">アーカイブから読み返せます。</div>
+          </div>
+        </div>
+        <section class="expand-diary">
+          <div class="expand-diary-head">
+            <span class="expand-diary-label">日本語日記</span>
+          </div>
+          <div class="expand-diary-text">${escapeHtml(a.expandedJp)}</div>
+        </section>
+        ${a.englishDraft ? `
+          <section class="english-pane english-pane--readonly">
+            <div class="english-head"><span class="english-label">英訳</span></div>
+            <div class="english-readonly">${escapeHtml(a.englishDraft)}</div>
+          </section>
+        ` : ''}
+        ${items.length > 0 ? `
+          <section class="corrections">
+            <div class="corrections-head">
+              <span class="corrections-sub">添削メモ (${items.length} 件)</span>
+            </div>
+            ${items.map((c, i) => renderCorrectionCard(c, i)).join('')}
+          </section>
+        ` : ''}
+        <div class="expand-actions" style="gap:8px;">
+          ${nextMode ? `
+            <button class="finish-day" id="next-mode" type="button">
+              <span style="display:inline-flex;">${icons[nextMode.icon](14)}</span>
+              次は ${nextMode.label} を書く
+            </button>
+          ` : `
+            <p class="phase-stub" style="margin:0;">今日のモード全て完成しました 🎉</p>
+          `}
+        </div>
+      </div>
+    `;
+    const next = bodyEl.querySelector('#next-mode') as HTMLButtonElement | null;
+    if (next && nextMode) {
+      next.addEventListener('click', () => {
+        selectedMode = nextMode.id;
+        renderModeBar();
+        rewireDiarySubscription();
+      });
+    }
   }
 
   // unload cleanup
@@ -357,6 +512,35 @@ export function renderToday(root: HTMLElement, opts: RenderTodayOptions): void {
     unsubUser();
     if (unsubDiary) unsubDiary();
   }, { once: true });
+}
+
+function renderCorrectionCard(c: { original: string; corrected: string; explanation: string }, i: number): string {
+  const isClean = normalizeText(c.original) === normalizeText(c.corrected);
+  return `
+    <article class="correction-card ${isClean ? 'correction-card--clean' : ''}">
+      <header class="correction-card-head">
+        <span class="correction-card-num">${i + 1}</span>
+        <span class="correction-card-status">${isClean ? '自然' : '提案あり'}</span>
+      </header>
+      <div class="correction-row">
+        <div class="correction-label">${isClean ? 'あなたの英文' : '元'}</div>
+        <p class="correction-text correction-text--original">${escapeHtml(c.original)}</p>
+      </div>
+      ${isClean ? '' : `
+        <div class="correction-row">
+          <div class="correction-label">提案</div>
+          <p class="correction-text correction-text--corrected">${escapeHtml(c.corrected)}</p>
+        </div>
+      `}
+      ${c.explanation ? `
+        <div class="correction-explanation">${escapeHtml(c.explanation)}</div>
+      ` : ''}
+    </article>
+  `;
+}
+
+function normalizeText(s: string): string {
+  return s.trim().replace(/\s+/g, ' ').toLowerCase().replace(/[.!?,;:"']/g, '');
 }
 
 function renderExpansionBubble(m: ExpansionMessage, persona: { icon: import('../components/icons').IconName; color: string }): string {

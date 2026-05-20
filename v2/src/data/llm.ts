@@ -6,7 +6,8 @@ import { app } from '../firebase';
 import type { Persona } from './personas';
 import type { ChatMessage } from './chat';
 import { getMode, type DiaryMode } from './modes';
-import type { ExpansionMessage } from './diaries';
+import type { ExpansionMessage, CorrectionItem } from './diaries';
+import type { Teacher } from './teachers';
 
 const REPLY_MODEL = 'gemini-3.1-flash-lite';
 
@@ -123,6 +124,84 @@ JSON で答えてください。`;
   const res = await expansionModel().generateContent(prompt);
   const raw = res.response.text().trim();
   return parseExpandStep(raw, expandedJp);
+}
+
+// ─── Stage B: 添削 ───
+// teacher persona が英文を文単位で添削して返す。corrected が原文と同じなら正解扱い。
+// explanation は日本語で短く。
+
+function correctionSystemPrompt(teacher: Teacher): string {
+  return `あなたは ${teacher.name}、${teacher.vibe}。
+日本語学習者が書いた英作文を、思いやりを持って添削します。
+
+[ルール]
+- 元の英文を **1 文ずつ** 分けて、各文について corrected + explanation を返す。
+- 文に直す必要がなければ corrected = original のままにし、explanation は日本語で短く褒める ("自然です。"等)。
+- 直す場合は **学習者のレベルに合わせて最小限の修正**。大幅な書き換えはしない。意味を保つ。
+- explanation は日本語で 1-2 文。**なぜそう直したか** を簡潔に説明。文法用語より自然さの視点で。
+- 元の文章を超えて勝手に内容を追加・削除しない。
+
+[出力] 必ず JSON で:
+{
+  "items": [
+    { "original": "<文 1 原文>", "corrected": "<添削後>", "explanation": "<日本語で 1-2 文>" },
+    ...
+  ]
+}`;
+}
+
+let _correctionModel: ReturnType<typeof getGenerativeModel> | null = null;
+function correctionModel() {
+  if (_correctionModel) return _correctionModel;
+  const ai = getAI(app, { backend: new GoogleAIBackend() });
+  _correctionModel = getGenerativeModel(ai, {
+    model: REPLY_MODEL,
+    generationConfig: { responseMimeType: 'application/json' },
+  });
+  return _correctionModel;
+}
+
+/** 英訳を文単位で添削。teacher persona の色付き解説 (日本語) で返す。 */
+export async function correctEnglish(
+  teacher: Teacher,
+  expandedJp: string,
+  englishDraft: string,
+): Promise<CorrectionItem[]> {
+  const sys = correctionSystemPrompt(teacher);
+  const prompt = `${sys}
+
+[元の日本語日記 — 意味の参照用]
+"""
+${expandedJp}
+"""
+
+[学習者の英訳]
+"""
+${englishDraft}
+"""
+
+JSON で答えてください。`;
+  const res = await correctionModel().generateContent(prompt);
+  const raw = res.response.text().trim();
+  let s = raw.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
+  const first = s.indexOf('{');
+  const last = s.lastIndexOf('}');
+  if (first >= 0 && last > first) s = s.slice(first, last + 1);
+  try {
+    const obj = JSON.parse(s) as { items?: unknown };
+    if (!Array.isArray(obj.items)) return [];
+    return obj.items.map((it) => {
+      const r = it as { original?: unknown; corrected?: unknown; explanation?: unknown };
+      return {
+        original: String(r.original || ''),
+        corrected: String(r.corrected || ''),
+        explanation: String(r.explanation || ''),
+      };
+    }).filter((c) => c.original);
+  } catch (e) {
+    console.warn('[correct] parse failed', e, raw);
+    return [];
+  }
 }
 
 function parseExpandStep(raw: string, fallbackDiary: string): ExpandStep {

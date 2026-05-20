@@ -106,6 +106,18 @@ export async function setPhase(
   await updateDoc(diaryRef(userId, date, mode), { phase, status, updatedAt: Date.now() });
 }
 
+export async function updateEnglishDraft(
+  userId: string, date: string, mode: DiaryMode, englishDraft: string,
+): Promise<void> {
+  await updateDoc(diaryRef(userId, date, mode), { englishDraft, updatedAt: Date.now() });
+}
+
+export async function updateCorrections(
+  userId: string, date: string, mode: DiaryMode, corrections: CorrectionItem[],
+): Promise<void> {
+  await updateDoc(diaryRef(userId, date, mode), { corrections, updatedAt: Date.now() });
+}
+
 export function subscribeDiary(
   userId: string, date: string, mode: DiaryMode,
   cb: (a: DiaryArtifact | null) => void,
