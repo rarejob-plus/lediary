@@ -79,16 +79,39 @@ function renderArtifactCard(a: DiaryArtifact): HTMLElement {
   const card = document.createElement('article');
   const meta = getMode(a.mode);
   card.className = `archive-card archive-card--${a.status}`;
+  // 新 schema (originalJp / expandedJp / englishDraft / corrections) を優先、
+  // 無ければ legacy フィールド (originalText / friendReply / selectedOption / expandedStory) で fallback。
+  const originalText = a.originalJp || a.originalText || '';
+  const expandedJp = a.expandedJp || '';
   card.innerHTML = `
     <header class="archive-card-head">
       <span class="archive-card-icon">${icons[meta.icon](16)}</span>
       <span class="archive-card-label">${meta.label}</span>
       <span class="archive-card-status">${a.status === 'completed' ? '完成' : '途中'}</span>
     </header>
-    <div class="archive-card-original">
-      <div class="archive-card-section-label">あなたの日記</div>
-      <p>${escapeHtml(a.originalText || '')}</p>
-    </div>
+    ${originalText ? `
+      <div class="archive-card-original">
+        <div class="archive-card-section-label">あなたの日記 (原文)</div>
+        <p>${escapeHtml(originalText)}</p>
+      </div>
+    ` : ''}
+    ${expandedJp && expandedJp !== originalText ? `
+      <div class="archive-card-twist">
+        <div class="archive-card-section-label">膨らませた日記</div>
+        <p>${escapeHtml(expandedJp)}</p>
+      </div>
+    ` : ''}
+    ${a.englishDraft ? `
+      <div class="archive-card-reply">
+        <div class="archive-card-section-label">英訳</div>
+        <p>${escapeHtml(a.englishDraft)}</p>
+      </div>
+    ` : ''}
+    ${a.expansionMessages && a.expansionMessages.length > 0 ? `
+      <div class="archive-card-reply">
+        <div class="archive-card-section-label">${a.expansionMessages.length} 往復の Q&amp;A</div>
+      </div>
+    ` : ''}
     ${a.friendReply ? `
       <div class="archive-card-reply">
         <div class="archive-card-section-label">友達の返信</div>
@@ -103,7 +126,7 @@ function renderArtifactCard(a: DiaryArtifact): HTMLElement {
     ` : ''}
     ${a.expandedStory ? `
       <div class="archive-card-story">
-        <div class="archive-card-section-label">拡張ストーリー</div>
+        <div class="archive-card-section-label">拡張ストーリー (旧)</div>
         <p>${escapeHtml(a.expandedStory)}</p>
       </div>
     ` : ''}

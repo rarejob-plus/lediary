@@ -6,6 +6,7 @@ import { app } from '../firebase';
 import type { Persona } from './personas';
 import type { ChatMessage } from './chat';
 import { getMode, type DiaryMode } from './modes';
+import type { ExpansionMessage } from './diaries';
 
 const REPLY_MODEL = 'gemini-3.1-flash-lite';
 
@@ -41,6 +42,104 @@ You're a close human friend of the user, texting on LINE / WhatsApp.
 - It's OK to NOT ask a question. Just react. A real friend doesn't interview you.
 - If the user wrote Japanese, reply in casual English anyway. Don't translate, don't correct.
 - Match the energy: low-key for tired moments, hype for good news.`;
+}
+
+// ─── Stage A: 日記拡張用 ───
+// JP 日記に対し、友達 persona が「日記を膨らませる」ための質問を 1 つ生成し、
+// ユーザーの直近回答を踏まえて JP 日記を更新したバージョンも同時に返す。
+
+function expansionSystemPrompt(persona: Persona): string {
+  return `あなたは「${persona.name}」(${persona.age} 歳、${persona.city}、${persona.vibe})。
+ユーザーが書いた日本語の日記を、雑談しながら一緒に膨らませてくれる仲のいい友達です。
+
+[役割]
+- ユーザーが書いた日記を読んで、その「日」を立体的にするための **質問を 1 つだけ** 出す。
+- ユーザーの直近の回答があれば、それを既存の日記に自然に織り込んで JP 日記を「育てる」。
+- 質問は **日本語のカジュアル口語** で、1 文。長い質問はしない。
+- 添削はしない。英訳もしない。あくまで「内容を膨らませる」役。
+
+[質問のコツ]
+- 既に書かれていることをただ言い換える質問は NG。
+- 5W1H で具体的な細部 (誰と / 何時に / どんな天気で / どう感じた / 何を食べた) を引き出す。
+- 同じ角度の質問を繰り返さない。新しい side angle を毎回。
+
+[出力] 必ず JSON で:
+{
+  "updatedDiary": "<新しい JP 日記 (元 + 直近回答を自然に統合。改行 OK)>",
+  "question": "<次に聞きたい 1 文>"
+}
+質問する必要がもう無いなら question を空文字にする。`;
+}
+
+const _expansionModelMap = new Map<string, ReturnType<typeof getGenerativeModel>>();
+function expansionModel() {
+  const key = 'json';
+  const cached = _expansionModelMap.get(key);
+  if (cached) return cached;
+  const ai = getAI(app, { backend: new GoogleAIBackend() });
+  const m = getGenerativeModel(ai, {
+    model: REPLY_MODEL,
+    generationConfig: { responseMimeType: 'application/json' },
+  });
+  _expansionModelMap.set(key, m);
+  return m;
+}
+
+export interface ExpandStep {
+  updatedDiary: string;
+  question: string;       // 空文字なら「もう質問なし」シグナル
+}
+
+/** 拡張ステップ: 既存日記 + 直近 Q&A を渡し、{更新後日記, 次の質問} を返す。
+ *  - 最初の質問取得時: lastUserAnswer="" を渡す。updatedDiary は元と同じになる想定。
+ *  - 2 回目以降: lastUserAnswer に回答を入れる。updatedDiary がそれを反映した新版になる。
+ */
+export async function stepExpand(
+  persona: Persona,
+  mode: DiaryMode,
+  expandedJp: string,
+  recentMessages: ExpansionMessage[],
+  lastUserAnswer: string,
+): Promise<ExpandStep> {
+  const sys = expansionSystemPrompt(persona);
+  const tail = recentMessages.slice(-8);
+  const transcript = tail.map((m) => `${m.role === 'user' ? 'User' : persona.name}: ${m.text}`).join('\n');
+  const modeCtx = getMode(mode).jaShort;
+  const answerBlock = lastUserAnswer
+    ? `\n[ユーザーの直近回答]\n${lastUserAnswer}`
+    : `\n(まだ会話は始まっていません。最初の質問をしてください。)`;
+  const prompt = `${sys}
+
+[モード] ${modeCtx}
+
+[現状の JP 日記]
+"""
+${expandedJp}
+"""
+
+${transcript ? `[これまでのやり取り]\n${transcript}\n` : ''}${answerBlock}
+
+JSON で答えてください。`;
+  const res = await expansionModel().generateContent(prompt);
+  const raw = res.response.text().trim();
+  return parseExpandStep(raw, expandedJp);
+}
+
+function parseExpandStep(raw: string, fallbackDiary: string): ExpandStep {
+  let s = raw.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
+  const first = s.indexOf('{');
+  const last = s.lastIndexOf('}');
+  if (first >= 0 && last > first) s = s.slice(first, last + 1);
+  try {
+    const obj = JSON.parse(s) as { updatedDiary?: string; question?: string };
+    return {
+      updatedDiary: (obj.updatedDiary && obj.updatedDiary.trim()) || fallbackDiary,
+      question: (obj.question || '').trim(),
+    };
+  } catch (e) {
+    console.warn('[expand] parse failed', e, raw);
+    return { updatedDiary: fallbackDiary, question: '' };
+  }
 }
 
 export interface FriendReplyWithOptions {

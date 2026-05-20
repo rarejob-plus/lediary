@@ -6,7 +6,7 @@
 
 import './styles/base.css';
 import './styles/chat.css';
-import { renderChat } from './pages/chat';
+import { renderToday } from './pages/today';
 import { renderLogin } from './pages/login';
 import { renderOnboarding } from './pages/onboarding';
 import { onAuth } from './auth';
@@ -32,11 +32,11 @@ function showOnboarding(): void {
 }
 
 function showChat(personaId: string): void {
-  const key = `chat:${personaId}`;
+  const key = `today:${personaId}`;
   if (lastRendered === key) return;
   lastRendered = key;
   root.innerHTML = '';
-  renderChat(root, { personaId });
+  renderToday(root, { personaId });
 }
 
 onAuth(async (user) => {

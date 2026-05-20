@@ -739,3 +739,187 @@
   align-items: center;
   gap: 4px;
 }
+
+/* ─── today screen (state-machine layout) ─── */
+.today-screen {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  max-width: 720px;
+  margin: 0 auto;
+  background: #f5f4f1;
+}
+.today-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+/* Phase 1: intake */
+.intake {
+  background: #fff;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+.intake-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.intake-mode-icon { color: #2563eb; display: inline-flex; }
+.intake-mode-label {
+  font-family: 'Lora', serif;
+  font-size: 20px;
+  font-weight: 500;
+}
+.intake-mode-sub {
+  margin-left: auto;
+  font-size: 11px;
+  color: #86868b;
+  letter-spacing: 0.04em;
+}
+.intake-instructions {
+  font-size: 13px;
+  color: #4a4a4f;
+  line-height: 1.7;
+  margin-bottom: 16px;
+}
+#intake-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+#intake-jp {
+  width: 100%;
+  border: 1px solid rgba(15,15,17,0.14);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-family: 'Lora', 'Hiragino Kaku Gothic ProN', serif;
+  font-size: 16px;
+  line-height: 1.8;
+  background: #fafaf7;
+  resize: vertical;
+  min-height: 140px;
+}
+#intake-jp:focus {
+  outline: none;
+  border-color: #2563eb;
+  background: #fff;
+}
+.intake-submit {
+  align-self: flex-end;
+  background: #2563eb;
+  color: #fff;
+  border: 0;
+  border-radius: 100px;
+  padding: 10px 24px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.intake-submit:hover { background: #1d4ed8; }
+.intake-submit:disabled { opacity: 0.5; cursor: wait; }
+
+/* Phase 2: expanding */
+.expand {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.expand-diary {
+  background: #fff;
+  border-radius: 14px;
+  padding: 14px 16px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+.expand-diary-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed rgba(15,15,17,0.08);
+}
+.expand-diary-label {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #86868b;
+  font-weight: 600;
+}
+.expand-diary-mode {
+  margin-left: auto;
+  font-size: 11px;
+  color: #2563eb;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+.expand-diary-text {
+  font-family: 'Lora', 'Hiragino Kaku Gothic ProN', serif;
+  font-size: 16px;
+  line-height: 1.85;
+  color: #1d1d1f;
+  white-space: pre-wrap;
+}
+
+.expand-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 45vh;
+  overflow-y: auto;
+  padding: 4px 2px;
+}
+
+.expand-answer-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  background: #fff;
+  border-radius: 14px;
+  padding: 10px 12px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+.expand-answer-bar textarea {
+  flex: 1;
+  resize: none;
+  border: 1px solid rgba(15,15,17,0.14);
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  background: #fafaf7;
+  outline: none;
+  min-height: 40px;
+  max-height: 25vh;
+}
+.expand-answer-bar textarea:focus { border-color: #2563eb; background: #fff; }
+
+.expand-actions {
+  display: flex;
+  justify-content: center;
+}
+.expand-finish {
+  background: transparent;
+  border: 1px solid rgba(15,15,17,0.16);
+  border-radius: 100px;
+  padding: 8px 18px;
+  font-size: 13px;
+  color: #1d1d1f;
+  cursor: pointer;
+}
+.expand-finish:hover { background: rgba(15,15,17,0.04); }
+
+.phase-stub {
+  text-align: center;
+  padding: 24px;
+  background: #fff;
+  border-radius: 14px;
+  font-size: 13px;
+  color: #4a4a4f;
+  line-height: 1.7;
+}
+.phase-stub button { margin-top: 12px; }
