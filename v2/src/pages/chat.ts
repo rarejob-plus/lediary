@@ -14,6 +14,8 @@ import {
   type DiaryStatus,
 } from '../data/diaries';
 import { renderArchive } from './archive';
+import { renderGifts } from './gifts';
+import { addPoints, subscribeUser } from '../data/user';
 
 interface RenderChatOptions {
   personaId: string;
@@ -42,6 +44,8 @@ export function renderChat(root: HTMLElement, opts: RenderChatOptions): void {
         </div>
         <div class="chat-friend-chevron">›</div>
       </button>
+      <div class="chat-header-mp" id="header-mp" title="モチベーションポイント">— MP</div>
+      <button class="chat-header-archive" id="gifts-btn" type="button" title="ギフト">🎁</button>
       <button class="chat-header-archive" id="archive-btn" type="button" title="過去の日記">📓</button>
       <button class="chat-header-logout" id="logout-btn" type="button" title="ログアウト">×</button>
     </header>
@@ -67,6 +71,13 @@ export function renderChat(root: HTMLElement, opts: RenderChatOptions): void {
   });
 
   wrap.querySelector('#archive-btn')!.addEventListener('click', () => {
+    openModal((body) => { void renderArchive(body, userId); });
+  });
+  wrap.querySelector('#gifts-btn')!.addEventListener('click', () => {
+    openModal((body) => renderGifts(body, userId));
+  });
+
+  function openModal(fill: (body: HTMLElement) => void): void {
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.innerHTML = `<div class="modal-close-bar"><button id="modal-close" type="button">閉じる</button></div>`;
@@ -74,8 +85,14 @@ export function renderChat(root: HTMLElement, opts: RenderChatOptions): void {
     body.className = 'modal-body';
     overlay.appendChild(body);
     document.body.appendChild(overlay);
-    renderArchive(body, userId);
+    fill(body);
     overlay.querySelector('#modal-close')!.addEventListener('click', () => overlay.remove());
+  }
+
+  // header の MP 表示を user doc に subscribe
+  const mpEl = wrap.querySelector('#header-mp') as HTMLElement;
+  const unsubUser = subscribeUser(userId, (u) => {
+    mpEl.textContent = `${u?.currentPoints ?? 0} MP`;
   });
 
   wrap.querySelector('#open-persona')!.addEventListener('click', () => {
@@ -208,6 +225,8 @@ export function renderChat(root: HTMLElement, opts: RenderChatOptions): void {
       createdAt: Date.now(),
     };
     await appendMessages(userId, [pickMsg]);
+    // What if 選択 +5MP
+    void addPoints(userId, 5).catch(console.warn);
 
     typing = true; render();
     const minTypingMs = 1400;
@@ -273,8 +292,9 @@ export function renderChat(root: HTMLElement, opts: RenderChatOptions): void {
       createdAt: Date.now(),
     };
     await appendMessages(userId, [diaryMsg]);
-    // artifact (in-progress) 作成
+    // artifact (in-progress) 作成 + 日記投稿 +10MP
     void upsertDiaryStart(userId, dateStr, mode, text).catch(console.warn);
+    void addPoints(userId, 10).catch(console.warn);
 
     typing = true;
     render();
@@ -329,7 +349,7 @@ export function renderChat(root: HTMLElement, opts: RenderChatOptions): void {
     }
   });
 
-  window.addEventListener('beforeunload', () => unsubChat(), { once: true });
+  window.addEventListener('beforeunload', () => { unsubChat(); unsubUser(); }, { once: true });
 }
 
 /** option-prompt から「元の diary テキスト」「mode」「date」を引く。 */
