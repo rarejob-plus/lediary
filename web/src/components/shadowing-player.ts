@@ -1,25 +1,24 @@
 // 1 フレーズ・シャドーイング player。
 // 動作モード:
-//   1. pick.audioPath が既に Storage 上にあれば fetch → AudioBuffer
-//   2. なければ Gemini TTS で生成 → AudioBuffer + WAV → Storage upload → audioPath を返却
+//   1. pick.audioPath が既に Storage 上にあれば fetch → blob URL
+//   2. なければ Gemini TTS で生成 → WAV → Blob URL → 並行で Storage upload (永続化)
 //   3. メモリキャッシュ (タブ存続中) で再フェッチ抑止
-// 速度・リピートは AudioBuffer を AudioBufferSourceNode で再生して制御。
+//
+// 再生は HTMLAudioElement で行う。
+// AudioBufferSourceNode と違い、playbackRate を変えても preservesPitch=true なら声の高さは保たれる。
+// (0.7x にしても "太い声" にならない)
 
 import { generateTtsAudio, pcm16leToWav } from '../llm';
-import { uploadPickAudio, fetchPickAudioBuffer } from '../data/picksAudio';
+import { uploadPickAudio } from '../data/picksAudio';
+import { getDownloadURL, ref as storageRef, getStorage } from 'firebase/storage';
+import { app } from '../firebase';
 import { icons } from './icons';
 
 const RATES = [0.5, 0.75, 1];
 const DEFAULT_VOICE = 'Charon';
 
-const audioCtxRef: { ctx: AudioContext | null } = { ctx: null };
-function ctx(): AudioContext {
-  if (!audioCtxRef.ctx) audioCtxRef.ctx = new AudioContext();
-  return audioCtxRef.ctx;
-}
-
-// AudioBuffer をテキスト + voice 単位でメモリキャッシュ。
-const audioCache = new Map<string, AudioBuffer>();
+// blob URL をテキスト + voice 単位でメモリキャッシュ (タブ存続中)。
+const urlCache = new Map<string, string>();
 function cacheKey(voice: string, text: string): string { return `${voice}::${text}`; }
 
 export interface ShadowingPlayerOptions {
@@ -29,9 +28,7 @@ export interface ShadowingPlayerOptions {
   audioVoice?: string;
   initialCount?: number;
   classPrefix?: string;
-  /** 累積回数を持つ呼び出し元へ通知。 */
   onShadowed?: (delta: number) => void | Promise<void>;
-  /** Storage upload 成功時に呼ばれる。entry / phrases 側で pick.audioPath を Firestore に保存する。 */
   onPersisted?: (audioPath: string, voice: string) => void | Promise<void>;
 }
 
@@ -55,77 +52,92 @@ export function createShadowingPlayer(opts: ShadowingPlayerOptions): HTMLElement
   const countEl = root.querySelector(`.${prefix}-count`) as HTMLElement;
 
   let rate = 1;
-  let currentSource: AudioBufferSourceNode | null = null;
   let isPlaying = false;
   let audioPath = opts.audioPath;
-  // voice が pick に保存されてれば優先、なければ現行デフォルト。
   const voice = opts.audioVoice || DEFAULT_VOICE;
+
+  // 再利用する 1 つの HTMLAudioElement。リピート時は ended → play() で再開。
+  const audioEl = new Audio();
+  audioEl.preload = 'auto';
+  // ピッチ保持 (ブラウザ間 prefix 対応)。デフォルト true だが念のため明示。
+  audioEl.preservesPitch = true;
+  // @ts-expect-error legacy webkit
+  audioEl.webkitPreservesPitch = true;
+  // @ts-expect-error legacy moz
+  audioEl.mozPreservesPitch = true;
+  audioEl.playbackRate = 1;
 
   root.querySelectorAll<HTMLButtonElement>(`.${prefix}-speed`).forEach((b) => {
     b.addEventListener('click', () => {
       rate = parseFloat(b.dataset.speed || '1');
+      audioEl.playbackRate = rate;
       root.querySelectorAll(`.${prefix}-speed`).forEach((x) => x.classList.toggle('active', x === b));
-      if (currentSource) currentSource.playbackRate.value = rate;
     });
   });
 
   function stop(): void {
-    if (currentSource) {
-      try { currentSource.onended = null; currentSource.stop(); } catch { /* ignore */ }
-      currentSource = null;
-    }
+    audioEl.pause();
+    audioEl.currentTime = 0;
     isPlaying = false;
     playBtn.innerHTML = icons.play(14);
   }
 
-  async function ensureBuffer(): Promise<AudioBuffer> {
+  audioEl.addEventListener('ended', () => {
+    const next = (parseInt(countEl.textContent || '0') || 0) + 1;
+    countEl.textContent = `${next} 回`;
+    void opts.onShadowed?.(1);
+    if (repeatCb.checked && isPlaying) {
+      audioEl.currentTime = 0;
+      void audioEl.play();
+    } else {
+      isPlaying = false;
+      playBtn.innerHTML = icons.play(14);
+    }
+  });
+
+  audioEl.addEventListener('error', () => {
+    isPlaying = false;
+    playBtn.innerHTML = icons.play(14);
+  });
+
+  /** Storage 上の audioPath を download URL に解決して blob として fetch。失敗時 null。 */
+  async function fetchPersistedAsBlobUrl(path: string): Promise<string | null> {
+    try {
+      const url = await getDownloadURL(storageRef(getStorage(app), path));
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`fetch ${res.status}`);
+      const blob = await res.blob();
+      return URL.createObjectURL(blob);
+    } catch (e) {
+      console.warn('[shadowing] persisted fetch failed', e);
+      return null;
+    }
+  }
+
+  /** 再生用の blob URL を確保。なければ生成 + upload。 */
+  async function ensureUrl(): Promise<string> {
     const key = cacheKey(voice, opts.text);
-    const cached = audioCache.get(key);
+    const cached = urlCache.get(key);
     if (cached) return cached;
 
-    // (1) Storage に既にあれば fetch
     if (audioPath) {
-      const buf = await fetchPickAudioBuffer(audioPath, ctx());
-      if (buf) {
-        audioCache.set(key, buf);
-        return buf;
-      }
-      // 失敗したら再生成にフォールバック
+      const url = await fetchPersistedAsBlobUrl(audioPath);
+      if (url) { urlCache.set(key, url); return url; }
+      // 失敗 → 再生成
     }
 
-    // (2) Gemini TTS で生成 + (3) Storage に upload (best-effort、失敗してもメモリ再生は継続)
-    const tts = await generateTtsAudio(opts.text, ctx(), voice);
-    audioCache.set(key, tts.audioBuffer);
+    const tts = await generateTtsAudio(opts.text, new AudioContext(), voice);
     const wav = pcm16leToWav(tts.pcm, tts.sampleRate);
+    const blob = new Blob([wav as unknown as BlobPart], { type: 'audio/wav' });
+    const url = URL.createObjectURL(blob);
+    urlCache.set(key, url);
     void uploadPickAudio(opts.pickId, wav).then((path) => {
       if (path && path !== audioPath) {
         audioPath = path;
         void opts.onPersisted?.(path, voice);
       }
     });
-    return tts.audioBuffer;
-  }
-
-  function play(buf: AudioBuffer): void {
-    const src = ctx().createBufferSource();
-    src.buffer = buf;
-    src.playbackRate.value = rate;
-    src.connect(ctx().destination);
-    src.onended = () => {
-      if (currentSource !== src) return;
-      currentSource = null;
-      const next = (parseInt(countEl.textContent || '0') || 0) + 1;
-      countEl.textContent = `${next} 回`;
-      void opts.onShadowed?.(1);
-      if (repeatCb.checked) {
-        play(buf);
-      } else {
-        isPlaying = false;
-        playBtn.innerHTML = icons.play(14);
-      }
-    };
-    currentSource = src;
-    src.start();
+    return url;
   }
 
   playBtn.addEventListener('click', async () => {
@@ -133,8 +145,12 @@ export function createShadowingPlayer(opts: ShadowingPlayerOptions): HTMLElement
     isPlaying = true;
     playBtn.innerHTML = icons.pause(14);
     try {
-      const buf = await ensureBuffer();
-      play(buf);
+      const url = await ensureUrl();
+      if (audioEl.src !== url) audioEl.src = url;
+      audioEl.playbackRate = rate;
+      audioEl.preservesPitch = true;
+      audioEl.currentTime = 0;
+      await audioEl.play();
     } catch (e) {
       console.error('[shadowing] TTS failed', e);
       alert('音声の生成に失敗しました');
