@@ -83,7 +83,9 @@
 
 .compose-textarea {
   width: 100%;
-  min-height: 180px;
+  min-height: 120px;
+  /* 内容に応じて自動で高さフィット (Chrome 123+, Firefox 130+, Safari 18+) */
+  field-sizing: content;
   padding: 16px 18px;
   background: var(--surface-warm);
   border: 1px solid transparent;
@@ -102,7 +104,7 @@
 .compose-textarea.en {
   font-family: var(--serif);
   font-size: 17px;
-  min-height: 160px;
+  min-height: 120px;
 }
 
 /* ─ JP + plain JP の collapsible wrapper ─
@@ -667,7 +669,7 @@
   }
 
   .compose-right .compose-textarea.en {
-    min-height: 220px;
+    min-height: 160px;
   }
 }
 
@@ -688,12 +690,14 @@
     overflow-y: auto;
   }
 
+  /* PC では sticky 左列との高さ整合のため少しだけ大きく。
+     field-sizing: content で内容ベースに伸びる方が優先される。 */
   .compose-left .compose-textarea {
-    min-height: 280px;
+    min-height: 160px;
   }
 
   .compose-right .compose-textarea.en {
-    min-height: 320px;
+    min-height: 200px;
   }
 
   .compose-third {
