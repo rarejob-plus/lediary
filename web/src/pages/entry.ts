@@ -788,6 +788,9 @@ function renderExpansionSection(entry: DiaryEntry, bodyEl: HTMLElement): HTMLEle
   }
 
   rerender();
+  // 拡張カード内の英文 (添削後の文・ヒント句など) も選択 → Flashcard 保存できるように。
+  // 漏れていたため iPhone でも「日記を膨らます」中の選択でボタンが出なかった。
+  enableTextSelectionBookmark(wrap);
   return wrap;
 }
 
