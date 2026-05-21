@@ -7,8 +7,36 @@ import { db } from '../firebase';
 import { getCurrentUser } from '../auth';
 import { analyzeDiary, type FeedbackItem, type DiaryAnalysis } from '../llm-diary';
 import { fetchUnsplashCover, notifyUnsplashDownload } from '../unsplash';
-import { invalidateEntriesCache } from './entries';
+import { fetchEntries, invalidateEntriesCache } from './entries';
 import type { Mode } from './mock';
+
+/** 過去 entry 全件 + 現在 entry の vocabulary + dismissedVocab を集めて重複排除した語句リスト。
+ *  analyzeDiary / extractVocabulary に「これらは除外」として渡す用。 */
+export async function gatherKnownVocabFor(userId: string, currentEntryId?: string): Promise<string[]> {
+  void userId;
+  try {
+    const entries = await fetchEntries();
+    const seen = new Set<string>();
+    for (const e of entries) {
+      // 同じエントリの既存 vocab も除外対象に入れる (再添削で同じ語が再度出てこないように)
+      void currentEntryId;
+      for (const v of (e.vocabulary || [])) {
+        if (v?.word) seen.add(v.word.toLowerCase().trim());
+      }
+      const dismissed = (e as unknown as { dismissedVocab?: Array<{ word?: string } | string> }).dismissedVocab;
+      if (Array.isArray(dismissed)) {
+        for (const d of dismissed) {
+          const w = typeof d === 'string' ? d : d?.word;
+          if (w) seen.add(w.toLowerCase().trim());
+        }
+      }
+    }
+    return Array.from(seen);
+  } catch (e) {
+    console.warn('[gatherKnownVocab] failed', e);
+    return [];
+  }
+}
 
 export interface TextOnlySaveInput {
   contentJp?: string;
@@ -98,10 +126,15 @@ export async function analyzeAndSavePost(input: AnalyzeSaveInput): Promise<Analy
   const skipMoodAndCover =
     existing?.contentJp === input.contentJp && !!existingMood && !!coverKeyword;
 
+  // 既知 vocab (= 過去 entry の vocab + dismissed) を集めて exclude 指示に使う。
+  // 失敗しても問題なし。空配列で進む。
+  const excludeVocab = await gatherKnownVocabFor(user.uid, docId);
+
   const analysis = await analyzeDiary(input.contentJp, input.userTranslation || '', {
     previousFeedback: input.previousFeedback || [],
     attemptCount: input.attemptCount ?? 1,
     skipMoodAndCover,
+    excludeVocab,
   });
 
   const finalMood = skipMoodAndCover ? existingMood : (analysis.mood || '');

@@ -7,8 +7,8 @@ import { renderSekkiInline, dayOfYear, daysInYear } from '../data/dateInfo';
 import { getCurrentUser, getIdToken } from '../auth';
 import { navigate } from '../router';
 import { enableTextSelectionBookmark, bookmarkPhrase } from '../components/text-selection-bookmark';
-import { correctExpansionAnswer, generateExpansionQuestions, generateLessonSheetContent, generateShareId } from '../llm-diary';
-import { savePostTextOnly, savePostPicks } from '../data/posts';
+import { correctExpansionAnswer, extractVocabulary, generateExpansionQuestions, generateLessonSheetContent, generateShareId } from '../llm-diary';
+import { savePostTextOnly, savePostPicks, gatherKnownVocabFor } from '../data/posts';
 import { createShadowingPlayer } from '../components/shadowing-player';
 import { deletePickAudio } from '../data/picksAudio';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
@@ -775,6 +775,43 @@ function renderExpansionSection(entry: DiaryEntry, bodyEl: HTMLElement): HTMLEle
             alert('保存に失敗しました（表示は更新されています）');
           }
           rerender();
+
+          // 追記文 (finalText / 添削後を含む) から「過去出てない新規 vocab」を取りに行く。
+          // 失敗してもエントリは更新済みなので noisily 失敗しない。
+          void (async () => {
+            try {
+              const user = getCurrentUser();
+              if (!user) return;
+              const exclude = await gatherKnownVocabFor(user.uid, entry.id);
+              const added = await extractVocabulary(finalText || inserted, exclude);
+              if (added.length === 0) return;
+              const merged = [...(entry.vocabulary || []), ...added];
+              entry.vocabulary = merged;
+              await updateDoc(doc(db, 'lediary-posts', entry.id), {
+                vocabulary: merged,
+                updatedAt: Date.now(),
+              });
+              invalidateEntriesCache();
+              // 「覚えたいフレーズ」セクションを再描画して新規語を出す。
+              const vocabBody = document.querySelector('.section .vocab-row')?.parentElement;
+              if (vocabBody) {
+                vocabBody.innerHTML = '';
+                merged.forEach((v) => {
+                  const row = document.createElement('div');
+                  row.className = 'vocab-row';
+                  row.innerHTML = `
+                    <span class="vocab-en">${escapeHtml(v.word)}</span>
+                    <button class="vocab-flashcard-btn">Flashcard</button>
+                    <span class="vocab-ja">${escapeHtml(v.definition)}</span>
+                    <span class="vocab-example">${escapeHtml(v.example)}</span>
+                  `;
+                  vocabBody.appendChild(row);
+                });
+              }
+            } catch (e) {
+              console.warn('[expand] extract vocab failed', e);
+            }
+          })();
         });
       } catch (err) {
         console.error(err);

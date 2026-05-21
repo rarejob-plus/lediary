@@ -340,6 +340,8 @@ export interface AnalyzeOptions {
   // contentJp が変わってない & 既に mood/coverKeyword 両方ある時に true。
   // プロンプトから mood / coverKeyword を外してコスト/レイテンシ節約。
   skipMoodAndCover?: boolean;
+  /** 既知 (= 過去 entry に登場した / dismiss された) phrase。新 vocab 出力時に除外させる。 */
+  excludeVocab?: string[];
 }
 
 export async function analyzeDiary(
@@ -350,6 +352,7 @@ export async function analyzeDiary(
   const previousFeedback = opts.previousFeedback || [];
   const attemptCount = opts.attemptCount ?? 1;
   const skipMoodAndCover = opts.skipMoodAndCover ?? false;
+  const excludeVocab = opts.excludeVocab || [];
 
   // 添削レベル — Basic は文法/不自然さ重視、Intermediate は自然さ、Advanced は仕上げ。
   const levelMap: Record<number, string> = {
@@ -377,7 +380,7 @@ Rules:
 - corrected rewrites THAT ONE sentence only, ≤1.5× source length. Don't quote-back the source unchanged.
 - If a sentence is already natural, omit it. Empty array is fine. One feedback per index; combine multiple fixes.
 - Don't reference "[N]"/"sentenceIndex"/"the second sentence" inside explanation.
-- vocabulary: 3-5 items, each must appear in your corrected text.
+- vocabulary: 3-5 items, each must appear in your corrected text. DO NOT repeat any item from the "Known vocabulary" list below — the learner already saw those. Pick fresh, useful collocations.
 
 Return ONLY the JSON object.`;
 
@@ -395,6 +398,11 @@ Return ONLY the JSON object.`;
     for (const fb of previousFeedback) {
       userMessage += `- "${fb.original}" → "${fb.corrected}"\n`;
     }
+  }
+  if (excludeVocab.length > 0) {
+    // 多すぎると prompt が膨らむので 80 件まで (新しい順想定)
+    const trimmed = excludeVocab.slice(0, 80);
+    userMessage += `\n\nKnown vocabulary (already shown to learner — exclude these):\n${trimmed.map((v) => `- ${v}`).join('\n')}`;
   }
 
   const analysis = await withRetry('analyzeDiary', async () => {
@@ -461,4 +469,40 @@ Return ONLY the JSON object.`;
   analysis.feedback = kept;
 
   return analysis;
+}
+
+// ─── extractVocabulary: 既存 text から新規 vocab だけ抜き出す軽量呼び出し ───
+// 用途: 「日記を膨らませる」で挿入された追記文を分析、既存 vocab に追加する。
+// 添削 (analyzeDiary) フルランは重いので、vocab だけ生成する小さなプロンプトに分離。
+
+export async function extractVocabulary(
+  text: string,
+  excludeVocab: string[] = [],
+): Promise<VocabItem[]> {
+  if (!text.trim()) return [];
+  const trimmedExclude = excludeVocab.slice(0, 80);
+  const systemPrompt = `You are an English coach for a Japanese learner. From the English text below, pick 2-4 useful collocations/phrases worth saving as flashcards.
+
+Return JSON: {"vocabulary":[{"word":"...","definition":"日本語","example":"natural sentence from the text or nearby"}]}
+
+Rules:
+- Pick natural, real-world collocations a learner can reuse. Avoid single function words.
+- Each "word" must literally appear in the text (or be inferable from it).
+- "definition" is short Japanese.
+- DO NOT repeat any item in the "Known vocabulary" list — the learner already saw those.
+- 2-4 items only. If nothing new is worth picking, return an empty array.
+
+Return ONLY the JSON object.`;
+  let userMessage = `English text:\n${text}`;
+  if (trimmedExclude.length > 0) {
+    userMessage += `\n\nKnown vocabulary (exclude — already shown):\n${trimmedExclude.map((v) => `- ${v}`).join('\n')}`;
+  }
+  try {
+    const response = await callLLM(systemPrompt, userMessage);
+    const parsed = parseJsonObject<{ vocabulary?: VocabItem[] }>(response);
+    return Array.isArray(parsed.vocabulary) ? parsed.vocabulary.filter((v) => v?.word) : [];
+  } catch (e) {
+    console.warn('[extractVocabulary] failed', e);
+    return [];
+  }
 }
