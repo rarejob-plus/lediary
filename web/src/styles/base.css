@@ -118,6 +118,23 @@ input {
   width: 100%;
 }
 
+/* iOS Safari は font-size が 16px 未満の input/textarea にフォーカスすると自動 zoom する。
+   モバイル幅では minimum 16px を強制して zoom を抑える。
+   PC では各コンポーネント側のサイズを尊重するため適用しない。 */
+@media (max-width: 768px) {
+  textarea,
+  input[type="text"],
+  input[type="search"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="tel"],
+  input[type="url"],
+  input:not([type]) {
+    font-size: max(16px, 1em);
+  }
+}
+
 /* ─── App chrome ─── */
 .app-chrome {
   position: sticky;
