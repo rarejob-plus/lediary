@@ -78,15 +78,6 @@ function stripSentenceIndexRefs(text: string | undefined): string {
     .trim();
 }
 
-export function generateShareId(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  const bytes = new Uint8Array(12);
-  crypto.getRandomValues(bytes);
-  let result = '';
-  for (const b of bytes) result += chars[b % chars.length];
-  return result;
-}
-
 // ─── 型 ───
 
 export interface FeedbackItem {
@@ -133,21 +124,6 @@ export interface FlowCheckResult {
 export interface CorrectAnswerResult {
   corrected: string;
   explanation: string;
-}
-
-export interface LessonSheetVocab {
-  word: string;
-  definition: string;
-  example: string;
-}
-export interface LessonSheetDiscussion {
-  topic: string;
-  questions: string[];
-}
-export interface LessonSheet {
-  title: string;
-  vocabulary: LessonSheetVocab[];
-  discussionTopics: LessonSheetDiscussion[];
 }
 
 // ─── expand ───
@@ -305,31 +281,6 @@ Return ONLY JSON.`;
     });
 
   return { suggestions, overall: stripSentenceIndexRefs(raw.overall) };
-}
-
-// ─── lesson-sheet 生成 ───
-
-export async function generateLessonSheetContent(
-  contentJp: string,
-  correctedText: string,
-  vocabulary: LessonSheetVocab[],
-): Promise<LessonSheet> {
-  const systemPrompt = `Make RareJob WNA-style lesson material from a student's diary (JP + corrected EN) for a 25-min English conversation lesson.
-
-Return JSON:
-{"title":"catchy article-style headline","vocabulary":[{"word":"...","definition":"simple English def","example":"natural sentence"}],"discussionTopics":[{"topic":"heading","questions":["...","..."]}]}
-
-- title: article headline, English.
-- vocabulary: 4-6 useful items from the diary/corrections. English everywhere (tutor doesn't read Japanese).
-- discussionTopics: exactly 2 groups × 2-3 questions, easier→harder. Use diary as a springboard for opinion/theme questions; do NOT ask factual questions whose answers are already in the diary.
-- Do NOT include the diary text itself (it's shown elsewhere as the "Article" section).
-Return ONLY JSON.`;
-
-  const userMessage = `Student's diary (Japanese):\n${contentJp}\n\nStudent's English text (corrected):\n${correctedText}\n\nVocabulary learned:\n${vocabulary.map((v) => `${v.word}: ${v.definition}`).join('\n')}`;
-  return withRetry('generateLessonSheetContent', async () => {
-    const response = await callLLM(systemPrompt, userMessage);
-    return parseJsonObject<LessonSheet>(response);
-  });
 }
 
 // ─── analyzeDiary: 添削 / vocab / expansion / mood / coverKeyword を1発で生成 ───

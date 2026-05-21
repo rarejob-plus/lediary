@@ -2,7 +2,6 @@ import { renderTimeline } from './pages/timeline';
 import { renderEditor } from './pages/editor';
 import { renderEntry } from './pages/entry';
 import { renderCalendar } from './pages/calendar';
-import { renderSheet } from './pages/sheet';
 import { renderPhrases } from './pages/phrases';
 
 export type Route =
@@ -10,8 +9,7 @@ export type Route =
   | { name: 'editor' }
   | { name: 'entry'; id: string }
   | { name: 'calendar' }
-  | { name: 'phrases' }
-  | { name: 'sheet'; id: string };
+  | { name: 'phrases' };
 
 function parseRoute(): Route {
   const path = location.pathname;
@@ -19,10 +17,9 @@ function parseRoute(): Route {
   if (path === '/editor') return { name: 'editor' };
   if (path === '/calendar') return { name: 'calendar' };
   if (path === '/phrases') return { name: 'phrases' };
-  const sheetMatch = path.match(/^\/s\/(.+)$/);
-  if (sheetMatch) return { name: 'sheet', id: sheetMatch[1]! };
   const m = path.match(/^\/entry\/(.+)$/);
   if (m) return { name: 'entry', id: m[1]! };
+  // 旧 /s/:id (lesson sheet) を踏んだ古い URL は timeline へ
   return { name: 'timeline' };
 }
 
@@ -51,9 +48,6 @@ export function render(): void {
       break;
     case 'phrases':
       renderPhrases(root);
-      break;
-    case 'sheet':
-      renderSheet(root, route.id);
       break;
   }
   window.scrollTo({ top: 0, behavior: 'instant' });

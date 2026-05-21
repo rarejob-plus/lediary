@@ -7,11 +7,12 @@ import { renderSekkiInline, dayOfYear, daysInYear } from '../data/dateInfo';
 import { getCurrentUser, getIdToken } from '../auth';
 import { navigate } from '../router';
 import { enableTextSelectionBookmark, bookmarkPhrase } from '../components/text-selection-bookmark';
-import { correctExpansionAnswer, extractVocabulary, generateExpansionQuestions, generateLessonSheetContent, generateShareId } from '../llm-diary';
+import { correctExpansionAnswer, extractVocabulary, generateExpansionQuestions } from '../llm-diary';
 import { savePostTextOnly, savePostPicks, gatherKnownVocabFor } from '../data/posts';
 import { createShadowingPlayer } from '../components/shadowing-player';
+import { enhanceTextarea } from '../components/textarea';
 import { deletePickAudio } from '../data/picksAudio';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
 export function renderEntry(root: HTMLElement, id: string): void {
@@ -92,7 +93,6 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
     <button class="btn btn-sm" id="edit">${icons.pencil(14)} 編集</button>
     <button class="btn btn-sm" id="redo">もう一度添削</button>
     <button class="btn btn-sm" id="flow">流れを整える</button>
-    <button class="btn btn-sm" id="sheet">${icons.share(14)} レッスンシート</button>
     <button class="btn btn-sm" id="movemode">モード変更</button>
     <button class="btn btn-sm btn-ghost danger" id="del" title="削除">${icons.trash(14)}</button>
   `;
@@ -107,38 +107,6 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
   actions.querySelector('#flow')!.addEventListener('click', () => {
     stashForEditor(entry);
     navigate(`/editor?date=${entry.date}&mode=${entry.mode}&action=flow`);
-  });
-  const sheetBtn = actions.querySelector('#sheet') as HTMLButtonElement;
-  if (entry.lessonSheetId) {
-    sheetBtn.innerHTML = `${icons.share(14)} シートを開く`;
-  }
-  sheetBtn.addEventListener('click', async () => {
-    if (!getCurrentUser()) {
-      alert('ログインが必要です');
-      return;
-    }
-    if (entry.lessonSheetId) {
-      window.open(`https://lediary.web.app/s/${entry.lessonSheetId}`, '_blank');
-      return;
-    }
-    const original = sheetBtn.innerHTML;
-    sheetBtn.disabled = true;
-    sheetBtn.textContent = '作成中…';
-    try {
-      const shareId = await createLessonSheet(entry);
-      entry.lessonSheetId = shareId;
-      sheetBtn.innerHTML = `${icons.share(14)} シートを開く`;
-      sheetBtn.disabled = false;
-      invalidateEntriesCache();
-      const url = `https://lediary.web.app/s/${shareId}`;
-      window.open(url, '_blank');
-      navigator.clipboard?.writeText(url).catch(() => {});
-    } catch (err) {
-      console.error(err);
-      alert('レッスンシート作成に失敗しました');
-      sheetBtn.disabled = false;
-      sheetBtn.innerHTML = original;
-    }
   });
   actions.querySelector('#movemode')!.addEventListener('click', async () => {
     const user = getCurrentUser();
@@ -719,6 +687,9 @@ function renderExpansionSection(entry: DiaryEntry, bodyEl: HTMLElement): HTMLEle
     `;
 
     const input = card.querySelector('.expansion-q-input') as HTMLTextAreaElement;
+    enhanceTextarea(input, {
+      onSubmit: () => (card.querySelector('.expansion-q-submit') as HTMLButtonElement | null)?.click(),
+    });
     const result = card.querySelector('.expansion-q-result') as HTMLElement;
     let submitBtn = card.querySelector('.expansion-q-submit') as HTMLButtonElement;
 
@@ -857,33 +828,3 @@ function escapeHtml(s: string | undefined | null): string {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }
 
-// 旧 POST /api/diary/lesson-sheet 相当: LLM 生成 → lediary-sheets に保存 → diary post に id 反映。
-async function createLessonSheet(entry: DiaryEntry): Promise<string> {
-  const user = getCurrentUser();
-  if (!user) throw new Error('not authenticated');
-  // 元 post をクライアントから取り直して、(corrected text や vocab の) 最新値を使う
-  const postSnap = await getDoc(doc(db, 'lediary-posts', entry.id));
-  if (!postSnap.exists()) throw new Error('post not found');
-  const post = postSnap.data() as Record<string, unknown>;
-  const contentJp = (post.contentJp as string) || '';
-  const correctedText = (post.userTranslation as string) || '';
-  const vocab = (post.vocabulary as { word: string; definition: string; example: string }[]) || [];
-
-  const sheet = await generateLessonSheetContent(contentJp, correctedText, vocab);
-  const shareId = generateShareId();
-  await setDoc(doc(db, 'lediary-sheets', shareId), {
-    shareId,
-    userId: user.uid,
-    postId: entry.id,
-    title: sheet.title,
-    articleBody: correctedText,
-    contentJp,
-    vocabulary: sheet.vocabulary,
-    discussionTopics: sheet.discussionTopics,
-    date: (post.date as string) || '',
-    mode: (post.mode as string) || 'diary',
-    createdAt: Date.now(),
-  });
-  await updateDoc(doc(db, 'lediary-posts', entry.id), { lessonSheetId: shareId });
-  return shareId;
-}

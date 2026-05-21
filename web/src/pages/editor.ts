@@ -5,6 +5,7 @@ import { MODE_META } from '../data/mock';
 import { fetchEntry, takeStashedEntry } from '../data/entries';
 import { fetchDays, type DayRating } from '../data/days';
 import { renderRatingRow } from '../components/day-rating-row';
+import { enhanceTextarea } from '../components/textarea';
 import { getCurrentUser } from '../auth';
 import { navigate } from '../router';
 import { enableTextSelectionBookmark } from '../components/text-selection-bookmark';
@@ -425,6 +426,13 @@ export function renderEditor(root: HTMLElement): void {
   enInputEl.addEventListener('focus', () => document.body.classList.add('en-focused'));
   enInputEl.addEventListener('blur', () => document.body.classList.remove('en-focused'));
 
+  // 共通 textarea 拡張: field-sizing 未対応ブラウザでも自動リサイズ + Cmd+Enter で添削開始。
+  enhanceTextarea(jpBlock.querySelector('#jp-input') as HTMLTextAreaElement);
+  enhanceTextarea(plainBlock.querySelector('#plain-jp-input') as HTMLTextAreaElement);
+  enhanceTextarea(enInputEl, {
+    onSubmit: () => (actionRow.querySelector('#correct-btn') as HTMLButtonElement | null)?.click(),
+  });
+
   const actionRow = document.createElement('div');
   actionRow.className = 'compose-action-row';
   actionRow.innerHTML = `
@@ -576,6 +584,7 @@ export function renderEditor(root: HTMLElement): void {
       ta.addEventListener('input', () => {
         rewrites[i] = ta.value;
       });
+      enhanceTextarea(ta);
       correctionSection.appendChild(card);
     });
 

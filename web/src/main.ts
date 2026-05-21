@@ -2,7 +2,6 @@ import './styles/base.css';
 import './styles/timeline.css';
 import './styles/editor.css';
 import './styles/entry.css';
-import './styles/sheet.css';
 import { render } from './router';
 import { onAuth, getCurrentUser } from './auth';
 import { isPushSupported, isNotificationGranted, isSubscribed, subscribePush } from './push';
