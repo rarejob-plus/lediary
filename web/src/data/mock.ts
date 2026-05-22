@@ -65,6 +65,8 @@ export interface DiaryEntry {
   feedback: FeedbackItem[];
   /** 「完成」マーカー (epoch ms)。これ以降は読書モードで開かれ、編集に確認を挟む。 */
   finalizedAt?: number;
+  /** JP↔EN 文ペア。クイズ用。analyzeDiary が生成 or alignSentences で後付けキャッシュ。 */
+  sentencePairs?: { jp: string; en: string }[];
   vocabulary: VocabItem[];
   expansionQuestions: ExpansionQuestion[];
   /** 英語日記 BOY 流: 添削後にピックする「覚えたい 1 フレーズ」群。 */

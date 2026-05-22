@@ -5,7 +5,7 @@
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { getCurrentUser } from '../auth';
-import { analyzeDiary, type FeedbackItem, type DiaryAnalysis } from '../llm-diary';
+import { alignSentences, analyzeDiary, type FeedbackItem, type DiaryAnalysis, type SentencePair } from '../llm-diary';
 import { fetchUnsplashCover, notifyUnsplashDownload } from '../unsplash';
 import { fetchEntries, invalidateEntriesCache } from './entries';
 import type { Mode } from './mock';
@@ -67,6 +67,30 @@ export async function savePostTextOnly(input: TextOnlySaveInput): Promise<void> 
   if (input.dismissedVocab) updates.dismissedVocab = input.dismissedVocab;
   await updateDoc(doc(db, 'lediary-posts', docId), updates);
   invalidateEntriesCache();
+}
+
+/** entry の JP↔EN sentencePairs を保証する。既存にあればそれ、無ければ LLM で生成 + 保存。 */
+export async function ensureSentencePairs(
+  entryId: string,
+  contentJp: string,
+  userTranslation: string,
+  existing?: SentencePair[],
+): Promise<SentencePair[]> {
+  if (Array.isArray(existing) && existing.length > 0) return existing;
+  if (!contentJp.trim() || !userTranslation.trim()) return [];
+  const pairs = await alignSentences(contentJp, userTranslation);
+  if (pairs.length > 0) {
+    try {
+      await updateDoc(doc(db, 'lediary-posts', entryId), {
+        sentencePairs: pairs,
+        updatedAt: Date.now(),
+      });
+      invalidateEntriesCache();
+    } catch (e) {
+      console.warn('[ensureSentencePairs] save failed', e);
+    }
+  }
+  return pairs;
 }
 
 /** 「完成」マーカーを付ける。以降は entry detail が読書モードで開く。 */
@@ -185,6 +209,7 @@ export async function analyzeAndSavePost(input: AnalyzeSaveInput): Promise<Analy
     feedback: analysis.feedback,
     vocabulary: analysis.vocabulary,
     expansionQuestions: analysis.expansionQuestions,
+    sentencePairs: analysis.sentencePairs || [],
     mood: finalMood,
     coverImageUrl,
     coverPhotographer,

@@ -3,7 +3,7 @@ import { icons } from './icons';
 import { getCurrentUser, loginWithGoogle, logout } from '../auth';
 import { getStoredTheme, nextTheme, setStoredTheme, type Theme } from './theme';
 
-export function renderHeader(active: 'timeline' | 'calendar' | 'editor' | 'phrases' | null): HTMLElement {
+export function renderHeader(active: 'timeline' | 'calendar' | 'editor' | 'phrases' | 'quiz' | null): HTMLElement {
   const user = getCurrentUser();
 
   const header = document.createElement('header');
@@ -14,6 +14,7 @@ export function renderHeader(active: 'timeline' | 'calendar' | 'editor' | 'phras
       <nav class="app-nav">
         <button class="icon-btn ${active === 'timeline' ? 'active' : ''}" data-nav="/" title="タイムライン">${icons.pen(18)}</button>
         <button class="icon-btn ${active === 'phrases' ? 'active' : ''}" data-nav="/phrases" title="私のフレーズ集">${icons.sparkles(18)}</button>
+        <button class="icon-btn ${active === 'quiz' ? 'active' : ''}" data-nav="/quiz" title="日記クイズ">${icons.graduation(18)}</button>
         <button class="icon-btn ${active === 'calendar' ? 'active' : ''}" data-nav="/calendar" title="カレンダー">${icons.calendar(18)}</button>
         <button class="icon-btn" id="theme-btn" title="${themeTitle(getStoredTheme())}">${themeIcon(getStoredTheme())}</button>
         ${user

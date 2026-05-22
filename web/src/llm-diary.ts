@@ -92,10 +92,16 @@ export interface VocabItem {
   example: string;
 }
 
+export interface SentencePair {
+  jp: string;
+  en: string;
+}
+
 export interface DiaryAnalysis {
   feedback: FeedbackItem[];
   vocabulary: VocabItem[];
   expansionQuestions: ExpansionQuestion[];
+  sentencePairs?: SentencePair[];
   mood?: string;
   coverKeyword?: string;
 }
@@ -321,7 +327,8 @@ Tone: casual English like a friend texting (no textbook/formal). Japanese fields
 Return JSON:
 {
   "feedback": [{"sentenceIndex": N, "corrected": "...", "explanation": "日本語でニュアンス差を簡潔に"}],
-  "vocabulary": [{"word": "...", "definition": "日本語", "example": "..."}]${skipMoodAndCover ? '' : `,
+  "vocabulary": [{"word": "...", "definition": "日本語", "example": "..."}],
+  "sentencePairs": [{"jp": "JP 1 文", "en": "対応する EN 1 文 (添削後があればそちらを優先)"}]${skipMoodAndCover ? '' : `,
   "mood": "ONE lowercase English word (calm/excited/cozy/buoyant/restless/focused 等)",
   "coverKeyword": "1-3 English words for a stock photo. Bias toward Japan (japanese/tokyo/ramen/sakura/konbini/izakaya 等). Concrete subjects, bright not dark."`}
 }
@@ -332,6 +339,7 @@ Rules:
 - If a sentence is already natural, omit it. Empty array is fine. One feedback per index; combine multiple fixes.
 - Don't reference "[N]"/"sentenceIndex"/"the second sentence" inside explanation.
 - vocabulary: 3-5 items, each must appear in your corrected text. DO NOT repeat any item from the "Known vocabulary" list below — the learner already saw those. Pick fresh, useful collocations.
+- sentencePairs: align Japanese diary sentences with their English counterparts. Use corrected English when applicable. Skip JP sentences that have no real English counterpart (don't invent). Skip if no userTranslation. Keep order matching JP sequence.
 
 Return ONLY the JSON object.`;
 
@@ -425,6 +433,39 @@ Return ONLY the JSON object.`;
 // ─── extractVocabulary: 既存 text から新規 vocab だけ抜き出す軽量呼び出し ───
 // 用途: 「日記を膨らませる」で挿入された追記文を分析、既存 vocab に追加する。
 // 添削 (analyzeDiary) フルランは重いので、vocab だけ生成する小さなプロンプトに分離。
+
+// ─── alignSentences: 既存 entry の JP↔EN 文ペアをオンデマンドで生成 ───
+// 用途: クイズ機能で過去 entry の文ペアが未保存の場合に 1 回だけ呼んで Firestore に焼き込む。
+
+export async function alignSentences(
+  contentJp: string,
+  userTranslation: string,
+): Promise<SentencePair[]> {
+  if (!contentJp.trim() || !userTranslation.trim()) return [];
+  const systemPrompt = `Align a Japanese diary with its English translation into sentence pairs.
+
+Output JSON: {"pairs":[{"jp":"JP 1 文","en":"対応する EN 1 文"}]}
+
+Rules:
+- One JP sentence per item; do not merge multiple JP sentences into one entry.
+- If a JP sentence has no real English counterpart (omitted from translation), skip it.
+- Do not invent EN content that isn't in the user's translation.
+- Keep order matching the JP sequence.
+- Trim leading/trailing whitespace, do not include trailing 。 or punctuation if natural.
+
+Return ONLY the JSON object.`;
+  const userMessage = `JP diary:\n${contentJp}\n\nEN translation:\n${userTranslation}`;
+  try {
+    const response = await callLLM(systemPrompt, userMessage);
+    const parsed = parseJsonObject<{ pairs?: SentencePair[] }>(response);
+    return Array.isArray(parsed.pairs)
+      ? parsed.pairs.filter((p) => p && typeof p.jp === 'string' && typeof p.en === 'string' && p.jp.trim() && p.en.trim())
+      : [];
+  } catch (e) {
+    console.warn('[alignSentences] failed', e);
+    return [];
+  }
+}
 
 export async function extractVocabulary(
   text: string,

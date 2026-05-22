@@ -27,6 +27,7 @@ interface RawPost {
   vocabulary?: DiaryEntry['vocabulary'];
   expansionQuestions?: DiaryEntry['expansionQuestions'];
   picks?: DiaryEntry['picks'];
+  sentencePairs?: DiaryEntry['sentencePairs'];
   hints?: unknown[];
   createdAt?: number | { _seconds: number };
   updatedAt?: number | { _seconds: number };
@@ -63,6 +64,7 @@ function toEntry(raw: RawPost): DiaryEntry {
     vocabulary: raw.vocabulary || [],
     expansionQuestions: raw.expansionQuestions || [],
     picks: raw.picks || [],
+    sentencePairs: raw.sentencePairs,
     finalizedAt: raw.finalizedAt,
     mood: raw.mood,
     lessonSheetId: raw.lessonSheetId,

@@ -3,13 +3,15 @@ import { renderEditor } from './pages/editor';
 import { renderEntry } from './pages/entry';
 import { renderCalendar } from './pages/calendar';
 import { renderPhrases } from './pages/phrases';
+import { renderQuiz } from './pages/quiz';
 
 export type Route =
   | { name: 'timeline' }
   | { name: 'editor' }
   | { name: 'entry'; id: string }
   | { name: 'calendar' }
-  | { name: 'phrases' };
+  | { name: 'phrases' }
+  | { name: 'quiz' };
 
 function parseRoute(): Route {
   const path = location.pathname;
@@ -17,6 +19,7 @@ function parseRoute(): Route {
   if (path === '/editor') return { name: 'editor' };
   if (path === '/calendar') return { name: 'calendar' };
   if (path === '/phrases') return { name: 'phrases' };
+  if (path === '/quiz') return { name: 'quiz' };
   const m = path.match(/^\/entry\/(.+)$/);
   if (m) return { name: 'entry', id: m[1]! };
   // 旧 /s/:id (lesson sheet) を踏んだ古い URL は timeline へ
@@ -48,6 +51,9 @@ export function render(): void {
       break;
     case 'phrases':
       renderPhrases(root);
+      break;
+    case 'quiz':
+      renderQuiz(root);
       break;
   }
   window.scrollTo({ top: 0, behavior: 'instant' });
