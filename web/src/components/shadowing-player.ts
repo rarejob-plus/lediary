@@ -13,6 +13,7 @@ import { uploadPickAudio } from '../data/picksAudio';
 import { getDownloadURL, ref as storageRef, getStorage } from 'firebase/storage';
 import { app } from '../firebase';
 import { icons } from './icons';
+import { isSpeechRecognitionSupported, recognizeOnce, scorePronunciation, renderScoreDiffHtml } from './pronunciation';
 
 const RATES = [0.5, 0.75, 1];
 const DEFAULT_VOICE = 'Charon';
@@ -27,24 +28,47 @@ export interface ShadowingPlayerOptions {
   audioPath?: string;
   audioVoice?: string;
   initialCount?: number;
+  /** 発音採点の前回 / ベストスコア (0-100)。表示用。 */
+  lastScore?: number;
+  bestScore?: number;
+  attemptCount?: number;
   classPrefix?: string;
   onShadowed?: (delta: number) => void | Promise<void>;
   onPersisted?: (audioPath: string, voice: string) => void | Promise<void>;
+  /** 録音 → 採点完了時。呼び出し側で pick.bestScore/lastScore/attemptCount を保存する。 */
+  onScored?: (result: { score: number; transcript: string; isNewBest: boolean }) => void | Promise<void>;
 }
 
 export function createShadowingPlayer(opts: ShadowingPlayerOptions): HTMLElement {
   const prefix = opts.classPrefix || 'pick';
   const root = document.createElement('div');
   root.className = `${prefix}-card-player`;
-  root.innerHTML = `
-    <button class="${prefix}-play" aria-label="再生">${icons.play(14)}</button>
-    <div class="${prefix}-speeds">
-      ${RATES.map((s) => `<button class="${prefix}-speed${s === 1 ? ' active' : ''}" data-speed="${s}">${s === 0.5 ? '0.5x' : s === 0.75 ? '0.75x' : '1x'}</button>`).join('')}
+  const srSupported = isSpeechRecognitionSupported();
+  const scoreLineHtml = (opts.lastScore !== undefined || opts.bestScore !== undefined) ? `
+    <div class="pron-score-line">
+      ${opts.lastScore !== undefined ? `<span class="pron-score-last">前回 ${opts.lastScore}</span>` : ''}
+      ${opts.bestScore !== undefined ? `<span class="pron-score-best">★ベスト ${opts.bestScore}</span>` : ''}
+      ${opts.attemptCount ? `<span class="pron-score-count">${opts.attemptCount} 回</span>` : ''}
     </div>
-    <label class="${prefix}-repeat" title="リピート">
-      <input type="checkbox" class="${prefix}-repeat-cb"> リピート
-    </label>
-    <span class="${prefix}-count" title="シャドーイング回数">${opts.initialCount || 0} 回</span>
+  ` : '';
+  root.innerHTML = `
+    <div class="${prefix}-card-player-row">
+      <button class="${prefix}-play" aria-label="再生">${icons.play(14)}</button>
+      <div class="${prefix}-speeds">
+        ${RATES.map((s) => `<button class="${prefix}-speed${s === 1 ? ' active' : ''}" data-speed="${s}">${s === 0.5 ? '0.5x' : s === 0.75 ? '0.75x' : '1x'}</button>`).join('')}
+      </div>
+      <label class="${prefix}-repeat" title="リピート">
+        <input type="checkbox" class="${prefix}-repeat-cb"> リピート
+      </label>
+      <span class="${prefix}-count" title="シャドーイング回数">${opts.initialCount || 0} 回</span>
+    </div>
+    ${srSupported ? `
+      <div class="pron-pane">
+        <button class="pron-rec" type="button" title="自分の発音を録音">🎤 録音する</button>
+        ${scoreLineHtml}
+        <div class="pron-result" aria-live="polite"></div>
+      </div>
+    ` : ''}
   `;
 
   const playBtn = root.querySelector(`.${prefix}-play`) as HTMLButtonElement;
@@ -159,5 +183,55 @@ export function createShadowingPlayer(opts: ShadowingPlayerOptions): HTMLElement
     }
   });
 
+  // ── 発音採点 ──
+  const recBtn = root.querySelector('.pron-rec') as HTMLButtonElement | null;
+  const resultEl = root.querySelector('.pron-result') as HTMLElement | null;
+  if (recBtn && resultEl) {
+    let recording = false;
+    let bestScore = opts.bestScore;
+    recBtn.addEventListener('click', async () => {
+      if (recording) return;
+      // TTS 再生中なら止める (マイクと競合させない)
+      if (isPlaying) { audioEl.pause(); isPlaying = false; playBtn.innerHTML = icons.play(14); }
+      recording = true;
+      const original = recBtn.textContent;
+      recBtn.classList.add('pron-rec--active');
+      recBtn.textContent = '🎤 録音中… 話してください';
+      resultEl.innerHTML = '';
+      try {
+        const rec = await recognizeOnce(10_000);
+        if (!rec) {
+          resultEl.innerHTML = '<p class="pron-error">録音できませんでした。マイク許可と発話を確認してください。</p>';
+          return;
+        }
+        const s = scorePronunciation(opts.text, rec.transcript);
+        const isNewBest = bestScore === undefined || s.score > bestScore;
+        if (isNewBest) bestScore = s.score;
+        resultEl.innerHTML = `
+          <div class="pron-score-headline">
+            <span class="pron-score-num">${s.score}</span>
+            <span class="pron-score-denom">/ 100</span>
+            <span class="pron-score-meta">${s.matched} / ${s.total} 単語一致</span>
+            ${isNewBest ? '<span class="pron-score-badge">★ ベスト更新</span>' : ''}
+          </div>
+          <div class="pron-diff">${renderScoreDiffHtml(s.tokens)}</div>
+          <div class="pron-heard">聞き取り: <em>${escapeHtml(rec.transcript)}</em></div>
+        `;
+        void opts.onScored?.({ score: s.score, transcript: rec.transcript, isNewBest });
+      } catch (e) {
+        console.error('[pron] failed', e);
+        resultEl.innerHTML = '<p class="pron-error">エラーが発生しました</p>';
+      } finally {
+        recording = false;
+        recBtn.classList.remove('pron-rec--active');
+        recBtn.textContent = original || '🎤 録音する';
+      }
+    });
+  }
+
   return root;
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }

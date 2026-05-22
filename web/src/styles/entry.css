@@ -761,3 +761,121 @@
     text-align: right;
   }
 }
+
+/* ─── 発音採点 (shadowing player 内) ─── */
+.pron-pane {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--ld-rule);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pron-rec {
+  align-self: flex-start;
+  background: var(--ld-bg);
+  border: 1px solid var(--ld-rule-strong);
+  border-radius: 100px;
+  padding: 6px 14px;
+  font-size: 13px;
+  color: var(--ld-ink);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.pron-rec:hover { background: var(--ld-surface); }
+.pron-rec--active {
+  background: #fef2f2;
+  border-color: #f87171;
+  color: #b91c1c;
+  animation: pron-pulse 1.2s ease-in-out infinite;
+}
+@keyframes pron-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.pron-score-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--ld-muted);
+}
+.pron-score-best { color: var(--ld-accent-deep); font-weight: 500; }
+
+.pron-result:empty { display: none; }
+.pron-score-headline {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 4px;
+}
+.pron-score-num {
+  font-family: var(--ld-serif);
+  font-size: 32px;
+  font-weight: 500;
+  color: var(--ld-ink);
+  line-height: 1;
+}
+.pron-score-denom {
+  font-size: 12px;
+  color: var(--ld-muted);
+}
+.pron-score-meta {
+  font-size: 11px;
+  color: var(--ld-muted);
+  margin-left: 4px;
+}
+.pron-score-badge {
+  margin-left: auto;
+  background: var(--ld-accent-tint);
+  color: var(--ld-accent-deep);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 10px;
+  border-radius: 100px;
+}
+.pron-diff {
+  font-family: var(--ld-serif);
+  font-size: 15px;
+  line-height: 1.7;
+  background: var(--ld-surface);
+  border-radius: var(--ld-r-sm);
+  padding: 10px 12px;
+  margin-top: 8px;
+}
+.pron-tok--ok    { color: var(--ld-ink); }
+.pron-tok--miss  {
+  color: #b94248;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  background: rgba(185, 66, 72, 0.08);
+  padding: 0 2px;
+  border-radius: 2px;
+}
+.pron-tok--extra {
+  color: #047857;
+  background: rgba(4, 120, 87, 0.08);
+  border-bottom: 1px dashed #10b981;
+  padding: 0 2px;
+}
+.pron-heard {
+  font-size: 11px;
+  color: var(--ld-muted);
+  margin-top: 4px;
+}
+.pron-heard em { font-style: italic; color: var(--ld-secondary); }
+.pron-error {
+  font-size: 12px;
+  color: #b91c1c;
+  margin: 0;
+}
+
+/* shadowing player の上段 row を 1 まとめに (rec ボタンは下段) */
+.pick-card-player-row,
+.phrase-card-player-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}

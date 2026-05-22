@@ -267,6 +267,13 @@ function renderPicksSection(entry: DiaryEntry): HTMLElement {
           p.audioVoice = voice;
           await savePostPicks(entry.id, picks);
         },
+        // onScored: 発音スコアを pick に保存
+        async ({ score, isNewBest }) => {
+          p.lastScore = score;
+          if (isNewBest) p.bestScore = score;
+          p.attemptCount = (p.attemptCount || 0) + 1;
+          await savePostPicks(entry.id, picks);
+        },
       );
       list.appendChild(card);
     });
@@ -327,6 +334,7 @@ function renderSinglePick(
   onDelete: () => void,
   onShadowed: (delta: number) => void | Promise<void>,
   onPersisted: (audioPath: string, voice: string) => void | Promise<void>,
+  onScored: (r: { score: number; transcript: string; isNewBest: boolean }) => void | Promise<void>,
 ): HTMLElement {
   const card = document.createElement('div');
   card.className = 'pick-card';
@@ -348,9 +356,13 @@ function renderSinglePick(
       audioPath: pick.audioPath,
       audioVoice: pick.audioVoice,
       initialCount: pick.shadowingCount || 0,
+      lastScore: pick.lastScore,
+      bestScore: pick.bestScore,
+      attemptCount: pick.attemptCount,
       classPrefix: 'pick',
       onShadowed,
       onPersisted,
+      onScored,
     }),
   );
   return card;

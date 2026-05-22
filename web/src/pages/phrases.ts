@@ -156,12 +156,20 @@ function renderPhraseCard(
       audioPath: pick.audioPath,
       audioVoice: pick.audioVoice,
       initialCount: pick.shadowingCount || 0,
+      lastScore: pick.lastScore,
+      bestScore: pick.bestScore,
+      attemptCount: pick.attemptCount,
       classPrefix: 'phrase',
       onShadowed,
       onPersisted: async (audioPath, voice) => {
         pick.audioPath = audioPath;
         pick.audioVoice = voice;
-        // 当該エントリの picks 配列に焼き込んで Firestore に保存
+        await persistPickUpdate(pick);
+      },
+      onScored: async ({ score, isNewBest }) => {
+        pick.lastScore = score;
+        if (isNewBest) pick.bestScore = score;
+        pick.attemptCount = (pick.attemptCount || 0) + 1;
         await persistPickUpdate(pick);
       },
     }),
@@ -190,6 +198,9 @@ async function persistPickUpdate(pick: PickWithContext): Promise<void> {
           lastShadowedAt: pick.lastShadowedAt,
           ...(pick.audioPath ? { audioPath: pick.audioPath } : {}),
           ...(pick.audioVoice ? { audioVoice: pick.audioVoice } : {}),
+          ...(pick.lastScore !== undefined ? { lastScore: pick.lastScore } : {}),
+          ...(pick.bestScore !== undefined ? { bestScore: pick.bestScore } : {}),
+          ...(pick.attemptCount !== undefined ? { attemptCount: pick.attemptCount } : {}),
         }
       : p,
   );

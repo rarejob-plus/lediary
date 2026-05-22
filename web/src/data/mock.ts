@@ -37,6 +37,12 @@ export interface PickedPhrase {
   audioPath?: string;
   /** TTS 生成時のボイス名。voice 変更時に audio を再生成すべきか判定する。 */
   audioVoice?: string;
+  /** 発音スコア (0-100) のベスト値。 */
+  bestScore?: number;
+  /** 直近の発音スコア。 */
+  lastScore?: number;
+  /** 発音チャレンジ回数 (録音 → 採点した回数)。 */
+  attemptCount?: number;
 }
 
 export interface DiaryEntry {
