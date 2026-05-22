@@ -879,3 +879,41 @@
   gap: 10px;
   flex-wrap: wrap;
 }
+
+/* ─── 完成 (finalized) 状態 ─── */
+/* 「完成」ピル: date block の中、右寄り */
+.entry-finalized-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 4px 10px;
+  background: var(--ld-accent-tint);
+  color: var(--ld-accent-deep);
+  border-radius: 100px;
+  font-family: var(--ld-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+.entry-finalized-pill:hover { filter: brightness(0.95); }
+.entry-date-block { align-items: center; }
+
+/* 「完成」ボタン: 通常 btn-sm より控えめに目立たせる */
+.btn-finalize {
+  background: var(--ld-accent);
+  color: #fff;
+  border-color: var(--ld-accent);
+}
+.btn-finalize:hover {
+  background: var(--ld-accent-deep);
+  border-color: var(--ld-accent-deep);
+}
+
+/* 完成済の entry-content: 元の日本語 + アクション行を隠す。本文に集中。 */
+.entry-content--finalized .entry-jp { display: none; }
+.entry-content--finalized .entry-actions { display: none; }
+/* 完成済ではセクション間の余白を多少詰める */
+.entry-content--finalized .entry-body { margin-bottom: 24px; }
+.entry-content--finalized .section { padding: 18px 0; }

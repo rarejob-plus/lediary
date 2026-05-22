@@ -8,7 +8,7 @@ import { getCurrentUser, getIdToken } from '../auth';
 import { navigate } from '../router';
 import { enableTextSelectionBookmark, bookmarkPhrase } from '../components/text-selection-bookmark';
 import { correctExpansionAnswer, extractVocabulary, generateExpansionQuestions } from '../llm-diary';
-import { savePostTextOnly, savePostPicks, gatherKnownVocabFor } from '../data/posts';
+import { savePostTextOnly, savePostPicks, gatherKnownVocabFor, finalizeEntry, unfinalizeEntry } from '../data/posts';
 import { createShadowingPlayer } from '../components/shadowing-player';
 import { enhanceTextarea } from '../components/textarea';
 import { deletePickAudio } from '../data/picksAudio';
@@ -74,7 +74,7 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
 
   // Content
   const content = document.createElement('div');
-  content.className = 'entry-content';
+  content.className = `entry-content${entry.finalizedAt ? ' entry-content--finalized' : ''}`;
 
   const dateBlock = document.createElement('div');
   dateBlock.className = 'entry-date-block';
@@ -84,8 +84,24 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
       <strong>${d.toLocaleDateString('en-US', { weekday: 'long' })}</strong>
       <span>${d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} · ${entry.time}</span>
     </div>
+    ${entry.finalizedAt ? `<span class="entry-finalized-pill" title="完成済 (タップで再編集)">${icons.check(12)} 完成</span>` : ''}
   `;
   content.appendChild(dateBlock);
+
+  // 完成済のとき、date pill をクリック → 再編集モードに戻す
+  if (entry.finalizedAt) {
+    const pill = dateBlock.querySelector('.entry-finalized-pill') as HTMLElement | null;
+    pill?.addEventListener('click', async () => {
+      if (!confirm('完成済の日記を編集します。よろしいですか?')) return;
+      try {
+        await unfinalizeEntry(entry.id);
+        entry.finalizedAt = undefined;
+        navigate(`/entry/${entry.id}`); // 再 render
+      } catch (e) {
+        console.error(e); alert('解除に失敗しました');
+      }
+    });
+  }
 
   const actions = document.createElement('div');
   actions.className = 'entry-actions';
@@ -94,6 +110,9 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
     <button class="btn btn-sm" id="redo">もう一度添削</button>
     <button class="btn btn-sm" id="flow">流れを整える</button>
     <button class="btn btn-sm" id="movemode">モード変更</button>
+    ${entry.finalizedAt
+      ? ''
+      : `<button class="btn btn-sm btn-finalize" id="finalize" title="これ以上編集しない">${icons.check(14)} 完成</button>`}
     <button class="btn btn-sm btn-ghost danger" id="del" title="削除">${icons.trash(14)}</button>
   `;
   actions.querySelector('#edit')!.addEventListener('click', () => {
@@ -144,6 +163,24 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
       moveBtn.textContent = 'モード変更';
     }
   });
+  const finalizeBtn = actions.querySelector('#finalize') as HTMLButtonElement | null;
+  if (finalizeBtn) {
+    finalizeBtn.addEventListener('click', async () => {
+      if (!confirm('この日記を「完成」にしますか? 以降は読書モードで開き、編集に確認を挟むようになります。')) return;
+      finalizeBtn.disabled = true;
+      finalizeBtn.textContent = '保存中…';
+      try {
+        await finalizeEntry(entry.id);
+        entry.finalizedAt = Date.now();
+        navigate(`/entry/${entry.id}`); // 再 render で読書モードに
+      } catch (e) {
+        console.error(e);
+        alert('保存に失敗しました');
+        finalizeBtn.disabled = false;
+      }
+    });
+  }
+
   actions.querySelector('#del')!.addEventListener('click', async () => {
     if (!confirm('この日記を削除しますか？元に戻せません。')) return;
     const delBtn = actions.querySelector('#del') as HTMLButtonElement;
@@ -177,7 +214,9 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
   enableTextSelectionBookmark(body);
 
   // 英語日記 BOY 流: 添削後にユーザーが「覚えたい 1 フレーズ」を選び、専用シャドーイング
-  appendSection(content, '今日の 1 フレーズ', renderPicksSection(entry), true);
+  // 完成済の場合は読書モードに集中させるため、全セクション折りたたみで開く。
+  const openByDefault = !entry.finalizedAt;
+  appendSection(content, '今日の 1 フレーズ', renderPicksSection(entry), openByDefault);
   appendSection(content, '覚えたいフレーズ', renderVocabSection(entry.vocabulary), false);
   appendSection(content, '日記を膨らませる', renderExpansionSection(entry, body), false);
 

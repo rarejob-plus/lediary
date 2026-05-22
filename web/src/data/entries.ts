@@ -30,6 +30,7 @@ interface RawPost {
   hints?: unknown[];
   createdAt?: number | { _seconds: number };
   updatedAt?: number | { _seconds: number };
+  finalizedAt?: number;
   mood?: string;
   lessonSheetId?: string;
   coverImageUrl?: string;
@@ -62,6 +63,7 @@ function toEntry(raw: RawPost): DiaryEntry {
     vocabulary: raw.vocabulary || [],
     expansionQuestions: raw.expansionQuestions || [],
     picks: raw.picks || [],
+    finalizedAt: raw.finalizedAt,
     mood: raw.mood,
     lessonSheetId: raw.lessonSheetId,
     coverImageUrl: raw.coverImageUrl,

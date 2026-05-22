@@ -69,6 +69,24 @@ export async function savePostTextOnly(input: TextOnlySaveInput): Promise<void> 
   invalidateEntriesCache();
 }
 
+/** 「完成」マーカーを付ける。以降は entry detail が読書モードで開く。 */
+export async function finalizeEntry(entryId: string): Promise<void> {
+  await updateDoc(doc(db, 'lediary-posts', entryId), {
+    finalizedAt: Date.now(),
+    updatedAt: Date.now(),
+  });
+  invalidateEntriesCache();
+}
+
+/** 完成解除 (再編集に戻す)。 */
+export async function unfinalizeEntry(entryId: string): Promise<void> {
+  await updateDoc(doc(db, 'lediary-posts', entryId), {
+    finalizedAt: null,
+    updatedAt: Date.now(),
+  });
+  invalidateEntriesCache();
+}
+
 /** 「今日の 1 フレーズ」リストを上書き保存。
  *  Firestore は undefined を弾くため、各 pick オブジェクトから undefined フィールドを除去する。 */
 export async function savePostPicks(entryId: string, picks: unknown[]): Promise<void> {
