@@ -214,11 +214,18 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
   enableTextSelectionBookmark(body);
 
   // 英語日記 BOY 流: 添削後にユーザーが「覚えたい 1 フレーズ」を選び、専用シャドーイング
-  // 完成済の場合は読書モードに集中させるため、全セクション折りたたみで開く。
-  const openByDefault = !entry.finalizedAt;
-  appendSection(content, '今日の 1 フレーズ', renderPicksSection(entry), openByDefault);
-  appendSection(content, '覚えたいフレーズ', renderVocabSection(entry.vocabulary), false);
-  appendSection(content, '日記を膨らませる', renderExpansionSection(entry, body), false);
+  // 完成済の場合: 編集系セクション (覚えたいフレーズ / 日記を膨らませる) は完全に省略。
+  // 今日の 1 フレーズは既存 pick があればシャドーイング用に出す (read-only、追加フォーム無し)。
+  if (entry.finalizedAt) {
+    const existingPicks = Array.isArray(entry.picks) ? entry.picks : [];
+    if (existingPicks.length > 0) {
+      appendSection(content, '今日の 1 フレーズ', renderPicksSection(entry, { readOnly: true }), true);
+    }
+  } else {
+    appendSection(content, '今日の 1 フレーズ', renderPicksSection(entry), true);
+    appendSection(content, '覚えたいフレーズ', renderVocabSection(entry.vocabulary), false);
+    appendSection(content, '日記を膨らませる', renderExpansionSection(entry, body), false);
+  }
 
   root.appendChild(content);
 }
@@ -246,7 +253,7 @@ function appendSection(parent: HTMLElement, title: string, body: HTMLElement, op
 /** 英語日記 BOY 流「今日の 1 フレーズ」セクション。
  *  添削後のユーザー本文から覚えたいフレーズをピックし、専用シャドーイング player で繰り返す。
  *  各 pick は post.picks に永続化される。 */
-function renderPicksSection(entry: DiaryEntry): HTMLElement {
+function renderPicksSection(entry: DiaryEntry, opts: { readOnly?: boolean } = {}): HTMLElement {
   const wrap = document.createElement('div');
   wrap.className = 'picks-section';
 
@@ -255,25 +262,29 @@ function renderPicksSection(entry: DiaryEntry): HTMLElement {
 
   const intro = document.createElement('p');
   intro.className = 'picks-intro';
-  intro.textContent = '言えるようになりたい 1 フレーズを選んで、TTS でシャドーイング。';
+  intro.textContent = opts.readOnly
+    ? '保存したフレーズを再生してシャドーイング。'
+    : '言えるようになりたい 1 フレーズを選んで、TTS でシャドーイング。';
   wrap.appendChild(intro);
 
-  // 入力フォーム: 「本文から選ぶ」「自由入力」の 2 経路
-  const form = document.createElement('div');
-  form.className = 'picks-form';
-  const sentences = splitIntoPickableSentences(entry.userTranslation || '');
-  form.innerHTML = `
-    ${sentences.length > 0 ? `
-      <select class="picks-form-select" aria-label="本文から選ぶ">
-        <option value="">— 本文の文から選ぶ —</option>
-        ${sentences.map((s, i) => `<option value="${escapeAttr(s)}">${i + 1}. ${escapeHtml(s.length > 60 ? s.slice(0, 58) + '…' : s)}</option>`).join('')}
-      </select>
-    ` : ''}
-    <textarea name="pick-text" class="picks-form-text" rows="2" placeholder="または自分で入力（添削後の英文を直接コピー可）"></textarea>
-    <textarea name="pick-note" class="picks-form-note" rows="1" placeholder="日本語メモ（任意）— 何を言いたかったか"></textarea>
-    <button class="btn btn-primary picks-form-btn" type="button">${icons.plus(14)} このフレーズを追加</button>
-  `;
-  wrap.appendChild(form);
+  // 完成済 (readOnly) の時は入力フォームを作らない。再生だけ。
+  const sentences = opts.readOnly ? [] : splitIntoPickableSentences(entry.userTranslation || '');
+  const form = opts.readOnly ? null : document.createElement('div');
+  if (form) {
+    form.className = 'picks-form';
+    form.innerHTML = `
+      ${sentences.length > 0 ? `
+        <select class="picks-form-select" aria-label="本文から選ぶ">
+          <option value="">— 本文の文から選ぶ —</option>
+          ${sentences.map((s, i) => `<option value="${escapeAttr(s)}">${i + 1}. ${escapeHtml(s.length > 60 ? s.slice(0, 58) + '…' : s)}</option>`).join('')}
+        </select>
+      ` : ''}
+      <textarea name="pick-text" class="picks-form-text" rows="2" placeholder="または自分で入力（添削後の英文を直接コピー可）"></textarea>
+      <textarea name="pick-note" class="picks-form-note" rows="1" placeholder="日本語メモ（任意）— 何を言いたかったか"></textarea>
+      <button class="btn btn-primary picks-form-btn" type="button">${icons.plus(14)} このフレーズを追加</button>
+    `;
+    wrap.appendChild(form);
+  }
 
   const list = document.createElement('div');
   list.className = 'picks-list';
@@ -319,6 +330,7 @@ function renderPicksSection(entry: DiaryEntry): HTMLElement {
   }
   renderList();
 
+  if (!form) return wrap;
   const selectEl = form.querySelector('.picks-form-select') as HTMLSelectElement | null;
   const textEl = form.querySelector('.picks-form-text') as HTMLTextAreaElement;
   const noteEl = form.querySelector('.picks-form-note') as HTMLTextAreaElement;
