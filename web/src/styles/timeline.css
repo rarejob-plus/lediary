@@ -616,3 +616,82 @@ body.day-rating-modal-open {
   color: var(--text);
   border-color: var(--border-strong);
 }
+
+/* ─── Onboarding banner (entries 0 件のとき timeline 最上部に出す) ─── */
+.onboarding-banner {
+  background: linear-gradient(180deg, var(--ld-surface) 0%, var(--ld-bg) 100%);
+  border: 1px solid var(--ld-rule);
+  border-radius: var(--ld-r-md);
+  padding: 24px 22px;
+  margin-bottom: 24px;
+}
+.onboarding-banner-title {
+  font-family: var(--ld-serif);
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--ld-ink);
+  margin: 0 0 6px;
+}
+.onboarding-banner-sub {
+  font-family: var(--ld-sans);
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ld-secondary);
+  margin-bottom: 18px;
+}
+.onboarding-banner-sub strong {
+  color: var(--ld-accent-deep);
+  font-weight: 600;
+}
+.onboarding-steps {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0;
+  margin: 0 0 14px;
+}
+.onboarding-steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 8px 10px;
+  background: var(--ld-bg);
+  border: 1px solid var(--ld-rule);
+  border-radius: var(--ld-r-sm);
+}
+.onboarding-step-n {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--ld-accent-tint);
+  color: var(--ld-accent-deep);
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.onboarding-steps li > div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.onboarding-steps li > div strong {
+  font-family: var(--ld-sans);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ld-ink);
+}
+.onboarding-steps li > div span {
+  font-size: 12px;
+  color: var(--ld-muted);
+  line-height: 1.6;
+}
+.onboarding-banner-cta-hint {
+  font-size: 11px;
+  color: var(--ld-muted);
+  text-align: center;
+  margin: 0;
+}

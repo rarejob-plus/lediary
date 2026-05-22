@@ -1,6 +1,7 @@
 import { navigate, render as routerRender } from '../router';
 import { icons } from './icons';
 import { getCurrentUser, loginWithGoogle, logout } from '../auth';
+import { getStoredTheme, nextTheme, setStoredTheme, type Theme } from './theme';
 
 export function renderHeader(active: 'timeline' | 'calendar' | 'editor' | 'phrases' | null): HTMLElement {
   const user = getCurrentUser();
@@ -14,6 +15,7 @@ export function renderHeader(active: 'timeline' | 'calendar' | 'editor' | 'phras
         <button class="icon-btn ${active === 'timeline' ? 'active' : ''}" data-nav="/" title="タイムライン">${icons.pen(18)}</button>
         <button class="icon-btn ${active === 'phrases' ? 'active' : ''}" data-nav="/phrases" title="私のフレーズ集">${icons.sparkles(18)}</button>
         <button class="icon-btn ${active === 'calendar' ? 'active' : ''}" data-nav="/calendar" title="カレンダー">${icons.calendar(18)}</button>
+        <button class="icon-btn" id="theme-btn" title="${themeTitle(getStoredTheme())}">${themeIcon(getStoredTheme())}</button>
         ${user
           ? `<button class="icon-btn" id="auth-btn" title="ログアウト (${escapeAttr(user.email || '')})">
               <img src="${escapeAttr(user.photoURL || '')}" alt="" style="width:24px;height:24px;border-radius:50%;" />
@@ -28,6 +30,16 @@ export function renderHeader(active: 'timeline' | 'calendar' | 'editor' | 'phras
       navigate((el as HTMLElement).dataset.nav!);
     });
   });
+
+  const themeBtn = header.querySelector('#theme-btn') as HTMLButtonElement | null;
+  if (themeBtn) {
+    themeBtn.addEventListener('click', () => {
+      const next = nextTheme(getStoredTheme());
+      setStoredTheme(next);
+      themeBtn.innerHTML = themeIcon(next);
+      themeBtn.title = themeTitle(next);
+    });
+  }
 
   const authBtn = header.querySelector('#auth-btn') as HTMLButtonElement | null;
   if (authBtn) {
@@ -63,4 +75,15 @@ export function renderFab(opts?: { label?: string; mode?: string }): HTMLElement
 
 function escapeAttr(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+}
+
+function themeIcon(t: Theme): string {
+  if (t === 'dark')  return icons.moon(18);
+  if (t === 'auto')  return icons.monitor(18);
+  return icons.sun(18);
+}
+function themeTitle(t: Theme): string {
+  if (t === 'dark')  return 'テーマ: ダーク (タップで自動に)';
+  if (t === 'auto')  return 'テーマ: 自動 (OS 設定に追従)';
+  return 'テーマ: ライト (タップでダークに)';
 }

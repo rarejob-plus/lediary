@@ -2,9 +2,13 @@ import './styles/base.css';
 import './styles/timeline.css';
 import './styles/editor.css';
 import './styles/entry.css';
+import { applyTheme } from './components/theme';
 import { render } from './router';
 import { onAuth, getCurrentUser } from './auth';
 import { isPushSupported, isNotificationGranted, isSubscribed, subscribePush } from './push';
+
+// テーマを早期に適用 (FOUC 回避)。
+applyTheme();
 
 // 認証状態が変わったら（ログイン/ログアウト）UI を再レンダリング
 let firstAuthSettled = false;

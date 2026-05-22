@@ -87,6 +87,12 @@ export function renderTimeline(root: HTMLElement): void {
 function renderBody(wrap: HTMLElement, entries: DiaryEntry[], days: Map<string, DayRating>): void {
   wrap.innerHTML = '';
 
+  // 新規ユーザー向け: まだ entry 0 件なら、方法説明バナーを最上部に出す。
+  // 1 件でも書けば自動で消える (関数の再 render に任せる)。
+  if (entries.length === 0) {
+    wrap.appendChild(renderOnboardingBanner());
+  }
+
   // Top row: today label
   const streak = computeStreak(entries);
   const topRow = document.createElement('div');
@@ -267,4 +273,25 @@ function formatYmd(d: Date): string {
 
 function escapeHtml(s: string | undefined | null): string {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+}
+
+/** 新規ユーザー向け 1 画面オンボーディング。entries 0 件のとき timeline 最上部に表示。 */
+function renderOnboardingBanner(): HTMLElement {
+  const el = document.createElement('section');
+  el.className = 'onboarding-banner';
+  el.innerHTML = `
+    <h2 class="onboarding-banner-title">英語日記、続けるためのアプリ</h2>
+    <p class="onboarding-banner-sub">
+      「英語日記 BOY」流で、毎日の出来事を英語に。<br>
+      ChatGPT に書かせず、<strong>自分で書く</strong>。AI は指摘と添削だけ。
+    </p>
+    <ol class="onboarding-steps">
+      <li><span class="onboarding-step-n">1</span><div><strong>日本語で書く</strong><span>気分が乗らない日も、1〜3 行で OK。</span></div></li>
+      <li><span class="onboarding-step-n">2</span><div><strong>英語にする</strong><span>ヒントを見ながら、自分の手で。</span></div></li>
+      <li><span class="onboarding-step-n">3</span><div><strong>AI が添削</strong><span>添削を読んで、自分で書き直す。</span></div></li>
+      <li><span class="onboarding-step-n">4</span><div><strong>1 フレーズを覚える</strong><span>シャドーイングして口に染み込ませる。</span></div></li>
+    </ol>
+    <p class="onboarding-banner-cta-hint">↓ 下のモードカードから今日の 1 つを選んで書き始められます。</p>
+  `;
+  return el;
 }
