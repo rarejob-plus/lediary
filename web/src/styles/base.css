@@ -924,6 +924,7 @@ input {
   font-size: 12px;
   color: var(--ld-secondary);
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .phrase-count {

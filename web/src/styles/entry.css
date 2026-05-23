@@ -741,6 +741,7 @@
   font-size: 12px;
   color: var(--ld-secondary);
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .pick-count {
@@ -773,6 +774,9 @@
 }
 .pron-rec {
   align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   background: var(--ld-bg);
   border: 1px solid var(--ld-rule-strong);
   border-radius: 100px;
@@ -781,7 +785,10 @@
   color: var(--ld-ink);
   cursor: pointer;
   transition: background 0.12s, border-color 0.12s;
+  white-space: nowrap;
 }
+.pron-rec-icon { display: inline-flex; align-items: center; }
+.pron-rec-label { white-space: nowrap; }
 .pron-rec:hover { background: var(--ld-surface); }
 .pron-rec--active {
   background: #fef2f2;

@@ -64,7 +64,10 @@ export function createShadowingPlayer(opts: ShadowingPlayerOptions): HTMLElement
     </div>
     ${srSupported ? `
       <div class="pron-pane">
-        <button class="pron-rec" type="button" title="自分の発音を録音">🎤 録音する</button>
+        <button class="pron-rec" type="button" title="自分の発音を録音">
+          <span class="pron-rec-icon">${icons.mic(14)}</span>
+          <span class="pron-rec-label">録音する</span>
+        </button>
         ${scoreLineHtml}
         <div class="pron-result" aria-live="polite"></div>
       </div>
@@ -189,14 +192,15 @@ export function createShadowingPlayer(opts: ShadowingPlayerOptions): HTMLElement
   if (recBtn && resultEl) {
     let recording = false;
     let bestScore = opts.bestScore;
+    const recLabelEl = recBtn.querySelector('.pron-rec-label') as HTMLElement | null;
+    const idleLabelText = recLabelEl?.textContent || '録音する';
     recBtn.addEventListener('click', async () => {
       if (recording) return;
       // TTS 再生中なら止める (マイクと競合させない)
       if (isPlaying) { audioEl.pause(); isPlaying = false; playBtn.innerHTML = icons.play(14); }
       recording = true;
-      const original = recBtn.textContent;
       recBtn.classList.add('pron-rec--active');
-      recBtn.textContent = '🎤 録音中… 話してください';
+      if (recLabelEl) recLabelEl.textContent = '録音中… 話してください';
       resultEl.innerHTML = '';
       try {
         const rec = await recognizeOnce(10_000);
@@ -224,7 +228,7 @@ export function createShadowingPlayer(opts: ShadowingPlayerOptions): HTMLElement
       } finally {
         recording = false;
         recBtn.classList.remove('pron-rec--active');
-        recBtn.textContent = original || '🎤 録音する';
+        if (recLabelEl) recLabelEl.textContent = idleLabelText;
       }
     });
   }
