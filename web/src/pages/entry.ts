@@ -9,7 +9,7 @@ import { navigate } from '../router';
 import { enableTextSelectionBookmark, bookmarkPhrase } from '../components/text-selection-bookmark';
 import { correctExpansionAnswer, extractVocabulary, generateExpansionQuestions } from '../llm-diary';
 import { savePostTextOnly, savePostPicks, gatherKnownVocabFor, finalizeEntry, unfinalizeEntry } from '../data/posts';
-import { fetchUnsplashCover, notifyUnsplashDownload } from '../unsplash';
+import { searchUnsplashCandidates, notifyUnsplashDownload, type UnsplashCandidate } from '../unsplash';
 import { createShadowingPlayer } from '../components/shadowing-player';
 import { enhanceTextarea } from '../components/textarea';
 import { deletePickAudio } from '../data/picksAudio';
@@ -183,43 +183,29 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
     });
   }
 
-  // カバー画像差し替え: ユーザーが Unsplash キーワードを入力して再取得 → Firestore に保存 + hero を更新
-  actions.querySelector('#cover')!.addEventListener('click', async () => {
-    const current = (entry as { coverKeyword?: string }).coverKeyword || '';
-    const kw = prompt('カバー画像のキーワード (英語、例: "bbq" / "summer picnic")', current);
-    if (kw == null) return;
-    const trimmed = kw.trim();
-    if (!trimmed) return;
-    const btn = actions.querySelector('#cover') as HTMLButtonElement;
-    btn.disabled = true;
-    btn.textContent = '取得中…';
-    try {
-      const cover = await fetchUnsplashCover(trimmed);
-      if (!cover) {
-        alert(`"${trimmed}" の画像が見つかりませんでした`);
-        return;
+  // カバー画像差し替え: キーワード入力 → 候補グリッドから 1 枚選択 → 保存 + hero 更新。
+  actions.querySelector('#cover')!.addEventListener('click', () => {
+    const initial = (entry as { coverKeyword?: string }).coverKeyword || '';
+    openCoverPicker(initial, async (chosen, keyword) => {
+      try {
+        await updateDoc(doc(db, 'lediary-posts', entry.id), {
+          coverImageUrl: chosen.url,
+          coverPhotographer: chosen.photographer,
+          coverPhotographerUrl: chosen.photographerUrl,
+          coverKeyword: keyword,
+          updatedAt: Date.now(),
+        });
+        void notifyUnsplashDownload(chosen.downloadLocation);
+        invalidateEntriesCache();
+        entry.coverImageUrl = chosen.url;
+        entry.coverPhotographer = chosen.photographer;
+        entry.coverPhotographerUrl = chosen.photographerUrl;
+        hero.style.background = entry.cover ?? coverFor(entry.mode, entry.time, chosen.url);
+      } catch (e) {
+        console.error('[cover] save failed', e);
+        alert('カバー画像の保存に失敗しました');
       }
-      await updateDoc(doc(db, 'lediary-posts', entry.id), {
-        coverImageUrl: cover.url,
-        coverPhotographer: cover.photographer,
-        coverPhotographerUrl: cover.photographerUrl,
-        coverKeyword: trimmed,
-        updatedAt: Date.now(),
-      });
-      void notifyUnsplashDownload(cover.downloadLocation);
-      invalidateEntriesCache();
-      entry.coverImageUrl = cover.url;
-      entry.coverPhotographer = cover.photographer;
-      entry.coverPhotographerUrl = cover.photographerUrl;
-      // hero の背景を即座に差し替え
-      hero.style.background = entry.cover ?? coverFor(entry.mode, entry.time, cover.url);
-    } catch (e) {
-      console.error('[cover] failed', e);
-      alert('カバー画像の取得に失敗しました');
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'カバーを変える';
-    }
+    });
   });
 
   actions.querySelector('#del')!.addEventListener('click', async () => {
@@ -922,6 +908,77 @@ function deriveHeroTitle(entry: DiaryEntry): string {
   const first = (m ? m[0] : source).trim();
   // 80 文字を超えたら省略
   return first.length > 80 ? first.slice(0, 78).trimEnd() + '…' : first;
+}
+
+/** Unsplash 候補グリッド modal。キーワード検索 → サムネイル一覧 → クリックで選択 → onPick(候補, 使ったキーワード)。 */
+function openCoverPicker(
+  initialKeyword: string,
+  onPick: (chosen: UnsplashCandidate, keyword: string) => void | Promise<void>,
+): void {
+  const overlay = document.createElement('div');
+  overlay.className = 'cover-picker-overlay';
+  overlay.innerHTML = `
+    <div class="cover-picker">
+      <header class="cover-picker-head">
+        <h3 class="cover-picker-title">カバーを変える</h3>
+        <button class="cover-picker-close" type="button" aria-label="閉じる">${icons.x(16)}</button>
+      </header>
+      <form class="cover-picker-search">
+        <input type="text" class="cover-picker-input" name="keyword" autocomplete="off"
+          placeholder="英語のキーワード (例: bbq, autumn leaves)" value="${escapeAttr(initialKeyword)}" />
+        <button class="btn btn-primary" type="submit">検索</button>
+      </form>
+      <div class="cover-picker-grid" id="cover-picker-grid">
+        <p class="cover-picker-hint">キーワードを入れて検索してください。</p>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) close();
+  });
+  overlay.querySelector('.cover-picker-close')!.addEventListener('click', close);
+
+  const form = overlay.querySelector('.cover-picker-search') as HTMLFormElement;
+  const input = overlay.querySelector('.cover-picker-input') as HTMLInputElement;
+  const grid = overlay.querySelector('#cover-picker-grid') as HTMLElement;
+  input.focus();
+  input.select();
+
+  async function search(): Promise<void> {
+    const kw = input.value.trim();
+    if (!kw) return;
+    grid.innerHTML = '<p class="cover-picker-hint">検索中…</p>';
+    const candidates = await searchUnsplashCandidates(kw, 12);
+    if (candidates.length === 0) {
+      grid.innerHTML = `<p class="cover-picker-hint">"${escapeHtml(kw)}" の画像が見つかりませんでした。別のキーワードを試してください。</p>`;
+      return;
+    }
+    grid.innerHTML = candidates.map((c, i) => `
+      <button class="cover-picker-thumb" type="button" data-i="${i}" title="${escapeAttr(c.alt || c.photographer)}">
+        <img src="${escapeAttr(c.thumbUrl)}" loading="lazy" alt="" />
+        <span class="cover-picker-credit">${escapeHtml(c.photographer)}</span>
+      </button>
+    `).join('');
+    grid.querySelectorAll<HTMLButtonElement>('.cover-picker-thumb').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const idx = parseInt(btn.dataset.i || '0', 10);
+        const chosen = candidates[idx];
+        if (!chosen) return;
+        btn.classList.add('cover-picker-thumb--chosen');
+        await onPick(chosen, kw);
+        close();
+      });
+    });
+  }
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    void search();
+  });
+  // 初期キーワードがあれば即検索
+  if (initialKeyword.trim()) void search();
 }
 
 function escapeAttr(s: string): string {

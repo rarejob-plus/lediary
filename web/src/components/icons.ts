@@ -12,6 +12,7 @@ export const icons = {
   share: (s = 18) => wrap('<path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" x2="12" y1="2" y2="15"/>', s),
   more: (s = 18) => wrap('<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>', s),
   plus: (s = 18) => wrap('<path d="M5 12h14"/><path d="M12 5v14"/>', s),
+  x: (s = 18) => wrap('<path d="M18 6 6 18"/><path d="m6 6 12 12"/>', s),
   pen: (s = 18) => wrap('<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/>', s),
   calendar: (s = 18) => wrap('<rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/>', s),
   clock: (s = 18) => wrap('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>', s),

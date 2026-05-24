@@ -12,10 +12,11 @@ export interface UnsplashCover {
 }
 
 interface Photo {
-  urls: { regular: string };
+  urls: { regular: string; small?: string; thumb?: string };
   user: { name: string; links: { html: string } };
   links: { download_location: string };
   color?: string;
+  alt_description?: string;
 }
 
 // hex (#rrggbb) → 知覚輝度 0-255。基準: ITU-R BT.601。
@@ -96,6 +97,42 @@ export async function fetchUnsplashCover(keyword: string): Promise<UnsplashCover
   } catch (e) {
     console.warn('Unsplash fetch error:', e);
     return null;
+  }
+}
+
+/** 検索結果を candidate 配列として返す (UI で候補から選ばせる用)。
+ *  fetchUnsplashCover は内部でこれを叩いてランダムに 1 枚選んでるが、
+ *  「カバーを変える」UI ではユーザーが選びたいので、上位 N 件をそのまま返す。 */
+export interface UnsplashCandidate {
+  url: string;            // regular サイズ (hero に使う)
+  thumbUrl: string;       // small サイズ (グリッド表示用)
+  photographer: string;
+  photographerUrl: string;
+  downloadLocation: string;
+  alt: string;
+}
+
+export async function searchUnsplashCandidates(keyword: string, limit = 12): Promise<UnsplashCandidate[]> {
+  if (!keyword || !ACCESS_KEY) return [];
+  try {
+    const tokens = keyword.trim().split(/\s+/);
+    let results: Photo[] = [];
+    for (let i = 0; i < tokens.length; i++) {
+      const q = tokens.slice(i).join(' ');
+      results = await searchPhotos(q);
+      if (results.length) break;
+    }
+    return results.slice(0, limit).map((p) => ({
+      url: p.urls.regular,
+      thumbUrl: p.urls.small || p.urls.thumb || p.urls.regular,
+      photographer: p.user.name,
+      photographerUrl: p.user.links.html,
+      downloadLocation: p.links.download_location,
+      alt: p.alt_description || '',
+    }));
+  } catch (e) {
+    console.warn('Unsplash search error:', e);
+    return [];
   }
 }
 
