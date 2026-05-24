@@ -55,10 +55,11 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
   hero.style.background = entry.cover ?? coverFor(entry.mode, entry.time, entry.coverImageUrl);
   hero.innerHTML = `
     <div class="entry-hero-fade"></div>
+    <button type="button" class="entry-hero-cover-btn" title="カバー画像を変更" aria-label="カバー画像を変更">${icons.refreshCw(16)}</button>
     <div class="entry-hero-overlay">
       <h1 class="entry-hero-title">${escapeHtml(deriveHeroTitle(entry))}</h1>
       <div class="ld-meta ld-meta--on-cover entry-hero-meta">
-        <span class="ld-meta__item ld-meta__item--accent"><span class="ld-meta__icon">${iconFor(meta.icon, 12)}</span>${meta.label}</span>
+        <button type="button" class="ld-meta__item ld-meta__item--accent ld-meta__item--link entry-hero-mode-trigger" title="モード変更"><span class="ld-meta__icon">${iconFor(meta.icon, 12)}</span>${meta.label}</button>
         <span class="ld-meta__item">${renderSekkiInline(entry.date)}</span>
         <span class="ld-meta__item">${dayOfYear(entry.date)} / ${daysInYear(entry.date)}</span>
         ${entry.mood ? `<span class="ld-meta__item">${escapeHtml(entry.mood)}</span>` : ''}
@@ -110,8 +111,6 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
     <button class="btn btn-sm" id="edit">${icons.pencil(14)} 編集</button>
     <button class="btn btn-sm" id="redo">もう一度添削</button>
     <button class="btn btn-sm" id="flow">流れを整える</button>
-    <button class="btn btn-sm" id="movemode">モード変更</button>
-    <button class="btn btn-sm" id="cover" title="カバー画像を変更">カバーを変える</button>
     ${entry.finalizedAt
       ? ''
       : `<button class="btn btn-sm btn-finalize" id="finalize" title="これ以上編集しない">${icons.check(14)} 完成</button>`}
@@ -129,7 +128,9 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
     stashForEditor(entry);
     navigate(`/editor?date=${entry.date}&mode=${entry.mode}&action=flow`);
   });
-  actions.querySelector('#movemode')!.addEventListener('click', async () => {
+  // モード変更: ヒーロー上の Morning/Lesson… pill クリックで起動
+  const modeTrigger = hero.querySelector('.entry-hero-mode-trigger') as HTMLButtonElement | null;
+  modeTrigger?.addEventListener('click', async () => {
     const user = getCurrentUser();
     if (!user) {
       alert('ログインが必要です');
@@ -145,24 +146,20 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
     }
     const targetMode = others[idx]!;
     const targetId = `${user.uid}_${entry.date}_${targetMode}`;
-    // 移動先に既にエントリがあれば中止
     const existingTarget = await fetchEntry(targetId);
     if (existingTarget && (existingTarget.contentJp || existingTarget.userTranslation)) {
       alert(`${MODE_META[targetMode].label} には既にエントリがあります。先に削除してください。`);
       return;
     }
     if (!confirm(`このエントリを ${MODE_META[entry.mode].label} → ${MODE_META[targetMode].label} に移しますか？`)) return;
-    const moveBtn = actions.querySelector('#movemode') as HTMLButtonElement;
-    moveBtn.disabled = true;
-    moveBtn.textContent = '移動中…';
+    modeTrigger.disabled = true;
     try {
       const res = await moveEntryMode(entry.id, targetMode);
       navigate(`/entry/${res.id || targetId}`);
     } catch (err) {
       console.error(err);
       alert('モード変更に失敗しました');
-      moveBtn.disabled = false;
-      moveBtn.textContent = 'モード変更';
+      modeTrigger.disabled = false;
     }
   });
   const finalizeBtn = actions.querySelector('#finalize') as HTMLButtonElement | null;
@@ -183,8 +180,9 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
     });
   }
 
-  // カバー画像差し替え: キーワード入力 → 候補グリッドから 1 枚選択 → 保存 + hero 更新。
-  actions.querySelector('#cover')!.addEventListener('click', () => {
+  // カバー画像差し替え: hero 右上の リフレッシュアイコンから起動。
+  const coverTrigger = hero.querySelector('.entry-hero-cover-btn') as HTMLButtonElement | null;
+  coverTrigger?.addEventListener('click', () => {
     const initial = (entry as { coverKeyword?: string }).coverKeyword || '';
     openCoverPicker(initial, async (chosen, keyword) => {
       try {

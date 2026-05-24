@@ -76,6 +76,50 @@
   }
 }
 
+/* カバー差し替えトリガー — hero 右上のリフレッシュアイコン */
+.entry-hero-cover-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(0, 0, 0, 0.32);
+  color: #fff;
+  border-radius: 999px;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  transition: background 0.15s, transform 0.15s;
+  z-index: 3;
+}
+.entry-hero-cover-btn:hover {
+  background: rgba(0, 0, 0, 0.5);
+  transform: rotate(-20deg);
+}
+.entry-hero-cover-btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* モード変更トリガー — hero 上の Morning/Lesson… pill */
+.entry-hero-mode-trigger {
+  border: none;
+  font: inherit;
+  cursor: pointer;
+  padding: inherit;
+  color: inherit;
+  background: inherit;
+}
+.entry-hero-mode-trigger:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
 .entry-hero-credit {
   position: absolute;
   bottom: 6px;

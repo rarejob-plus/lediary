@@ -55,6 +55,12 @@ export const icons = {
     + '<path d="m2 2 20 20"/>',
     s,
   ),
+  // Lucide refresh-cw (カバー差し替え用)
+  refreshCw: (s = 18) => wrap(
+    '<path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/>'
+    + '<path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M8 16H3v5"/>',
+    s,
+  ),
   eye: (s = 18) => wrap(
     '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/>'
     + '<circle cx="12" cy="12" r="3"/>',
