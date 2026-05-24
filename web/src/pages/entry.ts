@@ -9,6 +9,7 @@ import { navigate } from '../router';
 import { enableTextSelectionBookmark, bookmarkPhrase } from '../components/text-selection-bookmark';
 import { correctExpansionAnswer, extractVocabulary, generateExpansionQuestions } from '../llm-diary';
 import { savePostTextOnly, savePostPicks, gatherKnownVocabFor, finalizeEntry, unfinalizeEntry } from '../data/posts';
+import { fetchUnsplashCover, notifyUnsplashDownload } from '../unsplash';
 import { createShadowingPlayer } from '../components/shadowing-player';
 import { enhanceTextarea } from '../components/textarea';
 import { deletePickAudio } from '../data/picksAudio';
@@ -110,6 +111,7 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
     <button class="btn btn-sm" id="redo">もう一度添削</button>
     <button class="btn btn-sm" id="flow">流れを整える</button>
     <button class="btn btn-sm" id="movemode">モード変更</button>
+    <button class="btn btn-sm" id="cover" title="カバー画像を変更">カバーを変える</button>
     ${entry.finalizedAt
       ? ''
       : `<button class="btn btn-sm btn-finalize" id="finalize" title="これ以上編集しない">${icons.check(14)} 完成</button>`}
@@ -180,6 +182,45 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
       }
     });
   }
+
+  // カバー画像差し替え: ユーザーが Unsplash キーワードを入力して再取得 → Firestore に保存 + hero を更新
+  actions.querySelector('#cover')!.addEventListener('click', async () => {
+    const current = (entry as { coverKeyword?: string }).coverKeyword || '';
+    const kw = prompt('カバー画像のキーワード (英語、例: "bbq" / "summer picnic")', current);
+    if (kw == null) return;
+    const trimmed = kw.trim();
+    if (!trimmed) return;
+    const btn = actions.querySelector('#cover') as HTMLButtonElement;
+    btn.disabled = true;
+    btn.textContent = '取得中…';
+    try {
+      const cover = await fetchUnsplashCover(trimmed);
+      if (!cover) {
+        alert(`"${trimmed}" の画像が見つかりませんでした`);
+        return;
+      }
+      await updateDoc(doc(db, 'lediary-posts', entry.id), {
+        coverImageUrl: cover.url,
+        coverPhotographer: cover.photographer,
+        coverPhotographerUrl: cover.photographerUrl,
+        coverKeyword: trimmed,
+        updatedAt: Date.now(),
+      });
+      void notifyUnsplashDownload(cover.downloadLocation);
+      invalidateEntriesCache();
+      entry.coverImageUrl = cover.url;
+      entry.coverPhotographer = cover.photographer;
+      entry.coverPhotographerUrl = cover.photographerUrl;
+      // hero の背景を即座に差し替え
+      hero.style.background = entry.cover ?? coverFor(entry.mode, entry.time, cover.url);
+    } catch (e) {
+      console.error('[cover] failed', e);
+      alert('カバー画像の取得に失敗しました');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'カバーを変える';
+    }
+  });
 
   actions.querySelector('#del')!.addEventListener('click', async () => {
     if (!confirm('この日記を削除しますか？元に戻せません。')) return;

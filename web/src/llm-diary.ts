@@ -330,7 +330,7 @@ Return JSON:
   "vocabulary": [{"word": "...", "definition": "日本語", "example": "..."}],
   "sentencePairs": [{"jp": "JP 1 文", "en": "対応する EN 1 文 (添削後があればそちらを優先)"}]${skipMoodAndCover ? '' : `,
   "mood": "ONE lowercase English word (calm/excited/cozy/buoyant/restless/focused 等)",
-  "coverKeyword": "1-3 English words for a stock photo. Bias toward Japan (japanese/tokyo/ramen/sakura/konbini/izakaya 等). Concrete subjects, bright not dark."`}
+  "coverKeyword": "1-3 English words for a stock photo. Pick the MOST CONCRETE subject from the diary (food, place, activity, object). Examples: 'bbq grill', 'morning coffee', 'tokyo station', 'wet umbrella', 'office desk'. Only bias toward Japan-themed words (sakura/izakaya/ramen 等) if the diary explicitly references Japanese context. Otherwise pick whatever the diary is literally about. Bright, not dark."`}
 }
 
 Rules:
