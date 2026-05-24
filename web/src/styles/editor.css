@@ -834,3 +834,11 @@ body.editor-focus .compose-textarea:focus {
 @keyframes correction-loading-spin {
   to { transform: rotate(360deg); }
 }
+
+.done-hint {
+  margin-top: 18px;
+  font-size: 11px;
+  color: var(--ld-muted);
+  text-align: center;
+  line-height: 1.5;
+}

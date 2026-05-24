@@ -588,19 +588,27 @@ export function renderEditor(root: HTMLElement): void {
       correctionSection.appendChild(card);
     });
 
+    const doneHint = document.createElement('p');
+    doneHint.className = 'done-hint';
+    doneHint.textContent = '書き直していない文は元の英訳のまま保存されます (AI 添削を勝手に当てません)。';
+    correctionSection.appendChild(doneHint);
+
     const doneBtn = document.createElement('button');
     doneBtn.className = 'btn btn-primary';
-    doneBtn.style.cssText = 'width:100%;margin-top:12px;';
+    doneBtn.style.cssText = 'width:100%;margin-top:8px;';
     doneBtn.textContent = '完成';
     doneBtn.addEventListener('click', async () => {
       captureRewrites(); // 直前の入力も拾う
       const user = getCurrentUser();
-      // rewrites を本文に反映（空なら AI の corrected を採用）
+      // rewrites を本文に反映。**空欄の文は触らない** (= 元の自分の英訳のまま残す)。
+      // 「AI に書かせない、自分で書く力を鍛える」ポリシーのため、空欄を AI corrected で
+      // 自動置換することはしない。学習者が AI 版を採用したい場合は明示的に書き直し欄に書く。
       let finalText = (enBlock.querySelector('#en-input') as HTMLTextAreaElement).value;
       currentFeedback.forEach((fb, i) => {
-        const replacement = (rewrites[i] || '').trim() || fb.corrected;
+        const rewrite = (rewrites[i] || '').trim();
+        if (!rewrite) return; // 空欄はスキップ
         if (fb.original && finalText.includes(fb.original)) {
-          finalText = finalText.replace(fb.original, replacement);
+          finalText = finalText.replace(fb.original, rewrite);
         }
       });
 
