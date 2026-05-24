@@ -299,6 +299,34 @@ export interface AnalyzeOptions {
   skipMoodAndCover?: boolean;
   /** 既知 (= 過去 entry に登場した / dismiss された) phrase。新 vocab 出力時に除外させる。 */
   excludeVocab?: string[];
+  /** モード文脈。morning = 朝に書く今日の予定 / 未来形主体、diary = 過去の出来事 等。 */
+  mode?: 'morning' | 'lesson' | 'diary' | 'story';
+}
+
+/** モードごとの添削方針 (= 未来形 / 過去形 等の期待) を prompt に注入する。 */
+function modeGuidance(mode: AnalyzeOptions['mode']): string {
+  switch (mode) {
+    case 'morning':
+      return `[Mode: Morning intent / plans for today]
+- The writer is journaling at the START of the day. Expect future / near-future content: plans, intentions, hopes.
+- DO NOT "correct" present-perfect / future tense ("I will…", "I'm going to…", "I'm planning to…", "Today I want to…") into past tense. That breaks the writer's intent.
+- Suggest natural near-future expressions when awkward: "I'll", "I'm gonna" (casual), "I plan to", "Hoping to…".
+- If the writer mixes "what I'll do today" with "how I'm feeling this morning", both are valid — don't force tense unification.`;
+    case 'lesson':
+      return `[Mode: Lesson reflection (post-class)]
+- The writer is reflecting on an English lesson that just happened. Expect a mix of past tense (what we talked about) and present tense (what I learned, what I think now).
+- Pay attention to learning-related vocabulary; if they used a clumsy expression, suggest a phrase a teacher would have taught.`;
+    case 'diary':
+      return `[Mode: Evening diary of today's events]
+- The writer is recounting what happened today. Past tense is the default.
+- If they slip into future or unclear tense, gently fix to past where it makes sense for events that already happened.`;
+    case 'story':
+      return `[Mode: Short story / anecdote]
+- The writer is telling a small story or anecdote. Tense can be past (recall) or present (vivid retelling).
+- Preserve the chosen tense — don't unify to past if they've chosen present-tense storytelling.`;
+    default:
+      return '';
+  }
 }
 
 export async function analyzeDiary(
@@ -319,10 +347,12 @@ export async function analyzeDiary(
   };
   const levelInstruction = levelMap[Math.min(Math.max(attemptCount, 1), 3)]!;
 
+  const modeBlock = modeGuidance(opts.mode);
+
   const systemPrompt = `You are an English coach for a Japanese learner. Analyze their Japanese diary + English translation.
 
 ${levelInstruction}
-Tone: casual English like a friend texting (no textbook/formal). Japanese fields use polite ですます調.
+${modeBlock ? modeBlock + '\n' : ''}Tone: casual English like a friend texting (no textbook/formal). Japanese fields use polite ですます調.
 
 Return JSON:
 {

@@ -177,6 +177,7 @@ export async function analyzeAndSavePost(input: AnalyzeSaveInput): Promise<Analy
     attemptCount: input.attemptCount ?? 1,
     skipMoodAndCover,
     excludeVocab,
+    mode: input.mode,
   });
 
   const finalMood = skipMoodAndCover ? existingMood : (analysis.mood || '');
