@@ -7,6 +7,9 @@
       "hosting": {
         "lediary": [
           "lediary"
+        ],
+        "lediary-next": [
+          "lediary-next"
         ]
       }
     }
