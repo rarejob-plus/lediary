@@ -23,7 +23,7 @@
               'Inter', system-ui, sans-serif;
   --ld-mono:  'SF Mono', 'JetBrains Mono', 'Menlo', 'Consolas', ui-monospace, monospace;
 
-  --ld-fs-hero: 56px;  --ld-lh-hero: 64px;
+  --ld-fs-hero: 56px;  --ld-lh-hero: 72px;
   --ld-fs-h1:   40px;  --ld-lh-h1:   48px;
   --ld-fs-h2:   28px;  --ld-lh-h2:   36px;
   --ld-fs-h3:   20px;  --ld-lh-h3:   28px;
@@ -889,6 +889,22 @@ input {
   border: 0;
   cursor: pointer;
 }
+.phrase-play:disabled { cursor: progress; opacity: 0.65; }
+.phrase-play--loading { position: relative; }
+.phrase-play--loading svg { opacity: 0; }
+.phrase-play--loading::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255,255,255,0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: phrase-play-spin 0.7s linear infinite;
+}
+@keyframes phrase-play-spin { to { transform: rotate(360deg); } }
 
 .phrase-speeds {
   display: inline-flex;
@@ -927,11 +943,63 @@ input {
   white-space: nowrap;
 }
 
+.phrase-volume {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ld-secondary);
+  cursor: pointer;
+}
+.phrase-volume-icon { display: inline-flex; align-items: center; }
+.phrase-volume-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 72px;
+  height: 4px;
+  background: var(--ld-rule);
+  border-radius: 999px;
+  cursor: pointer;
+  margin: 0;
+}
+.phrase-volume-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  background: var(--ld-ink);
+  border-radius: 50%;
+  border: 0;
+  cursor: pointer;
+}
+.phrase-volume-range::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  background: var(--ld-ink);
+  border-radius: 50%;
+  border: 0;
+  cursor: pointer;
+}
+
 .phrase-count {
   margin-left: auto;
   font-family: var(--ld-mono);
   font-size: 11px;
   color: var(--ld-muted);
+}
+.phrase-count--achieved { color: #047857; font-weight: 600; }
+
+.phrase-goal-bar {
+  height: 3px;
+  background: var(--ld-rule);
+  border-radius: 999px;
+  margin-top: 6px;
+  overflow: hidden;
+}
+.phrase-goal-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #6b7280 0%, #10b981 100%);
+  transition: width 0.3s ease;
 }
 
 @media (max-width: 540px) {

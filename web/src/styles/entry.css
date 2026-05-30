@@ -72,7 +72,7 @@
   }
   .entry-hero-title {
     font-size: 36px;
-    line-height: 42px;
+    line-height: 46px;
   }
 }
 
@@ -175,9 +175,7 @@
 .entry-actions {
   display: flex;
   gap: 4px;
-  margin-bottom: 28px;
-  padding-bottom: 18px;
-  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
   flex-wrap: wrap;
 }
 
@@ -680,7 +678,7 @@
 .pick-card-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
 }
 
 .pick-card-num {
@@ -749,6 +747,27 @@
 .pick-play:hover {
   transform: scale(1.05);
 }
+.pick-play:disabled {
+  cursor: progress;
+  opacity: 0.65;
+}
+.pick-play--loading {
+  position: relative;
+}
+.pick-play--loading svg { opacity: 0; }
+.pick-play--loading::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255,255,255,0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: pick-play-spin 0.7s linear infinite;
+}
+@keyframes pick-play-spin { to { transform: rotate(360deg); } }
 
 .pick-speeds {
   display: inline-flex;
@@ -788,12 +807,65 @@
   white-space: nowrap;
 }
 
+.pick-volume {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ld-secondary);
+  cursor: pointer;
+}
+.pick-volume-icon { display: inline-flex; align-items: center; }
+.pick-volume-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 72px;
+  height: 4px;
+  background: var(--ld-rule);
+  border-radius: 999px;
+  cursor: pointer;
+  margin: 0;
+}
+.pick-volume-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  background: var(--ld-ink);
+  border-radius: 50%;
+  border: 0;
+  cursor: pointer;
+}
+.pick-volume-range::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  background: var(--ld-ink);
+  border-radius: 50%;
+  border: 0;
+  cursor: pointer;
+}
+
 .pick-count {
   margin-left: auto;
   font-family: var(--ld-mono);
   font-size: 11px;
   color: var(--ld-muted);
   font-variant-numeric: tabular-nums;
+}
+.pick-count--achieved { color: #047857; font-weight: 600; }
+
+/* 30 回ゴールの進捗バー (シャドーイング player の row 直下) */
+.pick-goal-bar {
+  height: 3px;
+  background: var(--ld-rule);
+  border-radius: 999px;
+  margin-top: 6px;
+  overflow: hidden;
+}
+.pick-goal-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #6b7280 0%, #10b981 100%);
+  transition: width 0.3s ease;
 }
 
 @media (max-width: 540px) {
@@ -809,9 +881,7 @@
 
 /* ─── 発音採点 (shadowing player 内) ─── */
 .pron-pane {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px dashed var(--ld-rule);
+  margin-top: 6px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -886,6 +956,22 @@
   padding: 2px 10px;
   border-radius: 100px;
 }
+.pron-score-badge--good {
+  background: rgba(59, 130, 246, 0.12);
+  color: #1d4ed8;
+  margin-left: 4px;
+}
+.pron-score-badge--great {
+  background: rgba(16, 185, 129, 0.12);
+  color: #047857;
+  margin-left: 4px;
+}
+.pron-score-badge--perfect {
+  background: linear-gradient(90deg, #fde68a 0%, #fcd34d 100%);
+  color: #78350f;
+  font-weight: 600;
+  margin-left: 4px;
+}
 .pron-diff {
   font-family: var(--ld-serif);
   font-size: 15px;
@@ -895,20 +981,13 @@
   padding: 10px 12px;
   margin-top: 8px;
 }
-.pron-tok--ok    { color: var(--ld-ink); }
-.pron-tok--miss  {
-  color: #b94248;
-  text-decoration: line-through;
-  text-decoration-thickness: 1px;
-  background: rgba(185, 66, 72, 0.08);
-  padding: 0 2px;
-  border-radius: 2px;
-}
-.pron-tok--extra {
-  color: #047857;
-  background: rgba(4, 120, 87, 0.08);
-  border-bottom: 1px dashed #10b981;
-  padding: 0 2px;
+.pron-tok--ok     { color: var(--ld-ink); }
+/* 言い間違えた単語: 下線のみで控えめにマーク */
+.pron-tok--wrong  {
+  text-decoration: underline;
+  text-decoration-color: #b94248;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
 }
 .pron-heard {
   font-size: 11px;
@@ -921,6 +1000,37 @@
   color: #b91c1c;
   margin: 0;
 }
+.pron-error small { color: var(--ld-muted); font-size: 11px; }
+
+/* mic レベル diagnostic メーター (録音中だけ表示、終わったら DOM から消える) */
+.pron-meter {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--ld-mono);
+  font-size: 11px;
+  color: var(--ld-muted);
+  padding: 6px 10px;
+  background: var(--ld-surface);
+  border: 1px solid var(--ld-rule);
+  border-radius: var(--ld-r-sm);
+  margin-top: 6px;
+}
+.pron-meter-label { white-space: nowrap; }
+.pron-meter-bar {
+  height: 6px;
+  background: var(--ld-rule);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.pron-meter-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #10b981 0%, #f59e0b 70%, #ef4444 100%);
+  transition: width 60ms linear;
+}
+.pron-meter-value { font-variant-numeric: tabular-nums; min-width: 3em; text-align: right; }
 
 /* shadowing player の上段 row を 1 まとめに (rec ボタンは下段) */
 .pick-card-player-row,
@@ -1092,4 +1202,54 @@
   .cover-picker-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+.mode-picker { width: min(440px, 100%); }
+.mode-picker-body { padding: 16px; }
+.mode-picker-hint {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: var(--ld-muted);
+  text-align: center;
+}
+.mode-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.mode-picker-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 16px 8px 12px;
+  background: var(--ld-surface);
+  border: 1px solid var(--ld-rule);
+  border-radius: var(--ld-r-sm);
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s, background 0.12s;
+}
+.mode-picker-card:not(:disabled):hover {
+  transform: translateY(-1px);
+  border-color: var(--ld-rule-strong);
+  background: var(--ld-bg);
+}
+.mode-picker-card:disabled { cursor: default; opacity: 0.55; }
+.mode-picker-card--disabled { opacity: 0.45; }
+.mode-picker-icon { display: grid; place-items: center; height: 24px; }
+.mode-picker-label {
+  font-family: var(--ld-serif);
+  font-size: 14px;
+  color: var(--ld-ink);
+}
+.mode-picker-status {
+  font-size: 10px;
+  color: var(--ld-muted);
+  letter-spacing: 0.02em;
+}
+.mode-picker-card--chosen { outline: 2px solid var(--ld-accent); }
+
+@media (max-width: 420px) {
+  .mode-picker-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .mode-picker-card { padding: 12px 4px 10px; }
 }

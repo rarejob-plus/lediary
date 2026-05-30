@@ -69,8 +69,10 @@ export interface DiaryEntry {
   sentencePairs?: { jp: string; en: string }[];
   vocabulary: VocabItem[];
   expansionQuestions: ExpansionQuestion[];
-  /** 英語日記 BOY 流: 添削後にピックする「覚えたい 1 フレーズ」群。 */
-  picks?: PickedPhrase[];
+  /** 英語日記 BOY 流: 添削後にピックする「覚えたい 1 フレーズ」(高々 1 件)。
+   *  以前は picks: PickedPhrase[] だったが「1 個に絞る」価値を優先して単数化。
+   *  read 側は data/entries.ts で legacy picks[0] から吸収する。 */
+  pick?: PickedPhrase | null;
   createdAt: number;
 }
 

@@ -5,6 +5,17 @@ import { icons } from './icons';
 import { openDayRatingModal } from './day-rating-modal';
 import type { DayRating } from '../data/days';
 
+/** 充実度 (0-10) を 1 色の HSL に補間。Day One 風のシエナ系で、低スコアは中性、
+ *  高スコアは深い暖色。timeline の日付数字に当てて「点 10 個」UI を消すために使う。
+ *  score 0 (未設定) は空文字 (=継承) を返して、呼び出し側で default 色を保てる。 */
+export function ratingColor(score: number): string {
+  if (score <= 0) return '';
+  const t = (score - 1) / 9;
+  const sat = Math.round(22 + t * 48);  // 22% → 70%
+  const lum = Math.round(62 - t * 32);  // 62% → 30%
+  return `hsl(20, ${sat}%, ${lum}%)`;
+}
+
 interface Options {
   date: string;
   days: Map<string, DayRating>; // 上位ページが持つキャッシュ。modal 保存後に書き戻す。

@@ -2,13 +2,13 @@
 // - savePostTextOnly: LLM を呼ばずに contentJp / userTranslation / expansionQuestions / dismissedVocab を更新
 // - analyzeAndSavePost: analyzeDiary → Unsplash cover → Firestore write の一気通貫
 
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { deleteField, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { getCurrentUser } from '../auth';
 import { alignSentences, analyzeDiary, type FeedbackItem, type DiaryAnalysis, type SentencePair } from '../llm-diary';
 import { fetchUnsplashCover, notifyUnsplashDownload } from '../unsplash';
 import { fetchEntries, invalidateEntriesCache } from './entries';
-import type { Mode } from './mock';
+import type { Mode, PickedPhrase } from './mock';
 
 /** 過去 entry 全件 + 現在 entry の vocabulary + dismissedVocab を集めて重複排除した語句リスト。
  *  analyzeDiary / extractVocabulary に「これらは除外」として渡す用。 */
@@ -111,16 +111,18 @@ export async function unfinalizeEntry(entryId: string): Promise<void> {
   invalidateEntriesCache();
 }
 
-/** 「今日の 1 フレーズ」リストを上書き保存。
- *  Firestore は undefined を弾くため、各 pick オブジェクトから undefined フィールドを除去する。 */
-export async function savePostPicks(entryId: string, picks: unknown[]): Promise<void> {
+/** 「今日の 1 フレーズ」を上書き保存。null を渡すと削除。
+ *  Firestore は undefined を弾くため、pick オブジェクトから undefined フィールドを除去する。
+ *  旧 picks[] フィールドが残っていれば同時に消す。 */
+export async function savePostPick(entryId: string, pick: PickedPhrase | null): Promise<void> {
   const user = getCurrentUser();
   if (!user) throw new Error('not authenticated');
-  const sanitized = picks.map((p) => stripUndefined(p as Record<string, unknown>));
-  await updateDoc(doc(db, 'lediary-posts', entryId), {
-    picks: sanitized,
+  const update: Record<string, unknown> = {
+    pick: pick ? stripUndefined(pick as unknown as Record<string, unknown>) : deleteField(),
+    picks: deleteField(),
     updatedAt: Date.now(),
-  });
+  };
+  await updateDoc(doc(db, 'lediary-posts', entryId), update);
   invalidateEntriesCache();
 }
 
@@ -196,7 +198,12 @@ export async function analyzeAndSavePost(input: AnalyzeSaveInput): Promise<Analy
 
   // 既存 doc に保存されていて、再添削で消えてほしくないフィールドを引き継ぐ。
   const existingPlainJp = (existing?.plainJp as string | undefined) || '';
-  const existingPicks = Array.isArray(existing?.picks) ? (existing!.picks as unknown[]) : [];
+  // 新形式 pick (単数) を優先、無ければ旧 picks[0] を吸収。次回保存で picks フィールドは消える。
+  const existingPick: PickedPhrase | null =
+    (existing?.pick as PickedPhrase | undefined) ??
+    (Array.isArray(existing?.picks) && (existing!.picks as PickedPhrase[]).length > 0
+      ? (existing!.picks as PickedPhrase[])[0]!
+      : null);
   const existingHints = Array.isArray(existing?.hints) ? (existing!.hints as unknown[]) : [];
   const existingDismissedVocab = Array.isArray(existing?.dismissedVocab)
     ? (existing!.dismissedVocab as unknown[])
@@ -229,7 +236,7 @@ export async function analyzeAndSavePost(input: AnalyzeSaveInput): Promise<Analy
     ? input.plainJp
     : existingPlainJp;
   if (plainJp) post.plainJp = plainJp;
-  if (existingPicks.length > 0) post.picks = existingPicks;
+  if (existingPick) post.pick = stripUndefined(existingPick as unknown as Record<string, unknown>);
   if (existingHints.length > 0) post.hints = existingHints;
   if (existingDismissedVocab.length > 0) post.dismissedVocab = existingDismissedVocab;
   if (existingLessonSheetId) post.lessonSheetId = existingLessonSheetId;

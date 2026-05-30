@@ -449,9 +449,7 @@ export function renderEditor(root: HTMLElement): void {
 
     const label = document.createElement('div');
     label.className = 'compose-label';
-    label.textContent = feedbackKind === 'flow'
-      ? '流れを整える（自分で書き直して定着させよう）'
-      : '添削（自分で書き直して定着させよう）';
+    label.textContent = feedbackKind === 'flow' ? '流れを整える' : '添削';
     correctionSection.appendChild(label);
 
     if (currentFeedback.length === 0) {
@@ -485,11 +483,6 @@ export function renderEditor(root: HTMLElement): void {
       enhanceTextarea(ta);
       correctionSection.appendChild(card);
     });
-
-    const doneHint = document.createElement('p');
-    doneHint.className = 'done-hint';
-    doneHint.textContent = '書き直していない文は元の英訳のまま保存されます (AI 添削を勝手に当てません)。';
-    correctionSection.appendChild(doneHint);
 
     const doneBtn = document.createElement('button');
     doneBtn.className = 'btn btn-primary';
@@ -743,13 +736,20 @@ const PLAIN_JP_VARIANTS_PROMPT = `あなたは日本語学習者向け英作文�
 3. JSON で返す: {"variant_subject": "...", "variant_verb": "...", "variant_split": "..."}
 4. 説明文や前置きは一切付けず JSON のみ出力。`;
 
-const HINTS_SYSTEM_PROMPT = `Give the MINIMUM English building blocks a Japanese learner needs to translate their diary themselves. Do NOT translate the whole thing.
+const HINTS_SYSTEM_PROMPT = `Give the English building blocks a Japanese learner needs to translate their diary themselves. Do NOT translate the whole thing.
 
-Each hint must map to a word/phrase that actually appears in the Japanese. Skip basics (family, today, go) — focus on idiomatic expressions, casual connectors, collocations, tricky verbs. Each Japanese concept once, no synonyms. Short diary → few hints (2-3 is fine).
+Each hint must map to a word/phrase that actually appears in the Japanese. Skip only the truly trivial (family, today, go, eat, see). Cover idiomatic expressions, casual connectors, collocations, tricky verbs, and any noun/verb the learner might hesitate on. Each Japanese concept once, no synonyms.
+
+Coverage target: roughly 1 hint per ~25 Japanese characters.
+- 50 chars → ~2 hints
+- 150 chars → ~6 hints
+- 300 chars → ~10–12 hints
+- 500+ chars → 14+ hints
+When in doubt about whether a phrase is "basic enough to skip," include it. Better one hint too many than one too few.
 
 Show English in base/dictionary form ("feel under the weather", not "feeling..."). Match the tone (casual = casual, formal = formal). Never add expressions the diary doesn't call for.
 
-Return JSON array (2-8 items typical):
+Return JSON array:
 [{"japanese":"diaryからの該当語/概念","english":"対応表現","note":"使い方の補足(日本語1文)"}]
 
 Return ONLY the JSON array.`;

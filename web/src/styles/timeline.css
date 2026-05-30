@@ -11,74 +11,74 @@
 }
 
 /* ─ Streak strip (handoff §4.10): 直近 7 日のドット列 + 連続日数 ─ */
+/* Streak は補助情報。枠ナシ・小さめドット・控えめ数字でさりげなく置く。 */
 .streak-strip {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 14px 16px;
-  border: 1px solid var(--ld-rule);
-  border-radius: var(--ld-r-md);
-  background: var(--ld-bg);
-  margin-bottom: 36px;
+  gap: 12px;
+  padding: 0;
+  margin-bottom: 24px;
+  background: transparent;
+  border: none;
 }
 
 .streak-strip-week {
   display: flex;
-  gap: 8px;
+  gap: 5px;
 }
 
 .streak-day {
-  width: 24px;
-  height: 24px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   display: inline-grid;
   place-items: center;
   flex-shrink: 0;
   color: #fff;
 }
+.streak-day svg { width: 8px; height: 8px; }
 
 .streak-day.filled {
-  background: var(--ld-accent);
+  background: var(--ld-faint);
 }
 
 .streak-day.empty {
-  border: 1.25px dashed var(--ld-faint);
+  border: 1px dashed var(--ld-faint);
 }
 
 .streak-day.is-today {
-  box-shadow: 0 0 0 1.5px var(--ld-ink);
+  background: var(--ld-ink);
 }
 
 .streak-strip-num {
   display: flex;
   align-items: baseline;
-  gap: 6px;
+  gap: 4px;
 }
 
 .streak-num {
-  font-family: var(--ld-serif);
-  font-size: 28px;
+  font-family: var(--ld-mono);
+  font-size: 13px;
   line-height: 1;
   font-weight: 500;
-  letter-spacing: -0.01em;
-  color: var(--ld-ink);
-  font-variant-numeric: lining-nums;
+  color: var(--ld-secondary);
+  font-variant-numeric: lining-nums tabular-nums;
 }
 
 .streak-label {
   font-family: var(--ld-sans);
-  font-size: 12px;
+  font-size: 11px;
   color: var(--ld-muted);
 }
 
 @media (max-width: 600px) {
   .streak-day {
-    width: 20px;
-    height: 20px;
+    width: 12px;
+    height: 12px;
   }
   .streak-strip-week {
-    gap: 6px;
+    gap: 4px;
   }
 }
 
@@ -245,7 +245,14 @@
   line-height: 1;
   font-variant-numeric: lining-nums;
   color: var(--ld-ink);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  transition: color 0.2s ease, transform 0.12s ease;
 }
+.timeline-day-num:hover { transform: translateY(-1px); }
+.timeline-day-num:focus-visible { outline: 2px dashed var(--ld-rule-strong); outline-offset: 4px; border-radius: 4px; }
 
 .timeline-day-meta {
   display: flex;
@@ -325,6 +332,80 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
   margin: 0;
+}
+
+/* タイムラインの主役: 今日の 1 フレーズ。本文抜粋より目立つように。 */
+.entry-card-pick {
+  font-family: var(--ld-serif);
+  font-size: 18px;
+  line-height: 28px;
+  color: var(--ld-ink);
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+}
+.entry-card-pick-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  margin-top: 6px;
+  color: var(--ld-accent);
+}
+/* タイムライン上で 1 フレーズを即再生する小さい play ボタン */
+.entry-card-pick-play {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  margin-top: 2px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--ld-ink);
+  color: #fff;
+  border: 0;
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.12s;
+}
+.entry-card-pick-play:hover { transform: scale(1.05); }
+.entry-card-pick-play--loading {
+  position: relative;
+  background: var(--ld-secondary);
+}
+.entry-card-pick-play--loading svg { opacity: 0; }
+.entry-card-pick-play--loading::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255,255,255,0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: entry-card-pick-play-spin 0.7s linear infinite;
+}
+@keyframes entry-card-pick-play-spin { to { transform: rotate(360deg); } }
+.entry-card-pick-text {
+  flex: 1 1 auto;
+  /* フレーズの省略禁止: 100 回読むのが主目的なので、文末まで見えないと意味が無い */
+}
+.entry-card-pick-note {
+  font-family: var(--ld-sans);
+  font-size: 12px;
+  color: var(--ld-muted);
+  margin: 2px 0 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.entry-card-pick-empty {
+  font-family: var(--ld-sans);
+  font-size: 11px;
+  color: var(--ld-muted);
+  margin: 4px 0 0;
+  letter-spacing: 0.04em;
 }
 
 @media (max-width: 600px) {

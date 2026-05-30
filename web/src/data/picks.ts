@@ -11,15 +11,14 @@ export interface PickWithContext extends PickedPhrase {
   entryMode: DiaryEntry['mode'];
 }
 
-/** 全エントリの picks を flat 化して 1 配列にする。新しい順。 */
+/** 全エントリの単数 pick を集めて 1 配列にする。新しい順。
+ *  entry.pick が null/未定義の entry はスキップ。 */
 export async function fetchAllPicks(): Promise<PickWithContext[]> {
   const entries = await fetchEntries();
   const out: PickWithContext[] = [];
   for (const e of entries) {
-    if (!Array.isArray(e.picks)) continue;
-    for (const p of e.picks) {
-      out.push({ ...p, entryId: e.id, entryDate: e.date, entryMode: e.mode });
-    }
+    if (!e.pick) continue;
+    out.push({ ...e.pick, entryId: e.id, entryDate: e.date, entryMode: e.mode });
   }
   out.sort((a, b) => b.createdAt - a.createdAt);
   return out;

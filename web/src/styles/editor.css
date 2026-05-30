@@ -344,23 +344,34 @@
   border-radius: var(--radius);
   padding: 16px 18px;
   margin-bottom: 28px;
+  /* ヒントが多くて EN 入力欄が下に追いやられないよう、縦幅を固定して中身をスクロール。
+     ヘッダーは sticky で常に視認可能。 */
+  max-height: 320px;
+  overflow-y: auto;
+  position: relative;
 }
 
 .hints-card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
+  margin: -16px -18px 10px;
+  padding: 12px 18px;
   font-size: 11px;
   color: var(--text-muted);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.12em;
+  position: sticky;
+  top: 0;
+  background: var(--surface-warm);
+  z-index: 1;
 }
 
 .hint-row {
   display: flex;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 4px 12px;
   padding: 8px 0;
   border-bottom: 1px solid var(--border);
   align-items: baseline;
@@ -375,13 +386,19 @@
   font-size: 14px;
   font-weight: 600;
   color: var(--text);
-  min-width: 130px;
-  flex-shrink: 0;
+  min-width: 0;
+  flex: 0 1 auto;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .hint-ja {
   font-size: 13px;
   color: var(--text-muted);
+  min-width: 0;
+  flex: 1 1 auto;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .correction-mode-toggle {

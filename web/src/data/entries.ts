@@ -26,7 +26,9 @@ interface RawPost {
   feedback?: DiaryEntry['feedback'];
   vocabulary?: DiaryEntry['vocabulary'];
   expansionQuestions?: DiaryEntry['expansionQuestions'];
-  picks?: DiaryEntry['picks'];
+  pick?: DiaryEntry['pick'];
+  /** legacy: 旧 picks[] フィールド。read 時に picks[0] を pick に昇格して吸収する。 */
+  picks?: import('./mock').PickedPhrase[];
   sentencePairs?: DiaryEntry['sentencePairs'];
   hints?: unknown[];
   createdAt?: number | { _seconds: number };
@@ -63,7 +65,8 @@ function toEntry(raw: RawPost): DiaryEntry {
     feedback: raw.feedback || [],
     vocabulary: raw.vocabulary || [],
     expansionQuestions: raw.expansionQuestions || [],
-    picks: raw.picks || [],
+    // 新形式: pick: 単数。旧形式 picks[]: 先頭 1 件を pick に昇格して吸収。
+    pick: raw.pick ?? (Array.isArray(raw.picks) && raw.picks.length > 0 ? raw.picks[0] : null),
     sentencePairs: raw.sentencePairs,
     finalizedAt: raw.finalizedAt,
     mood: raw.mood,

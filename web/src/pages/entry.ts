@@ -1,14 +1,14 @@
 import { renderHeader } from '../components/header';
 import { icons } from '../components/icons';
 import { coverFor } from '../components/cover';
-import { MODE_META, type DiaryEntry, type PickedPhrase } from '../data/mock';
+import { MODE_META, type DiaryEntry, type Mode, type PickedPhrase } from '../data/mock';
 import { deleteEntry, fetchEntry, invalidateEntriesCache, moveEntryMode, stashForEditor } from '../data/entries';
 import { renderSekkiInline, dayOfYear, daysInYear } from '../data/dateInfo';
 import { getCurrentUser, getIdToken } from '../auth';
 import { navigate } from '../router';
 import { enableTextSelectionBookmark, bookmarkPhrase } from '../components/text-selection-bookmark';
 import { correctExpansionAnswer, extractVocabulary, generateExpansionQuestions } from '../llm-diary';
-import { savePostTextOnly, savePostPicks, gatherKnownVocabFor, finalizeEntry, unfinalizeEntry } from '../data/posts';
+import { savePostTextOnly, savePostPick, gatherKnownVocabFor, finalizeEntry, unfinalizeEntry } from '../data/posts';
 import { searchUnsplashCandidates, notifyUnsplashDownload, type UnsplashCandidate } from '../unsplash';
 import { createShadowingPlayer } from '../components/shadowing-player';
 import { enhanceTextarea } from '../components/textarea';
@@ -130,37 +130,24 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
   });
   // モード変更: ヒーロー上の Morning/Lesson… pill クリックで起動
   const modeTrigger = hero.querySelector('.entry-hero-mode-trigger') as HTMLButtonElement | null;
-  modeTrigger?.addEventListener('click', async () => {
+  modeTrigger?.addEventListener('click', () => {
     const user = getCurrentUser();
     if (!user) {
       alert('ログインが必要です');
       return;
     }
-    const others = (['morning', 'lesson', 'diary', 'story'] as const).filter((m) => m !== entry.mode);
-    const choice = prompt(`どのモードに移しますか？\n${others.map((m, i) => `${i + 1}. ${MODE_META[m].label}`).join('\n')}\n\n番号を入力 (1-${others.length})`);
-    if (!choice) return;
-    const idx = parseInt(choice, 10) - 1;
-    if (!Number.isInteger(idx) || idx < 0 || idx >= others.length) {
-      alert('番号が正しくありません');
-      return;
-    }
-    const targetMode = others[idx]!;
-    const targetId = `${user.uid}_${entry.date}_${targetMode}`;
-    const existingTarget = await fetchEntry(targetId);
-    if (existingTarget && (existingTarget.contentJp || existingTarget.userTranslation)) {
-      alert(`${MODE_META[targetMode].label} には既にエントリがあります。先に削除してください。`);
-      return;
-    }
-    if (!confirm(`このエントリを ${MODE_META[entry.mode].label} → ${MODE_META[targetMode].label} に移しますか？`)) return;
-    modeTrigger.disabled = true;
-    try {
-      const res = await moveEntryMode(entry.id, targetMode);
-      navigate(`/entry/${res.id || targetId}`);
-    } catch (err) {
-      console.error(err);
-      alert('モード変更に失敗しました');
-      modeTrigger.disabled = false;
-    }
+    openModePicker(entry.mode, entry.date, user.uid, async (targetMode) => {
+      modeTrigger.disabled = true;
+      try {
+        const res = await moveEntryMode(entry.id, targetMode);
+        const targetId = `${user.uid}_${entry.date}_${targetMode}`;
+        navigate(`/entry/${res.id || targetId}`);
+      } catch (err) {
+        console.error(err);
+        alert('モード変更に失敗しました');
+        modeTrigger.disabled = false;
+      }
+    });
   });
   const finalizeBtn = actions.querySelector('#finalize') as HTMLButtonElement | null;
   if (finalizeBtn) {
@@ -223,6 +210,12 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
   });
   content.appendChild(actions);
 
+  // 完成済 (読書モード) は pick を最上段に出して BOY シャドーイング先行。
+  // 編集中 (完成前) は逆: 日記本文 (JP / EN) を先に見せ、その後 pick → 補助セクションの順。
+  if (entry.finalizedAt && entry.pick) {
+    appendSection(content, '今日の 1 フレーズ', renderPicksSection(entry, { readOnly: true }), true);
+  }
+
   const jp = document.createElement('div');
   jp.className = 'entry-jp';
   jp.textContent = entry.contentJp;
@@ -238,15 +231,7 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
   }
   enableTextSelectionBookmark(body);
 
-  // 英語日記 BOY 流: 添削後にユーザーが「覚えたい 1 フレーズ」を選び、専用シャドーイング
-  // 完成済の場合: 編集系セクション (覚えたいフレーズ / 日記を膨らませる) は完全に省略。
-  // 今日の 1 フレーズは既存 pick があればシャドーイング用に出す (read-only、追加フォーム無し)。
-  if (entry.finalizedAt) {
-    const existingPicks = Array.isArray(entry.picks) ? entry.picks : [];
-    if (existingPicks.length > 0) {
-      appendSection(content, '今日の 1 フレーズ', renderPicksSection(entry, { readOnly: true }), true);
-    }
-  } else {
+  if (!entry.finalizedAt) {
     appendSection(content, '今日の 1 フレーズ', renderPicksSection(entry), true);
     appendSection(content, '覚えたいフレーズ', renderVocabSection(entry.vocabulary), false);
     appendSection(content, '日記を膨らませる', renderExpansionSection(entry, body), false);
@@ -276,26 +261,70 @@ function appendSection(parent: HTMLElement, title: string, body: HTMLElement, op
 }
 
 /** 英語日記 BOY 流「今日の 1 フレーズ」セクション。
- *  添削後のユーザー本文から覚えたいフレーズをピックし、専用シャドーイング player で繰り返す。
- *  各 pick は post.picks に永続化される。 */
+ *  添削後のユーザー本文から覚えたいフレーズを **ちょうど 1 個** ピックし、専用シャドーイング player で繰り返す。
+ *  pick は post.pick に永続化される。「1 個に絞る」こと自体が選択の質を高める価値、という意図。 */
 function renderPicksSection(entry: DiaryEntry, opts: { readOnly?: boolean } = {}): HTMLElement {
   const wrap = document.createElement('div');
   wrap.className = 'picks-section';
 
-  // ローカル mutable コピー。Firestore への保存はその都度 savePostPicks に委譲。
-  const picks: PickedPhrase[] = Array.isArray(entry.picks) ? [...entry.picks] : [];
+  // 状態: 現在の pick (null = 未選択)。差し替えは onPick → savePostPick で都度永続化。
+  let pick: PickedPhrase | null = entry.pick ?? null;
 
-  const intro = document.createElement('p');
-  intro.className = 'picks-intro';
-  intro.textContent = opts.readOnly
-    ? '保存したフレーズを再生してシャドーイング。'
-    : '言えるようになりたい 1 フレーズを選んで、TTS でシャドーイング。';
-  wrap.appendChild(intro);
+  const slot = document.createElement('div');
+  slot.className = 'picks-list';
+  wrap.appendChild(slot);
 
-  // 完成済 (readOnly) の時は入力フォームを作らない。再生だけ。
-  const sentences = opts.readOnly ? [] : splitIntoPickableSentences(entry.userTranslation || '');
-  const form = opts.readOnly ? null : document.createElement('div');
-  if (form) {
+  function renderPickCard(): void {
+    slot.innerHTML = '';
+    if (!pick) {
+      slot.innerHTML = '<p class="expansion-empty">まだピックしていません。</p>';
+      return;
+    }
+    const card = renderSinglePick(entry.id, pick,
+      // onDelete: Storage 上の WAV も best-effort で削除し、空に戻す
+      opts.readOnly ? undefined : () => {
+        const removed = pick;
+        pick = null;
+        void savePostPick(entry.id, null);
+        if (removed?.audioPath) void deletePickAudio(removed.audioPath);
+        renderPickCard();
+        renderForm();
+      },
+      // onShadowed: SRS 更新
+      async (delta) => {
+        if (!pick) return;
+        pick.shadowingCount = (pick.shadowingCount || 0) + delta;
+        pick.lastShadowedAt = Date.now();
+        await savePostPick(entry.id, pick);
+      },
+      // onPersisted: Storage upload 成功時に audioPath / voice を pick に焼き込む
+      async (audioPath, voice) => {
+        if (!pick) return;
+        pick.audioPath = audioPath;
+        pick.audioVoice = voice;
+        await savePostPick(entry.id, pick);
+      },
+      // onScored: 発音スコアを pick に保存
+      async ({ score, isNewBest }) => {
+        if (!pick) return;
+        pick.lastScore = score;
+        if (isNewBest) pick.bestScore = score;
+        pick.attemptCount = (pick.attemptCount || 0) + 1;
+        await savePostPick(entry.id, pick);
+      },
+    );
+    slot.appendChild(card);
+  }
+
+  // pick が無い (or 削除直後) のとき入力フォームを出す。readOnly では常に出さない。
+  const formHost = document.createElement('div');
+  wrap.appendChild(formHost);
+
+  function renderForm(): void {
+    formHost.innerHTML = '';
+    if (opts.readOnly || pick) return;
+    const sentences = splitIntoPickableSentences(entry.userTranslation || '');
+    const form = document.createElement('div');
     form.className = 'picks-form';
     form.innerHTML = `
       ${sentences.length > 0 ? `
@@ -305,109 +334,64 @@ function renderPicksSection(entry: DiaryEntry, opts: { readOnly?: boolean } = {}
         </select>
       ` : ''}
       <textarea name="pick-text" class="picks-form-text" rows="2" placeholder="または自分で入力（添削後の英文を直接コピー可）"></textarea>
-      <textarea name="pick-note" class="picks-form-note" rows="1" placeholder="日本語メモ（任意）— 何を言いたかったか"></textarea>
-      <button class="btn btn-primary picks-form-btn" type="button">${icons.plus(14)} このフレーズを追加</button>
+      <textarea name="pick-note" class="picks-form-note" rows="1" placeholder="日本語メモ（任意）— 本文から該当部分が自動入力されます"></textarea>
+      <button class="btn btn-primary picks-form-btn" type="button">${icons.plus(14)} このフレーズに決める</button>
     `;
-    wrap.appendChild(form);
-  }
+    formHost.appendChild(form);
 
-  const list = document.createElement('div');
-  list.className = 'picks-list';
-  wrap.appendChild(list);
+    const selectEl = form.querySelector('.picks-form-select') as HTMLSelectElement | null;
+    const textEl = form.querySelector('.picks-form-text') as HTMLTextAreaElement;
+    const noteEl = form.querySelector('.picks-form-note') as HTMLTextAreaElement;
+    const btnEl = form.querySelector('.picks-form-btn') as HTMLButtonElement;
 
-  function renderList(): void {
-    if (picks.length === 0) {
-      list.innerHTML = '<p class="expansion-empty">まだピックしていません。</p>';
-      return;
-    }
-    list.innerHTML = '';
-    picks.forEach((p, idx) => {
-      const card = renderSinglePick(entry.id, p, idx,
-        // onDelete: Storage 上の WAV も best-effort で削除
-        () => {
-          const removed = picks.splice(idx, 1)[0];
-          void savePostPicks(entry.id, picks);
-          if (removed?.audioPath) void deletePickAudio(removed.audioPath);
-          renderList();
-        },
-        // onShadowed: SRS 更新
-        async (delta) => {
-          p.shadowingCount = (p.shadowingCount || 0) + delta;
-          p.lastShadowedAt = Date.now();
-          await savePostPicks(entry.id, picks);
-        },
-        // onPersisted: Storage upload 成功時に audioPath / voice を pick に焼き込む
-        async (audioPath, voice) => {
-          p.audioPath = audioPath;
-          p.audioVoice = voice;
-          await savePostPicks(entry.id, picks);
-        },
-        // onScored: 発音スコアを pick に保存
-        async ({ score, isNewBest }) => {
-          p.lastScore = score;
-          if (isNewBest) p.bestScore = score;
-          p.attemptCount = (p.attemptCount || 0) + 1;
-          await savePostPicks(entry.id, picks);
-        },
-      );
-      list.appendChild(card);
+    // EN を本文から選ぶと、sentencePairs (analyzeDiary が生成した JP↔EN 対応表) から
+    // 該当する JP を引いて note に自動入力する。note を既に手で書いていれば上書きしない。
+    selectEl?.addEventListener('change', () => {
+      if (!selectEl.value) return;
+      textEl.value = selectEl.value;
+      if (noteEl.value.trim()) return;
+      const jp = lookupJpForEn(entry, selectEl.value);
+      if (jp) noteEl.value = jp;
     });
-  }
-  renderList();
 
-  if (!form) return wrap;
-  const selectEl = form.querySelector('.picks-form-select') as HTMLSelectElement | null;
-  const textEl = form.querySelector('.picks-form-text') as HTMLTextAreaElement;
-  const noteEl = form.querySelector('.picks-form-note') as HTMLTextAreaElement;
-  const btnEl = form.querySelector('.picks-form-btn') as HTMLButtonElement;
-
-  if (selectEl) {
-    selectEl.addEventListener('change', () => {
-      if (selectEl.value) textEl.value = selectEl.value;
+    btnEl.addEventListener('click', async () => {
+      const text = textEl.value.trim();
+      if (!text) {
+        alert('フレーズを入力してください');
+        return;
+      }
+      const noteVal = noteEl.value.trim();
+      const next: PickedPhrase = {
+        id: cryptoRandomId(),
+        text,
+        createdAt: Date.now(),
+        shadowingCount: 0,
+        ...(noteVal ? { note: noteVal } : {}),
+      };
+      btnEl.disabled = true;
+      try {
+        await savePostPick(entry.id, next);
+        pick = next;
+        renderPickCard();
+        renderForm();
+      } catch (e) {
+        console.error('[pick] save failed', e);
+        alert('保存に失敗しました');
+        btnEl.disabled = false;
+      }
     });
   }
 
-  btnEl.addEventListener('click', async () => {
-    const text = textEl.value.trim();
-    if (!text) {
-      alert('フレーズを入力してください');
-      return;
-    }
-    const noteVal = noteEl.value.trim();
-    // Firestore は undefined を弾くので、空のときは note を含めない。
-    const pick: PickedPhrase = {
-      id: cryptoRandomId(),
-      text,
-      createdAt: Date.now(),
-      shadowingCount: 0,
-      ...(noteVal ? { note: noteVal } : {}),
-    };
-    picks.push(pick);
-    btnEl.disabled = true;
-    try {
-      await savePostPicks(entry.id, picks);
-      textEl.value = '';
-      noteEl.value = '';
-      if (selectEl) selectEl.value = '';
-      renderList();
-    } catch (e) {
-      console.error('[picks] save failed', e);
-      alert('保存に失敗しました');
-      picks.pop();
-    } finally {
-      btnEl.disabled = false;
-    }
-  });
-
+  renderPickCard();
+  renderForm();
   return wrap;
 }
 
-/** 1 件分の pick の表示 + シャドーイング player。 */
+/** 単数 pick の表示 + シャドーイング player。onDelete が無いとき (readOnly) は削除ボタン非表示。 */
 function renderSinglePick(
   _entryId: string,
   pick: PickedPhrase,
-  index: number,
-  onDelete: () => void,
+  onDelete: (() => void) | undefined,
   onShadowed: (delta: number) => void | Promise<void>,
   onPersisted: (audioPath: string, voice: string) => void | Promise<void>,
   onScored: (r: { score: number; transcript: string; isNewBest: boolean }) => void | Promise<void>,
@@ -415,16 +399,19 @@ function renderSinglePick(
   const card = document.createElement('div');
   card.className = 'pick-card';
   card.innerHTML = `
-    <div class="pick-card-head">
-      <span class="pick-card-num">#${index + 1}</span>
-      <button class="pick-card-del" title="削除" aria-label="削除">${icons.trash(14)}</button>
-    </div>
+    ${onDelete ? `
+      <div class="pick-card-head">
+        <button class="pick-card-del" title="差し替える / 削除" aria-label="差し替える">${icons.trash(14)}</button>
+      </div>
+    ` : ''}
     <p class="pick-card-text">${escapeHtml(pick.text)}</p>
     ${pick.note ? `<p class="pick-card-note">${escapeHtml(pick.note)}</p>` : ''}
   `;
-  card.querySelector('.pick-card-del')!.addEventListener('click', () => {
-    if (confirm('この 1 フレーズを削除しますか?')) onDelete();
-  });
+  if (onDelete) {
+    card.querySelector('.pick-card-del')!.addEventListener('click', () => {
+      if (confirm('この 1 フレーズを削除して選び直しますか？')) onDelete();
+    });
+  }
   card.appendChild(
     createShadowingPlayer({
       pickId: pick.id,
@@ -436,6 +423,7 @@ function renderSinglePick(
       bestScore: pick.bestScore,
       attemptCount: pick.attemptCount,
       classPrefix: 'pick',
+      eager: true,
       onShadowed,
       onPersisted,
       onScored,
@@ -445,6 +433,25 @@ function renderSinglePick(
 }
 
 /** 本文を「pickable な文」に分解（. ! ? . で区切る、空白除く）。 */
+/** 選んだ EN 文に対応する JP 文を sentencePairs から探す。
+ *  normalize (lower-case + 末尾句読点除去 + 空白圧縮) で寛容に比較。なければ null。 */
+function lookupJpForEn(entry: DiaryEntry, en: string): string | null {
+  const pairs = entry.sentencePairs;
+  if (!Array.isArray(pairs) || pairs.length === 0) return null;
+  const norm = (s: string) => s.toLowerCase().replace(/[\s]+/g, ' ').replace(/[.,!?;:]+$/g, '').trim();
+  const target = norm(en);
+  for (const p of pairs) {
+    if (!p?.en || !p?.jp) continue;
+    if (norm(p.en) === target) return p.jp;
+  }
+  // 部分一致 (LLM が完全一致しない添削後文を pair に入れている場合)
+  for (const p of pairs) {
+    if (!p?.en || !p?.jp) continue;
+    if (norm(p.en).includes(target) || target.includes(norm(p.en))) return p.jp;
+  }
+  return null;
+}
+
 function splitIntoPickableSentences(text: string): string[] {
   if (!text) return [];
   const out: string[] = [];
@@ -692,7 +699,6 @@ function renderExpansionSection(entry: DiaryEntry, bodyEl: HTMLElement): HTMLEle
       const empty = document.createElement('div');
       empty.style.cssText = 'text-align:center;padding:8px 0 4px;';
       empty.innerHTML = `
-        <p class="expansion-empty" style="margin-bottom:12px;">添削が一段落したら 5W1H で深掘り質問を作れます</p>
         <button class="btn" id="gen-q">質問を生成</button>
       `;
       empty.querySelector('#gen-q')!.addEventListener('click', () => generate(empty));
@@ -906,6 +912,72 @@ function deriveHeroTitle(entry: DiaryEntry): string {
   const first = (m ? m[0] : source).trim();
   // 80 文字を超えたら省略
   return first.length > 80 ? first.slice(0, 78).trimEnd() + '…' : first;
+}
+
+/** モード変更 modal。残り 3 モードをカード表示。既にエントリのあるモードは選択不可。 */
+function openModePicker(
+  currentMode: Mode,
+  date: string,
+  userId: string,
+  onPick: (target: Mode) => void | Promise<void>,
+): void {
+  const others = (['morning', 'lesson', 'diary', 'story'] as const).filter((m) => m !== currentMode);
+  const overlay = document.createElement('div');
+  overlay.className = 'cover-picker-overlay';
+  overlay.innerHTML = `
+    <div class="cover-picker mode-picker">
+      <header class="cover-picker-head">
+        <h3 class="cover-picker-title">モードを変える</h3>
+        <button class="cover-picker-close" type="button" aria-label="閉じる">${icons.x(16)}</button>
+      </header>
+      <div class="mode-picker-body">
+        <p class="mode-picker-hint">${MODE_META[currentMode].label} の内容を、どのモードに移しますか？</p>
+        <div class="mode-picker-grid">
+          ${others.map((m) => `
+            <button type="button" class="mode-picker-card" data-mode="${m}" disabled>
+              <span class="mode-picker-icon" style="color: ${MODE_META[m].color}">${iconFor(MODE_META[m].icon, 20)}</span>
+              <span class="mode-picker-label">${MODE_META[m].label}</span>
+              <span class="mode-picker-status" data-status>確認中…</span>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) close();
+  });
+  overlay.querySelector('.cover-picker-close')!.addEventListener('click', close);
+
+  // 各候補モードの既存エントリを並列でチェックし、card を有効化 or 無効ラベル付き化。
+  others.forEach(async (m) => {
+    const card = overlay.querySelector<HTMLButtonElement>(`.mode-picker-card[data-mode="${m}"]`);
+    if (!card) return;
+    const statusEl = card.querySelector<HTMLElement>('[data-status]');
+    const targetId = `${userId}_${date}_${m}`;
+    let conflict = false;
+    try {
+      const existing = await fetchEntry(targetId);
+      conflict = !!(existing && (existing.contentJp || existing.userTranslation));
+    } catch {
+      // フェッチ失敗は競合扱いせず、移動を試みさせる
+    }
+    if (conflict) {
+      card.classList.add('mode-picker-card--disabled');
+      if (statusEl) statusEl.textContent = '既にエントリあり';
+      return;
+    }
+    card.disabled = false;
+    if (statusEl) statusEl.remove();
+    card.addEventListener('click', async () => {
+      overlay.querySelectorAll<HTMLButtonElement>('.mode-picker-card').forEach((b) => (b.disabled = true));
+      card.classList.add('mode-picker-card--chosen');
+      await onPick(m);
+      close();
+    });
+  });
 }
 
 /** Unsplash 候補グリッド modal。キーワード検索 → サムネイル一覧 → クリックで選択 → onPick(候補, 使ったキーワード)。 */

@@ -6,18 +6,20 @@ export type DiffOp = 'eq' | 'del' | 'ins';
 export interface DiffToken { type: DiffOp; text: string; }
 
 function tokenize(s: string): string[] {
-  // 空白を保ったまま単語に分割。空白 run も 1 トークンとして残し、レイアウトを保つ。
+  // 単語 / 句読点 / 空白 run を別 token に分ける。
+  // - 単語 (アポストロフィ含む: I've, it's) は 1 token
+  // - 句読点や記号 (, . — etc.) は単独 token
+  // - 空白 run はそのままレイアウト保持用に残す
   const out: string[] = [];
-  const re = /(\s+|[^\s]+)/g;
+  const re = /\s+|[\p{L}\p{N}'’]+|[^\s\p{L}\p{N}'’]+/gu;
   let m: RegExpExecArray | null;
   while ((m = re.exec(s)) !== null) out.push(m[0]);
   return out;
 }
 
 function eq(a: string, b: string): boolean {
-  // 比較は case-insensitive、両端の句読点を寛容に。
-  const norm = (s: string) => s.toLowerCase().replace(/[\.,!?;:"']+$/g, '').replace(/^[\.,!?;:"']+/, '');
-  return norm(a) === norm(b);
+  // case-insensitive。punctuation は別 token に分かれているので緩和不要。
+  return a.toLowerCase() === b.toLowerCase();
 }
 
 export function diffWords(original: string, corrected: string): DiffToken[] {

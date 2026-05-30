@@ -1,10 +1,13 @@
 import { renderHeader, renderFab } from '../components/header';
 import { icons } from '../components/icons';
 import { coverFor } from '../components/cover';
-import { renderRatingRow } from '../components/day-rating-row';
+import { ratingColor } from '../components/day-rating-row';
+import { openDayRatingModal } from '../components/day-rating-modal';
 import { MODE_META, type DiaryEntry, type Mode } from '../data/mock';
 import { fetchEntries } from '../data/entries';
 import { fetchDays, type DayRating } from '../data/days';
+import { ensurePickAudioUrl } from '../data/picksAudio';
+import { savePostPick } from '../data/posts';
 import { renderSekkiInline, dayOfYear, daysInYear } from '../data/dateInfo';
 import { navigate } from '../router';
 
@@ -216,20 +219,50 @@ function renderDay(date: string, dayEntries: DiaryEntry[], days: Map<string, Day
   day.className = 'timeline-day';
 
   const parts = dayHeaderParts(date);
+  const rating = days.get(date);
+  const score = rating?.score ?? 0;
+  const noteText = rating?.note ?? '';
+  const tint = ratingColor(score);
+  const numStyle = tint ? ` style="color:${tint};"` : '';
+  const noteHint = noteText ? ` · ${noteText}` : '';
+  const ariaLabel = score > 0
+    ? `${parts.num}日 · 充実度 ${score}/10${noteHint}`
+    : `${parts.num}日 · 充実度を記録`;
+
   const header = document.createElement('div');
   header.className = 'timeline-day-header';
   header.innerHTML = `
-    <div class="timeline-day-num">${parts.num}</div>
+    <button type="button" class="timeline-day-num" title="${escapeAttr(ariaLabel)}" aria-label="${escapeAttr(ariaLabel)}"${numStyle}>${parts.num}</button>
     <div class="timeline-day-meta">
       <strong>${parts.weekday}</strong>
       <span>${parts.monthYear}</span>
     </div>
-    <div class="timeline-day-rating"></div>
   `;
   day.appendChild(header);
 
-  const ratingEl = header.querySelector('.timeline-day-rating') as HTMLElement;
-  renderRatingRow(ratingEl, { date, days, size: 'sm' });
+  // 日付数字タップ → rating modal。「点 10 個」UI は廃止し、数字の色が充実度を語る。
+  const numEl = header.querySelector('.timeline-day-num') as HTMLButtonElement;
+  numEl.addEventListener('click', () => {
+    openDayRatingModal({
+      date,
+      score: score > 0 ? score : 5,
+      initialNote: noteText,
+      onSaved: (saved) => {
+        if (saved) days.set(date, saved); else days.delete(date);
+        const next = days.get(date);
+        const nextScore = next?.score ?? 0;
+        const nextTint = ratingColor(nextScore);
+        numEl.style.color = nextTint || '';
+        const nextNote = next?.note ?? '';
+        const nextHint = nextNote ? ` · ${nextNote}` : '';
+        const nextAria = nextScore > 0
+          ? `${parts.num}日 · 充実度 ${nextScore}/10${nextHint}`
+          : `${parts.num}日 · 充実度を記録`;
+        numEl.title = nextAria;
+        numEl.setAttribute('aria-label', nextAria);
+      },
+    });
+  });
 
   for (const entry of dayEntries) {
     const meta = MODE_META[entry.mode];
@@ -245,15 +278,63 @@ function renderDay(date: string, dayEntries: DiaryEntry[], days: Map<string, Day
           ${entry.mood ? `<span class="ld-meta__item">${escapeHtml(entry.mood)}</span>` : ''}
           <span class="ld-meta__item">${entry.time}</span>
         </div>
-        <p class="entry-card-text">${escapeHtml(entry.userTranslation || entry.contentJp)}</p>
-        ${entry.vocabulary.length > 0 ? `
-          <div class="entry-card-tags">
-            ${entry.vocabulary.slice(0, 3).map((v) => `<span class="entry-tag">${escapeHtml(v.word)}</span>`).join('')}
-          </div>
-        ` : ''}
+        ${entry.pick ? `
+          <p class="entry-card-pick">
+            <button type="button" class="entry-card-pick-play" aria-label="再生" title="再生">${icons.play(14)}</button>
+            <span class="entry-card-pick-text">${escapeHtml(entry.pick.text)}</span>
+          </p>
+          ${entry.pick.note ? `<p class="entry-card-pick-note">${escapeHtml(entry.pick.note)}</p>` : ''}
+        ` : `
+          <p class="entry-card-text">${escapeHtml(entry.userTranslation || entry.contentJp)}</p>
+          <p class="entry-card-pick-empty">今日の 1 フレーズ未選定</p>
+        `}
       </div>
     `;
     card.addEventListener('click', () => navigate(`/entry/${entry.id}`));
+
+    // 1 フレーズの quick play: カードナビと干渉しないよう stopPropagation。
+    // 1 タップ目で生成済 audio を再生、再生中タップで停止。
+    const playBtn = card.querySelector<HTMLButtonElement>('.entry-card-pick-play');
+    if (playBtn && entry.pick) {
+      const pick = entry.pick;
+      const audio = new Audio();
+      audio.preservesPitch = true;
+      let busy = false;
+      const setPlayIcon = () => { playBtn.innerHTML = icons.play(14); };
+      const setPauseIcon = () => { playBtn.innerHTML = icons.pause(14); };
+      audio.addEventListener('ended', () => setPlayIcon());
+      audio.addEventListener('pause', () => setPlayIcon());
+      playBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!audio.paused) { audio.pause(); audio.currentTime = 0; return; }
+        if (busy) return;
+        busy = true;
+        playBtn.classList.add('entry-card-pick-play--loading');
+        try {
+          const url = await ensurePickAudioUrl({
+            pickId: pick.id,
+            text: pick.text,
+            audioPath: pick.audioPath,
+            audioVoice: pick.audioVoice,
+            onPersisted: async (path, voice) => {
+              // 初回生成時に Firestore にも audioPath を焼き込んで、次回以降は fetch だけで済むように。
+              pick.audioPath = path;
+              pick.audioVoice = voice;
+              await savePostPick(entry.id, pick);
+            },
+          });
+          audio.src = url;
+          setPauseIcon();
+          await audio.play();
+        } catch (err) {
+          console.error('[timeline] quick play failed', err);
+        } finally {
+          playBtn.classList.remove('entry-card-pick-play--loading');
+          busy = false;
+        }
+      });
+    }
+
     day.appendChild(card);
   }
 
@@ -269,6 +350,10 @@ function iconFor(name: 'sun' | 'graduation' | 'moon' | 'bookOpen', size = 11): s
 
 function formatYmd(d: Date): string {
   return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function escapeAttr(s: string | undefined | null): string {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 }
 
 function escapeHtml(s: string | undefined | null): string {

@@ -4,8 +4,7 @@
 import { renderHeader } from '../components/header';
 import { icons } from '../components/icons';
 import { fetchAllPicks, pickStatus, sortBySrs, type PickWithContext } from '../data/picks';
-import { savePostPicks } from '../data/posts';
-import { fetchEntries } from '../data/entries';
+import { savePostPick } from '../data/posts';
 import { MODE_META } from '../data/mock';
 import { navigate } from '../router';
 import { isPushSupported, isSubscribed, subscribePush, unsubscribePush } from '../push';
@@ -185,26 +184,11 @@ function statusLabel(pick: PickWithContext): string {
   return '次回まで';
 }
 
-/** pick の差分を該当 entry に書き戻す。複数 pick 持ちの entry でも safe な merge。 */
+/** pick の差分を該当 entry に書き戻す。entry には pick が高々 1 件しか無いので
+ *  entry.pick を素直に上書きするだけ。entryId / entryDate / entryMode は context 専用なので除外。 */
 async function persistPickUpdate(pick: PickWithContext): Promise<void> {
-  const entries = await fetchEntries();
-  const entry = entries.find((e) => e.id === pick.entryId);
-  if (!entry || !Array.isArray(entry.picks)) return;
-  const updated = entry.picks.map((p) =>
-    p.id === pick.id
-      ? {
-          ...p,
-          shadowingCount: pick.shadowingCount,
-          lastShadowedAt: pick.lastShadowedAt,
-          ...(pick.audioPath ? { audioPath: pick.audioPath } : {}),
-          ...(pick.audioVoice ? { audioVoice: pick.audioVoice } : {}),
-          ...(pick.lastScore !== undefined ? { lastScore: pick.lastScore } : {}),
-          ...(pick.bestScore !== undefined ? { bestScore: pick.bestScore } : {}),
-          ...(pick.attemptCount !== undefined ? { attemptCount: pick.attemptCount } : {}),
-        }
-      : p,
-  );
-  await savePostPicks(pick.entryId, updated);
+  const { entryId, entryDate: _d, entryMode: _m, ...rest } = pick;
+  await savePostPick(entryId, rest);
 }
 
 function escapeHtml(s: string | undefined | null): string {

@@ -8,19 +8,24 @@
 // AudioBufferSourceNode と違い、playbackRate を変えても preservesPitch=true なら声の高さは保たれる。
 // (0.7x にしても "太い声" にならない)
 
-import { generateTtsAudio, pcm16leToWav } from '../llm';
-import { uploadPickAudio } from '../data/picksAudio';
-import { getDownloadURL, ref as storageRef, getStorage } from 'firebase/storage';
-import { app } from '../firebase';
+import { ensurePickAudioUrl } from '../data/picksAudio';
 import { icons } from './icons';
-import { isSpeechRecognitionSupported, recognizeOnce, scorePronunciation, renderScoreDiffHtml } from './pronunciation';
+import { isSpeechRecognitionSupported, recognizeStreaming, scorePronunciation, renderScoreDiffHtml } from './pronunciation';
 
 const RATES = [0.5, 0.75, 1];
 const DEFAULT_VOICE = 'Charon';
+/** BOY 方式の最低リピート目安 = 30 回 (聞く 10 + 喋る 10 + シャドーイング 10)。
+ *  これだけやれば最低限すらすら読み上げられるラインの肌感。 */
+const SHADOWING_GOAL = 30;
+const VOLUME_KEY = 'lediary_shadowing_volume';
 
-// blob URL をテキスト + voice 単位でメモリキャッシュ (タブ存続中)。
-const urlCache = new Map<string, string>();
-function cacheKey(voice: string, text: string): string { return `${voice}::${text}`; }
+function loadVolume(): number {
+  const v = parseFloat(localStorage.getItem(VOLUME_KEY) || '1');
+  return Number.isFinite(v) && v >= 0 && v <= 1 ? v : 1;
+}
+function saveVolume(v: number): void {
+  localStorage.setItem(VOLUME_KEY, String(v));
+}
 
 export interface ShadowingPlayerOptions {
   pickId: string;
@@ -33,6 +38,9 @@ export interface ShadowingPlayerOptions {
   bestScore?: number;
   attemptCount?: number;
   classPrefix?: string;
+  /** マウント直後に TTS を確保 (or 既存 audioPath を fetch)。再生ボタンは準備中は disabled、
+   *  完了後に enable。"決定" 直後にすぐ再生可能にしたいときに使う。 */
+  eager?: boolean;
   onShadowed?: (delta: number) => void | Promise<void>;
   onPersisted?: (audioPath: string, voice: string) => void | Promise<void>;
   /** 録音 → 採点完了時。呼び出し側で pick.bestScore/lastScore/attemptCount を保存する。 */
@@ -57,10 +65,17 @@ export function createShadowingPlayer(opts: ShadowingPlayerOptions): HTMLElement
       <div class="${prefix}-speeds">
         ${RATES.map((s) => `<button class="${prefix}-speed${s === 1 ? ' active' : ''}" data-speed="${s}">${s === 0.5 ? '0.5x' : s === 0.75 ? '0.75x' : '1x'}</button>`).join('')}
       </div>
+      <label class="${prefix}-volume" title="音量">
+        <span class="${prefix}-volume-icon">${icons.volume2(14)}</span>
+        <input type="range" class="${prefix}-volume-range" min="0" max="1" step="0.05" value="${loadVolume()}">
+      </label>
       <label class="${prefix}-repeat" title="リピート">
         <input type="checkbox" class="${prefix}-repeat-cb"> リピート
       </label>
-      <span class="${prefix}-count" title="シャドーイング回数">${opts.initialCount || 0} 回</span>
+      <span class="${prefix}-count" title="シャドーイング回数">${formatGoal(opts.initialCount || 0)}</span>
+    </div>
+    <div class="${prefix}-goal-bar" title="目標 ${SHADOWING_GOAL} 回">
+      <div class="${prefix}-goal-fill" style="width:${goalPercent(opts.initialCount || 0)}%"></div>
     </div>
     ${srSupported ? `
       <div class="pron-pane">
@@ -77,6 +92,9 @@ export function createShadowingPlayer(opts: ShadowingPlayerOptions): HTMLElement
   const playBtn = root.querySelector(`.${prefix}-play`) as HTMLButtonElement;
   const repeatCb = root.querySelector(`.${prefix}-repeat-cb`) as HTMLInputElement;
   const countEl = root.querySelector(`.${prefix}-count`) as HTMLElement;
+  const goalFillEl = root.querySelector(`.${prefix}-goal-fill`) as HTMLElement | null;
+  let currentCount = opts.initialCount || 0;
+  if (currentCount >= SHADOWING_GOAL) countEl.classList.add(`${prefix}-count--achieved`);
 
   let rate = 1;
   let isPlaying = false;
@@ -93,6 +111,14 @@ export function createShadowingPlayer(opts: ShadowingPlayerOptions): HTMLElement
   // @ts-expect-error legacy moz
   audioEl.mozPreservesPitch = true;
   audioEl.playbackRate = 1;
+  audioEl.volume = loadVolume();
+
+  const volumeRange = root.querySelector(`.${prefix}-volume-range`) as HTMLInputElement | null;
+  volumeRange?.addEventListener('input', () => {
+    const v = parseFloat(volumeRange.value);
+    audioEl.volume = v;
+    saveVolume(v);
+  });
 
   root.querySelectorAll<HTMLButtonElement>(`.${prefix}-speed`).forEach((b) => {
     b.addEventListener('click', () => {
@@ -110,12 +136,18 @@ export function createShadowingPlayer(opts: ShadowingPlayerOptions): HTMLElement
   }
 
   audioEl.addEventListener('ended', () => {
-    const next = (parseInt(countEl.textContent || '0') || 0) + 1;
-    countEl.textContent = `${next} 回`;
+    currentCount += 1;
+    countEl.textContent = formatGoal(currentCount);
+    if (goalFillEl) goalFillEl.style.width = `${goalPercent(currentCount)}%`;
+    if (currentCount >= SHADOWING_GOAL) countEl.classList.add(`${prefix}-count--achieved`);
     void opts.onShadowed?.(1);
     if (repeatCb.checked && isPlaying) {
       audioEl.currentTime = 0;
-      void audioEl.play();
+      // 連続再生の境目が詰まりすぎるとリスニングの区切りが取れないので、
+      // ほんの少し (600ms) だけ間を空けてから再生。途中で stop されたら発火しない。
+      window.setTimeout(() => {
+        if (isPlaying && repeatCb.checked) void audioEl.play();
+      }, 600);
     } else {
       isPlaying = false;
       playBtn.innerHTML = icons.play(14);
@@ -127,44 +159,34 @@ export function createShadowingPlayer(opts: ShadowingPlayerOptions): HTMLElement
     playBtn.innerHTML = icons.play(14);
   });
 
-  /** Storage 上の audioPath を download URL に解決して blob として fetch。失敗時 null。 */
-  async function fetchPersistedAsBlobUrl(path: string): Promise<string | null> {
-    try {
-      const url = await getDownloadURL(storageRef(getStorage(app), path));
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`fetch ${res.status}`);
-      const blob = await res.blob();
-      return URL.createObjectURL(blob);
-    } catch (e) {
-      console.warn('[shadowing] persisted fetch failed', e);
-      return null;
-    }
+  /** 再生用 blob URL を確保 (キャッシュ / Storage fetch / 生成 + upload の優先順)。
+   *  ロジックは data/picksAudio.ts に集約されており、timeline などとキャッシュも共有。 */
+  function ensureUrl(): Promise<string> {
+    return ensurePickAudioUrl({
+      pickId: opts.pickId,
+      text: opts.text,
+      audioPath,
+      audioVoice: voice,
+      onPersisted: (path, v) => {
+        audioPath = path;
+        return opts.onPersisted?.(path, v);
+      },
+    });
   }
 
-  /** 再生用の blob URL を確保。なければ生成 + upload。 */
-  async function ensureUrl(): Promise<string> {
-    const key = cacheKey(voice, opts.text);
-    const cached = urlCache.get(key);
-    if (cached) return cached;
-
-    if (audioPath) {
-      const url = await fetchPersistedAsBlobUrl(audioPath);
-      if (url) { urlCache.set(key, url); return url; }
-      // 失敗 → 再生成
-    }
-
-    const tts = await generateTtsAudio(opts.text, new AudioContext(), voice);
-    const wav = pcm16leToWav(tts.pcm, tts.sampleRate);
-    const blob = new Blob([wav as unknown as BlobPart], { type: 'audio/wav' });
-    const url = URL.createObjectURL(blob);
-    urlCache.set(key, url);
-    void uploadPickAudio(opts.pickId, wav).then((path) => {
-      if (path && path !== audioPath) {
-        audioPath = path;
-        void opts.onPersisted?.(path, voice);
-      }
-    });
-    return url;
+  if (opts.eager) {
+    playBtn.disabled = true;
+    playBtn.classList.add(`${prefix}-play--loading`);
+    void ensureUrl()
+      .then(() => {
+        playBtn.disabled = false;
+        playBtn.classList.remove(`${prefix}-play--loading`);
+      })
+      .catch((e) => {
+        console.error('[shadowing] eager preload failed', e);
+        playBtn.classList.remove(`${prefix}-play--loading`);
+        playBtn.disabled = false; // ユーザが手動 retry できるようには戻す
+      });
   }
 
   playBtn.addEventListener('click', async () => {
@@ -191,31 +213,65 @@ export function createShadowingPlayer(opts: ShadowingPlayerOptions): HTMLElement
   const resultEl = root.querySelector('.pron-result') as HTMLElement | null;
   if (recBtn && resultEl) {
     let recording = false;
+    let activeController: ReturnType<typeof recognizeStreaming> | null = null;
     let bestScore = opts.bestScore;
     const recLabelEl = recBtn.querySelector('.pron-rec-label') as HTMLElement | null;
     const idleLabelText = recLabelEl?.textContent || '録音する';
     recBtn.addEventListener('click', async () => {
-      if (recording) return;
+      // 録音中にもう一度押されたら手動停止 → これまでの累積で採点する。
+      if (recording && activeController) {
+        activeController.stop();
+        return;
+      }
       // TTS 再生中なら止める (マイクと競合させない)
       if (isPlaying) { audioEl.pause(); isPlaying = false; playBtn.innerHTML = icons.play(14); }
       recording = true;
       recBtn.classList.add('pron-rec--active');
-      if (recLabelEl) recLabelEl.textContent = '録音中… 話してください';
+      if (recLabelEl) recLabelEl.textContent = '録音中… (押すと停止)';
       resultEl.innerHTML = '';
+      // ── マイク入力レベル diagnostic ──
+      // Web Speech API と並行で getUserMedia + AnalyserNode を回し、録音中の RMS を計測。
+      // 「no-speech が連発するけど本当にマイクから音が拾えてないだけ？」を切り分けるための観測装置。
+      // 結果: maxLevel >= 0.05 程度なら音は拾えてる → API 側の問題確定 → Deepgram 載せ替えへ。
+      const meter = setupLevelMeter(resultEl);
+
       try {
-        const rec = await recognizeOnce(10_000);
-        if (!rec) {
-          resultEl.innerHTML = '<p class="pron-error">録音できませんでした。マイク許可と発話を確認してください。</p>';
+        // continuous + interim 累積で発話途中のポーズで切れない。
+        // startupGrace 12s = ボタン押してから話し始めるまでの猶予 (silence timer は最初の発話後に始動)。
+        // silence 2.5s = 話し終わってからの auto-stop。max 30s = ハードタイムアウト。
+        activeController = recognizeStreaming({ maxMs: 30_000, silenceMs: 2_500, startupGraceMs: 12_000 });
+        const rec = await activeController.result;
+        activeController = null;
+        const diag = await meter.finish();
+        if (!rec || !('transcript' in rec)) {
+          const reason = rec && 'reason' in rec ? rec.reason : 'unknown';
+          const msg = reasonMessage(reason);
+          const verdict = diag
+            ? (diag.maxLevel >= 0.04
+                ? `<br><small>(マイク入力は検出されています: 最大レベル ${(diag.maxLevel * 100).toFixed(1)} → 音声認識 API 側の問題の可能性大)</small>`
+                : `<br><small>(マイク入力レベルがほぼゼロ: 最大 ${(diag.maxLevel * 100).toFixed(2)} → 入力デバイスや権限を確認してください)</small>`)
+            : '';
+          resultEl.innerHTML = `<p class="pron-error">${msg}${verdict}</p>`;
           return;
         }
         const s = scorePronunciation(opts.text, rec.transcript);
         const isNewBest = bestScore === undefined || s.score > bestScore;
         if (isNewBest) bestScore = s.score;
+        // 100 = Perfect, 90+ = Great, 60+ = Good。100 はゴールとして据え置き、
+        // 中間段にも称揚を入れて「100 にできなくて萎える」を緩和する (BOY 方式の継続性を優先)。
+        const tierBadge = s.score >= 100
+          ? '<span class="pron-score-badge pron-score-badge--perfect">🏆 Perfect!</span>'
+          : s.score >= 90
+            ? '<span class="pron-score-badge pron-score-badge--great">✨ Great!</span>'
+            : s.score >= 60
+              ? '<span class="pron-score-badge pron-score-badge--good">👍 Good!</span>'
+              : '';
         resultEl.innerHTML = `
           <div class="pron-score-headline">
             <span class="pron-score-num">${s.score}</span>
             <span class="pron-score-denom">/ 100</span>
             <span class="pron-score-meta">${s.matched} / ${s.total} 単語一致</span>
+            ${tierBadge}
             ${isNewBest ? '<span class="pron-score-badge">★ ベスト更新</span>' : ''}
           </div>
           <div class="pron-diff">${renderScoreDiffHtml(s.tokens)}</div>
@@ -234,6 +290,102 @@ export function createShadowingPlayer(opts: ShadowingPlayerOptions): HTMLElement
   }
 
   return root;
+}
+
+/** getUserMedia でマイクストリームを開いて AnalyserNode で RMS レベルを観測。
+ *  録音 UI (resultEl) に簡易メーターを表示し、終了時に maxLevel を返す。
+ *  失敗 (権限拒否など) しても採点フロー本体は止めない。 */
+function setupLevelMeter(host: HTMLElement): {
+  finish: () => Promise<{ maxLevel: number } | null>;
+} {
+  const meter = document.createElement('div');
+  meter.className = 'pron-meter';
+  meter.innerHTML = `
+    <div class="pron-meter-label">mic レベル (診断用)</div>
+    <div class="pron-meter-bar"><div class="pron-meter-fill"></div></div>
+    <div class="pron-meter-value">0.0</div>
+  `;
+  host.appendChild(meter);
+  const fillEl = meter.querySelector('.pron-meter-fill') as HTMLElement;
+  const valEl = meter.querySelector('.pron-meter-value') as HTMLElement;
+
+  let stream: MediaStream | null = null;
+  let ctx: AudioContext | null = null;
+  let rafId: number | null = null;
+  let maxLevel = 0;
+  let stopped = false;
+
+  const start = async () => {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      ctx = new AudioContext();
+      const src = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 2048;
+      src.connect(analyser);
+      const buf = new Uint8Array(analyser.fftSize);
+      const tick = () => {
+        if (stopped) return;
+        analyser.getByteTimeDomainData(buf);
+        // 0..255 → -1..1 に正規化して RMS
+        let sumSq = 0;
+        for (let i = 0; i < buf.length; i++) {
+          const v = (buf[i]! - 128) / 128;
+          sumSq += v * v;
+        }
+        const rms = Math.sqrt(sumSq / buf.length);
+        if (rms > maxLevel) maxLevel = rms;
+        const pct = Math.min(100, rms * 400);
+        fillEl.style.width = `${pct}%`;
+        valEl.textContent = rms.toFixed(3);
+        rafId = requestAnimationFrame(tick);
+      };
+      tick();
+    } catch (e) {
+      console.warn('[pron-meter] getUserMedia failed', e);
+      meter.remove();
+      stream = null;
+    }
+  };
+  void start();
+
+  return {
+    finish: async () => {
+      stopped = true;
+      if (rafId) cancelAnimationFrame(rafId);
+      stream?.getTracks().forEach((t) => t.stop());
+      try { await ctx?.close(); } catch { /* ignore */ }
+      console.log('[pron-meter] maxLevel =', maxLevel.toFixed(4));
+      // 採点結果が出る場合は邪魔なので消す。エラー表示の時は呼び出し側で参照済。
+      meter.remove();
+      return stream ? { maxLevel } : null;
+    },
+  };
+}
+
+function reasonMessage(reason: string): string {
+  switch (reason) {
+    case 'no-speech':
+      return '発話を検出できませんでした。マイクに近づいて、もう少し大きめの声で試してください。';
+    case 'audio-capture':
+      return 'マイクにアクセスできませんでした。他のアプリがマイクを使用していないか、入力デバイスの設定を確認してください。';
+    case 'not-allowed':
+      return 'マイクの使用が許可されていません。ブラウザのサイト設定からマイク権限を許可してください。';
+    case 'network':
+      return 'ネットワークエラー (音声認識は Google のクラウド処理に依存します)。接続を確認して再試行してください。';
+    case 'aborted':
+      return '録音が中断されました。もう一度試してください。';
+    default:
+      return '録音できませんでした。マイク設定と発話を確認してください。';
+  }
+}
+
+function formatGoal(n: number): string {
+  if (n >= SHADOWING_GOAL) return `${n} / ${SHADOWING_GOAL} ✓`;
+  return `${n} / ${SHADOWING_GOAL}`;
+}
+function goalPercent(n: number): number {
+  return Math.min(100, Math.round((n / SHADOWING_GOAL) * 100));
 }
 
 function escapeHtml(s: string): string {
