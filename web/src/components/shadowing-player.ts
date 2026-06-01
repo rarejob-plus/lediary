@@ -13,7 +13,7 @@ import { icons } from './icons';
 import { isSpeechRecognitionSupported, recognizeStreaming, scorePronunciation, renderScoreDiffHtml } from './pronunciation';
 
 const RATES = [0.5, 0.75, 1];
-const DEFAULT_VOICE = 'Charon';
+const DEFAULT_VOICE = 'Iapetus';
 /** BOY 方式の最低リピート目安 = 30 回 (聞く 10 + 喋る 10 + シャドーイング 10)。
  *  これだけやれば最低限すらすら読み上げられるラインの肌感。 */
 const SHADOWING_GOAL = 30;

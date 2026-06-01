@@ -7,7 +7,7 @@ import { app } from '../firebase';
 import { getCurrentUser } from '../auth';
 import { generateTtsAudio, pcm16leToWav } from '../llm';
 
-const DEFAULT_VOICE = 'Charon';
+const DEFAULT_VOICE = 'Iapetus';
 
 // blob URL を pickId + voice + text のキーでメモリキャッシュ (タブ存続中)。
 // timeline と entry detail の両方で同じ pick を扱うため、ここに集約してキャッシュ共有する。
