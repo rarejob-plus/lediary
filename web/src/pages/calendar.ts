@@ -124,7 +124,13 @@ export function renderCalendar(root: HTMLElement): void {
       cell.innerHTML = `<span class="ld-cal__num">${d}</span>${footer}`;
 
       if (writable) {
-        cell.addEventListener('click', () => navigate(`/editor?date=${dateStr}`));
+        // エントリがある日は閲覧画面へ (timeline カード選択と同じ挙動)、無い日は新規作成 editor へ。
+        // 1 日に複数 entry がある場合は最初の entry を開く (mode dots からの個別選択は別途）。
+        const firstEntry = dayEntries?.[0];
+        cell.addEventListener('click', () => {
+          if (firstEntry) navigate(`/entry/${firstEntry.id}`);
+          else navigate(`/editor?date=${dateStr}`);
+        });
         cell.querySelectorAll('.ld-cal__mdot').forEach((dot) => {
           dot.addEventListener('click', (e) => {
             e.stopPropagation();

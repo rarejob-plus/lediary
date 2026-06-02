@@ -276,10 +276,7 @@ function renderPicksSection(entry: DiaryEntry, opts: { readOnly?: boolean } = {}
 
   function renderPickCard(): void {
     slot.innerHTML = '';
-    if (!pick) {
-      slot.innerHTML = '<p class="expansion-empty">まだピックしていません。</p>';
-      return;
-    }
+    if (!pick) return; // 未ピック時は何も描画せず、下の入力フォームだけ見せる
     const card = renderSinglePick(entry.id, pick,
       // onDelete: Storage 上の WAV も best-effort で削除し、空に戻す
       opts.readOnly ? undefined : () => {

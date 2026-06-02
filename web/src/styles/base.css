@@ -1070,7 +1070,6 @@ input {
   .editor-meta-right { flex-wrap: wrap; gap: 8px; }
   .mode-pills { flex-wrap: wrap; }
   .mode-pill { padding: 5px 10px; font-size: 11px; }
-  .editor-focus-btn { padding: 5px 10px; font-size: 11px; }
 
   /* Correction toggle: 3 button segmented + stoic toggle を 2 段に許容 */
   .correction-mode-toggle { gap: 8px; padding: 10px 12px; flex-wrap: wrap; }
