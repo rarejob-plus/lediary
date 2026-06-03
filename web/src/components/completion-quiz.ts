@@ -5,6 +5,7 @@
 
 import { scorePronunciation, renderScoreDiffHtml } from './pronunciation';
 import { icons } from './icons';
+import { ensurePickAudioUrl } from '../data/picksAudio';
 
 /** クイズ問題 1 件。pick ベースで構築するため、対応する entry / pick ID を保持して
  *  結果記録時に元の pick まで辿れるようにする。 */
@@ -115,14 +116,52 @@ export function openCompletionQuiz(
       </div>
       <div class="completion-quiz-diff">${renderScoreDiffHtml(s.tokens)}</div>
       <div class="completion-quiz-answer">
-        <div class="completion-quiz-answer-label">元の答え</div>
+        <div class="completion-quiz-answer-head">
+          <span class="completion-quiz-answer-label">元の答え</span>
+          <button class="completion-quiz-play" type="button" aria-label="再生" title="お手本を再生">${icons.play(14)}</button>
+        </div>
         <p>${escapeHtml(pair.en)}</p>
       </div>
       <div class="completion-quiz-actions">
         <button class="btn btn-primary completion-quiz-next" type="button">${idx + 1 === pairs.length ? 'まとめへ →' : '次の問題 →'}</button>
       </div>
     `;
+    bindPlayButton(pair);
     body.querySelector('.completion-quiz-next')!.addEventListener('click', () => next());
+  }
+
+  /** お手本再生ボタンの配線。pick の audio キャッシュ (ensurePickAudioUrl) と共有するので、
+   *  既に entry で生成済みの WAV があれば即再生。無ければ TTS 生成 → 再生。 */
+  function bindPlayButton(pair: QuizPair): void {
+    const btn = body.querySelector('.completion-quiz-play') as HTMLButtonElement | null;
+    if (!btn) return;
+    const audio = new Audio();
+    audio.preservesPitch = true;
+    let busy = false;
+    const setPlay = () => { btn.innerHTML = icons.play(14); };
+    const setPause = () => { btn.innerHTML = icons.pause(14); };
+    audio.addEventListener('ended', setPlay);
+    audio.addEventListener('pause', setPlay);
+    btn.addEventListener('click', async () => {
+      if (!audio.paused) { audio.pause(); audio.currentTime = 0; return; }
+      if (busy) return;
+      busy = true;
+      btn.classList.add('completion-quiz-play--loading');
+      try {
+        const url = await ensurePickAudioUrl({
+          pickId: pair.pickId,
+          text: pair.en,
+        });
+        audio.src = url;
+        setPause();
+        await audio.play();
+      } catch (e) {
+        console.error('[completion-quiz] play failed', e);
+      } finally {
+        btn.classList.remove('completion-quiz-play--loading');
+        busy = false;
+      }
+    });
   }
 
   function next(): void {

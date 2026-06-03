@@ -1313,13 +1313,49 @@
   padding: 10px 12px;
   margin-bottom: 12px;
 }
+.completion-quiz-answer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
 .completion-quiz-answer-label {
   font-size: 11px;
   color: var(--ld-muted);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  margin-bottom: 4px;
 }
+.completion-quiz-play {
+  width: 28px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--ld-ink);
+  color: #fff;
+  border: 0;
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.12s;
+}
+.completion-quiz-play:hover { transform: scale(1.05); }
+.completion-quiz-play--loading {
+  position: relative;
+  background: var(--ld-secondary);
+}
+.completion-quiz-play--loading svg { opacity: 0; }
+.completion-quiz-play--loading::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255,255,255,0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: completion-quiz-play-spin 0.7s linear infinite;
+}
+@keyframes completion-quiz-play-spin { to { transform: rotate(360deg); } }
 .completion-quiz-answer p {
   margin: 0;
   font-family: var(--ld-serif);
