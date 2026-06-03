@@ -24,6 +24,32 @@ export async function fetchAllPicks(): Promise<PickWithContext[]> {
   return out;
 }
 
+/** 完成ゲートクイズ用に、指定 entry を除いた過去 pick から quiz pair を作る。
+ *  - pick.note (JP メモ) を出題、pick.text (EN) を答えに使う
+ *  - note が空の pick は出題不能なので除外
+ *  - 新しい順に上から 50 件まで候補にし、ランダムに count 件抽出 */
+export async function pickCompletionQuizCandidates(
+  excludeEntryId: string,
+  count: number,
+): Promise<Array<{ jp: string; en: string; entryId: string; entryDate: string; pickId: string }>> {
+  const all = await fetchAllPicks();
+  const pool = all
+    .filter((p) => p.entryId !== excludeEntryId && (p.note || '').trim().length > 0 && p.text.trim().length > 0)
+    .slice(0, 50)
+    .map((p) => ({
+      jp: (p.note || '').trim(),
+      en: p.text.trim(),
+      entryId: p.entryId,
+      entryDate: p.entryDate,
+      pickId: p.id,
+    }));
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j]!, pool[i]!];
+  }
+  return pool.slice(0, count);
+}
+
 /** SRS 間隔（ms）。Anki 風だが軽量。
  *  0回 シャドーイング → 即 due
  *  1-2回             → 1 日後

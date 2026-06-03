@@ -357,7 +357,7 @@ ${modeBlock ? modeBlock + '\n' : ''}Tone: casual English like a friend texting (
 Return JSON:
 {
   "feedback": [{"sentenceIndex": N, "corrected": "...", "explanation": "日本語でニュアンス差を簡潔に"}],
-  "vocabulary": [{"word": "...", "definition": "日本語", "example": "..."}],
+  "vocabulary": [{"word": "...", "definition": "日本語", "example": "(日記 or corrected 文から該当語を含む 1 文をそのまま抜き出す)"}],
   "sentencePairs": [{"jp": "JP 1 文", "en": "対応する EN 1 文 (添削後があればそちらを優先)"}]${skipMoodAndCover ? '' : `,
   "mood": "ONE lowercase English word (calm/excited/cozy/buoyant/restless/focused 等)",
   "coverKeyword": "1-3 English words for a stock photo. Pick the MOST CONCRETE subject from the diary (food, place, activity, object). Examples: 'bbq grill', 'morning coffee', 'tokyo station', 'wet umbrella', 'office desk'. Only bias toward Japan-themed words (sakura/izakaya/ramen 等) if the diary explicitly references Japanese context. Otherwise pick whatever the diary is literally about. Bright, not dark."`}
@@ -368,7 +368,7 @@ Rules:
 - corrected rewrites THAT ONE sentence only, ≤1.5× source length. Don't quote-back the source unchanged.
 - If a sentence is already natural, omit it. Empty array is fine. One feedback per index; combine multiple fixes.
 - Don't reference "[N]"/"sentenceIndex"/"the second sentence" inside explanation.
-- vocabulary: 3-5 items, each must appear in your corrected text. DO NOT repeat any item from the "Known vocabulary" list below — the learner already saw those. Pick fresh, useful collocations.
+- vocabulary: 3-5 items. word MUST appear (substring, case-insensitive) in EITHER the user's original English text OR one of your corrected sentences. Do NOT invent generic morning/lesson/diary related vocabulary that the diary didn't actually use. example MUST be a sentence quoted verbatim from the diary (user's original or your corrected version) that contains the word. Do not synthesize fresh example sentences. DO NOT repeat any item from the "Known vocabulary" list below — the learner already saw those.
 - sentencePairs: align Japanese diary sentences with their English counterparts. Use corrected English when applicable. Skip JP sentences that have no real English counterpart (don't invent). Skip if no userTranslation. Keep order matching JP sequence.
 
 Return ONLY the JSON object.`;
@@ -457,7 +457,43 @@ Return ONLY the JSON object.`;
   }
   analysis.feedback = kept;
 
+  // 語彙の検証: word が本文 (userTranslation + corrected) に substring として存在しないものは drop。
+  // LLM が「日記内容に関係ない一般語彙」を返してくる事故を防ぐ。
+  // 加えて example も実本文の該当文に置き換える (LLM 例文の捏造を排除)。
+  analysis.vocabulary = sanitizeVocabAgainstText(analysis.vocabulary, userTranslation, analysis.feedback);
+
   return analysis;
+}
+
+/** vocab を実本文 (userTranslation + 各 feedback.corrected) に照らして検証 + example 差し替え。
+ *  - word が本文に出てこないものは drop
+ *  - example は word を含む実本文の文に置き換え (見つからなければ LLM の example をそのまま) */
+function sanitizeVocabAgainstText(
+  vocabulary: VocabItem[] | undefined,
+  userTranslation: string,
+  feedback: FeedbackItem[],
+): VocabItem[] {
+  if (!Array.isArray(vocabulary) || vocabulary.length === 0) return [];
+  const sources: string[] = [];
+  if (userTranslation) sources.push(userTranslation);
+  for (const fb of feedback) {
+    if (fb?.corrected) sources.push(fb.corrected);
+  }
+  if (sources.length === 0) return vocabulary;
+  const haystack = sources.join(' \n ').toLowerCase();
+  const allSentences = sources.flatMap((s) => splitIntoSentences(s));
+  return vocabulary
+    .filter((v) => {
+      if (!v?.word) return false;
+      const w = v.word.toLowerCase().trim();
+      if (!w) return false;
+      return haystack.includes(w);
+    })
+    .map((v) => {
+      const w = v.word.toLowerCase();
+      const realExample = allSentences.find((s) => s.toLowerCase().includes(w));
+      return realExample ? { ...v, example: realExample } : v;
+    });
 }
 
 // ─── extractVocabulary: 既存 text から新規 vocab だけ抜き出す軽量呼び出し ───
@@ -505,11 +541,12 @@ export async function extractVocabulary(
   const trimmedExclude = excludeVocab.slice(0, 80);
   const systemPrompt = `You are an English coach for a Japanese learner. From the English text below, pick 2-4 useful collocations/phrases worth saving as flashcards.
 
-Return JSON: {"vocabulary":[{"word":"...","definition":"日本語","example":"natural sentence from the text or nearby"}]}
+Return JSON: {"vocabulary":[{"word":"...","definition":"日本語","example":"(text から該当語を含む 1 文をそのまま抜き出す)"}]}
 
 Rules:
 - Pick natural, real-world collocations a learner can reuse. Avoid single function words.
-- Each "word" must literally appear in the text (or be inferable from it).
+- "word" MUST literally appear (substring, case-insensitive) in the text below. Do not invent generic vocabulary that the text didn't actually use.
+- "example" MUST be a sentence quoted verbatim from the text that contains the word. Do not synthesize fresh example sentences.
 - "definition" is short Japanese.
 - DO NOT repeat any item in the "Known vocabulary" list — the learner already saw those.
 - 2-4 items only. If nothing new is worth picking, return an empty array.
@@ -522,7 +559,8 @@ Return ONLY the JSON object.`;
   try {
     const response = await callLLM(systemPrompt, userMessage);
     const parsed = parseJsonObject<{ vocabulary?: VocabItem[] }>(response);
-    return Array.isArray(parsed.vocabulary) ? parsed.vocabulary.filter((v) => v?.word) : [];
+    const raw = Array.isArray(parsed.vocabulary) ? parsed.vocabulary.filter((v) => v?.word) : [];
+    return sanitizeVocabAgainstText(raw, text, []);
   } catch (e) {
     console.warn('[extractVocabulary] failed', e);
     return [];

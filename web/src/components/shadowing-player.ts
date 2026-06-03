@@ -260,11 +260,11 @@ export function createShadowingPlayer(opts: ShadowingPlayerOptions): HTMLElement
         // 100 = Perfect, 90+ = Great, 60+ = Good。100 はゴールとして据え置き、
         // 中間段にも称揚を入れて「100 にできなくて萎える」を緩和する (BOY 方式の継続性を優先)。
         const tierBadge = s.score >= 100
-          ? '<span class="pron-score-badge pron-score-badge--perfect">🏆 Perfect!</span>'
+          ? `<span class="pron-score-badge pron-score-badge--perfect">${icons.trophy(12)} Perfect!</span>`
           : s.score >= 90
-            ? '<span class="pron-score-badge pron-score-badge--great">✨ Great!</span>'
+            ? `<span class="pron-score-badge pron-score-badge--great">${icons.sparkles(12)} Great!</span>`
             : s.score >= 60
-              ? '<span class="pron-score-badge pron-score-badge--good">👍 Good!</span>'
+              ? `<span class="pron-score-badge pron-score-badge--good">${icons.thumbsUp(12)} Good!</span>`
               : '';
         resultEl.innerHTML = `
           <div class="pron-score-headline">

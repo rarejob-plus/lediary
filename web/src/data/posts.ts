@@ -2,7 +2,7 @@
 // - savePostTextOnly: LLM を呼ばずに contentJp / userTranslation / expansionQuestions / dismissedVocab を更新
 // - analyzeAndSavePost: analyzeDiary → Unsplash cover → Firestore write の一気通貫
 
-import { deleteField, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, deleteField, doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { getCurrentUser } from '../auth';
 import { alignSentences, analyzeDiary, type FeedbackItem, type DiaryAnalysis, type SentencePair } from '../llm-diary';
@@ -100,6 +100,32 @@ export async function finalizeEntry(entryId: string): Promise<void> {
     updatedAt: Date.now(),
   });
   invalidateEntriesCache();
+}
+
+/** 完成ゲートクイズの 1 問結果を Firestore に保存。
+ *  collection: lediary-quiz-results/{auto-id}
+ *  doc: { userId, pickId, entryId, jp, expectedEn, guess, score, skipped, attemptedAt, createdAt }
+ *  user 別の集計 / SRS スケジューリング (将来) のため userId と pickId を index 用に持つ。 */
+export async function logCompletionQuizResults(
+  results: Array<{
+    pickId: string;
+    entryId: string;
+    jp: string;
+    expectedEn: string;
+    guess: string;
+    score: number;
+    skipped: boolean;
+    attemptedAt: number;
+  }>,
+): Promise<void> {
+  const user = getCurrentUser();
+  if (!user || results.length === 0) return;
+  const col = collection(db, 'lediary-quiz-results');
+  // 並行 add (順序不問)。失敗は warn にとどめて UX を止めない。
+  await Promise.all(results.map((r) =>
+    addDoc(col, { ...r, userId: user.uid, createdAt: serverTimestamp() })
+      .catch((e) => console.warn('[quiz-results] save failed', e)),
+  ));
 }
 
 /** 完成解除 (再編集に戻す)。 */

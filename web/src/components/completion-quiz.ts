@@ -1,25 +1,44 @@
 // 「完成」直前の小テスト modal。
-// 過去 entry の JP↔EN ペアから 3 問出題し、JP → EN を学習者が即訳する。
-// 「機能だけ作っても使わない」を回避するため、編集 → 完成のパスに半強制的に挟む。
-// スキップは可能だが、視線が必ず通る位置に置く。
+// 過去 entry の pick (今日の 1 フレーズ) から JP メモ → EN を学習者が即訳する。
+// 「機能だけ作っても使わない」を回避するため、entry detail の 完成 ボタンの
+// パスに半強制的に挟む。スキップは可能だが、視線が必ず通る位置に置く。
 
 import { scorePronunciation, renderScoreDiffHtml } from './pronunciation';
 import { icons } from './icons';
 
-export interface QuizPair { jp: string; en: string; entryDate?: string; }
-
-interface QuizState {
-  guess: string;       // ユーザが書いた英訳
-  skipped: boolean;
-  score: number;       // 0-100, skipped なら 0
+/** クイズ問題 1 件。pick ベースで構築するため、対応する entry / pick ID を保持して
+ *  結果記録時に元の pick まで辿れるようにする。 */
+export interface QuizPair {
+  jp: string;
+  en: string;
+  entryId: string;
+  entryDate: string;
+  pickId: string;
 }
+
+/** 1 問あたりの結果。Firestore に永続化される。 */
+export interface QuizResult {
+  pickId: string;
+  entryId: string;
+  jp: string;
+  expectedEn: string;
+  guess: string;       // ユーザが書いた英訳。skipped なら空文字
+  score: number;       // 0-100, skipped なら 0
+  skipped: boolean;
+  attemptedAt: number; // epoch ms
+}
+
+type QuizState = Omit<QuizResult, 'pickId' | 'entryId' | 'jp' | 'expectedEn' | 'attemptedAt'>;
 
 /** 完成前クイズ modal を開く。
  *  pairs が空なら何もせず onComplete を即呼ぶ。
- *  ユーザが全問終えて「完成して保存」を押す or ESC で modal を閉じると onComplete が呼ばれる。
- *  abort (バツボタン) は onComplete を呼ばずに modal を閉じる (= 保存中断)。 */
-export function openCompletionQuiz(pairs: QuizPair[], onComplete: () => void): void {
-  if (pairs.length === 0) { onComplete(); return; }
+ *  ユーザが全問終えて「完成して保存」を押すと結果配列を引数に onComplete が呼ばれる。
+ *  abort (バツボタン) は onComplete を呼ばずに modal を閉じる (= 完成中断)。 */
+export function openCompletionQuiz(
+  pairs: QuizPair[],
+  onComplete: (results: QuizResult[]) => void,
+): void {
+  if (pairs.length === 0) { onComplete([]); return; }
   const states: QuizState[] = pairs.map(() => ({ guess: '', skipped: false, score: 0 }));
   let idx = 0;
 
@@ -89,9 +108,9 @@ export function openCompletionQuiz(pairs: QuizPair[], onComplete: () => void): v
       <div class="completion-quiz-score-row">
         <span class="completion-quiz-score-num">${s.score}</span>
         <span class="completion-quiz-score-denom">/ 100</span>
-        ${s.score >= 100 ? '<span class="completion-quiz-badge completion-quiz-badge--perfect">🏆 Perfect!</span>'
-          : s.score >= 90 ? '<span class="completion-quiz-badge completion-quiz-badge--great">✨ Great!</span>'
-          : s.score >= 60 ? '<span class="completion-quiz-badge completion-quiz-badge--good">👍 Good!</span>'
+        ${s.score >= 100 ? `<span class="completion-quiz-badge completion-quiz-badge--perfect">${icons.trophy(12)} Perfect!</span>`
+          : s.score >= 90 ? `<span class="completion-quiz-badge completion-quiz-badge--great">${icons.sparkles(12)} Great!</span>`
+          : s.score >= 60 ? `<span class="completion-quiz-badge completion-quiz-badge--good">${icons.thumbsUp(12)} Good!</span>`
           : ''}
       </div>
       <div class="completion-quiz-diff">${renderScoreDiffHtml(s.tokens)}</div>
@@ -136,7 +155,18 @@ export function openCompletionQuiz(pairs: QuizPair[], onComplete: () => void): v
     `;
     body.querySelector('.completion-quiz-done')!.addEventListener('click', () => {
       overlay.remove();
-      onComplete();
+      const now = Date.now();
+      const results: QuizResult[] = pairs.map((p, i) => ({
+        pickId: p.pickId,
+        entryId: p.entryId,
+        jp: p.jp,
+        expectedEn: p.en,
+        guess: states[i]!.guess,
+        score: states[i]!.score,
+        skipped: states[i]!.skipped,
+        attemptedAt: now,
+      }));
+      onComplete(results);
     });
   }
 

@@ -4,11 +4,13 @@ import { coverFor } from '../components/cover';
 import { MODE_META, type DiaryEntry, type Mode, type PickedPhrase } from '../data/mock';
 import { deleteEntry, fetchEntry, invalidateEntriesCache, moveEntryMode, stashForEditor } from '../data/entries';
 import { renderSekkiInline, dayOfYear, daysInYear } from '../data/dateInfo';
-import { getCurrentUser, getIdToken } from '../auth';
+import { getCurrentUser } from '../auth';
 import { navigate } from '../router';
 import { enableTextSelectionBookmark, bookmarkPhrase } from '../components/text-selection-bookmark';
 import { correctExpansionAnswer, extractVocabulary, generateExpansionQuestions } from '../llm-diary';
-import { savePostTextOnly, savePostPick, gatherKnownVocabFor, finalizeEntry, unfinalizeEntry } from '../data/posts';
+import { savePostTextOnly, savePostPick, gatherKnownVocabFor, finalizeEntry, unfinalizeEntry, logCompletionQuizResults } from '../data/posts';
+import { pickCompletionQuizCandidates } from '../data/picks';
+import { openCompletionQuiz } from '../components/completion-quiz';
 import { searchUnsplashCandidates, notifyUnsplashDownload, type UnsplashCandidate } from '../unsplash';
 import { createShadowingPlayer } from '../components/shadowing-player';
 import { enhanceTextarea } from '../components/textarea';
@@ -153,17 +155,34 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
   if (finalizeBtn) {
     finalizeBtn.addEventListener('click', async () => {
       if (!confirm('この日記を「完成」にしますか? 以降は読書モードで開き、編集に確認を挟むようになります。')) return;
-      finalizeBtn.disabled = true;
-      finalizeBtn.textContent = '保存中…';
-      try {
-        await finalizeEntry(entry.id);
-        entry.finalizedAt = Date.now();
-        navigate(`/entry/${entry.id}`); // 再 render で読書モードに
-      } catch (e) {
-        console.error(e);
-        alert('保存に失敗しました');
-        finalizeBtn.disabled = false;
+
+      // 半強制パターン B: 完成ゲート。過去 pick (= ユーザが意図的に学習したいと選んだフレーズ) から
+      // 3 問出題。pool が無ければ即完成。
+      const pairs = await pickCompletionQuizCandidates(entry.id, 3);
+
+      const finalizeAndNavigate = async (): Promise<void> => {
+        finalizeBtn.disabled = true;
+        finalizeBtn.textContent = '保存中…';
+        try {
+          await finalizeEntry(entry.id);
+          entry.finalizedAt = Date.now();
+          navigate(`/entry/${entry.id}`);
+        } catch (e) {
+          console.error(e);
+          alert('保存に失敗しました');
+          finalizeBtn.disabled = false;
+        }
+      };
+
+      if (pairs.length === 0) {
+        void finalizeAndNavigate();
+        return;
       }
+      openCompletionQuiz(pairs, (results) => {
+        // 結果記録は fire-and-forget。完成フローは止めない。
+        void logCompletionQuizResults(results);
+        void finalizeAndNavigate();
+      });
     });
   }
 
@@ -221,14 +240,11 @@ function renderEntryBody(root: HTMLElement, entry: DiaryEntry): void {
   jp.textContent = entry.contentJp;
   content.appendChild(jp);
 
-  // 本文 + 下にコンパクトな TTS プレイヤー（再生 + 速度プリセット）
+  // 本文。学習の焦点は「今日の 1 フレーズ」に集約したので、本文全体の TTS は廃止。
   const body = document.createElement('div');
   body.className = 'entry-body';
   body.textContent = entry.userTranslation;
   content.appendChild(body);
-  if (entry.userTranslation) {
-    content.appendChild(renderTTSPlayer(entry.userTranslation));
-  }
   enableTextSelectionBookmark(body);
 
   if (!entry.finalizedAt) {
@@ -497,117 +513,6 @@ function renderVocabSection(vocab: { word: string; definition: string; example: 
 // 英文下に置くコンパクトな音声プレイヤー。
 // 再生ボタン + 速度プリセット (0.75/1.0/1.25/1.5x)。
 // 初回クリックで TTS 生成 → 再生、以降は同じバッファを使い回し。
-const TTS_SPEEDS = [0.75, 1.0, 1.25, 1.5] as const;
-const TTS_SPEED_KEY = 'lediary_v2_tts_speed';
-
-function renderTTSPlayer(text: string): HTMLElement {
-  const wrap = document.createElement('div');
-  wrap.className = 'entry-tts';
-
-  const savedSpeed = parseFloat(localStorage.getItem(TTS_SPEED_KEY) || '1.0');
-  let playbackRate = TTS_SPEEDS.includes(savedSpeed as 0.75 | 1 | 1.25 | 1.5) ? savedSpeed : 1.0;
-
-  wrap.innerHTML = `
-    <button class="entry-tts-play" aria-label="音声を再生">${icons.play(14)}</button>
-    <div class="entry-tts-speeds" role="group" aria-label="再生速度">
-      ${TTS_SPEEDS.map((s) => `<button class="entry-tts-speed${s === playbackRate ? ' active' : ''}" data-speed="${s}">${s.toFixed(2).replace(/0$/, '')}x</button>`).join('')}
-    </div>
-  `;
-
-  if (!getCurrentUser()) {
-    const playBtn = wrap.querySelector('.entry-tts-play') as HTMLButtonElement;
-    playBtn.disabled = true;
-    playBtn.title = 'ログイン後に利用できます';
-    wrap.querySelectorAll<HTMLButtonElement>('.entry-tts-speed').forEach((b) => (b.disabled = true));
-    return wrap;
-  }
-
-  let audioCtx: AudioContext | null = null;
-  let audioBuffer: AudioBuffer | null = null;
-  let currentSource: AudioBufferSourceNode | null = null;
-  let isPlaying = false;
-  let loading = false;
-
-  const playBtn = wrap.querySelector('.entry-tts-play') as HTMLButtonElement;
-
-  function setIcon(name: 'play' | 'pause' | 'loading'): void {
-    if (name === 'loading') {
-      playBtn.innerHTML = `<span class="entry-tts-spinner"></span>`;
-    } else {
-      playBtn.innerHTML = name === 'play' ? icons.play(14) : icons.pause(14);
-    }
-  }
-
-  function stop(): void {
-    if (currentSource) {
-      try { currentSource.stop(); } catch { /* */ }
-    }
-    currentSource = null;
-    isPlaying = false;
-    setIcon('play');
-  }
-
-  function play(): void {
-    if (!audioCtx || !audioBuffer) return;
-    stop();
-    const source = audioCtx.createBufferSource();
-    source.buffer = audioBuffer;
-    source.playbackRate.value = playbackRate;
-    source.connect(audioCtx.destination);
-    source.onended = () => {
-      isPlaying = false;
-      currentSource = null;
-      setIcon('play');
-    };
-    source.start();
-    currentSource = source;
-    isPlaying = true;
-    setIcon('pause');
-  }
-
-  playBtn.addEventListener('click', async () => {
-    if (loading) return;
-    if (isPlaying) { stop(); return; }
-    if (audioBuffer) { play(); return; }
-    loading = true;
-    setIcon('loading');
-    playBtn.disabled = true;
-    try {
-      audioCtx = audioCtx || new AudioContext();
-      const token = await getIdToken();
-      const voice = localStorage.getItem('lediary_v2_tts_voice') || 'Achird';
-      const res = await fetch(`/api/diary/tts?text=${encodeURIComponent(text)}&voice=${voice}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error(`TTS ${res.status}`);
-      audioBuffer = await audioCtx.decodeAudioData(await res.arrayBuffer());
-      play();
-    } catch (err) {
-      console.error(err);
-      setIcon('play');
-      alert('音声の生成に失敗しました');
-    } finally {
-      loading = false;
-      playBtn.disabled = false;
-    }
-  });
-
-  wrap.querySelectorAll<HTMLButtonElement>('.entry-tts-speed').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const next = parseFloat(btn.dataset.speed || '1');
-      if (next === playbackRate) return;
-      playbackRate = next;
-      localStorage.setItem(TTS_SPEED_KEY, String(next));
-      wrap.querySelectorAll('.entry-tts-speed').forEach((b) => b.classList.toggle('active', b === btn));
-      // 再生中なら即座に新しい速度で再生し直す
-      if (isPlaying) play();
-    });
-  });
-
-  return wrap;
-}
-
-
 interface ExpansionQ {
   question: string;
   hintJa: string;

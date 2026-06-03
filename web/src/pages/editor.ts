@@ -2,8 +2,7 @@ import { renderHeader } from '../components/header';
 import { icons } from '../components/icons';
 import type { Mode, FeedbackItem } from '../data/mock';
 import { MODE_META } from '../data/mock';
-import { fetchEntry, fetchEntries, takeStashedEntry } from '../data/entries';
-import { openCompletionQuiz, type QuizPair } from '../components/completion-quiz';
+import { fetchEntry, takeStashedEntry } from '../data/entries';
 import { fetchDays, type DayRating } from '../data/days';
 import { renderRatingRow } from '../components/day-rating-row';
 import { enhanceTextarea } from '../components/textarea';
@@ -472,38 +471,29 @@ export function renderEditor(root: HTMLElement): void {
         }
       });
 
-      const doSave = async (): Promise<void> => {
-        doneBtn.disabled = true;
-        doneBtn.textContent = '保存中…';
-        try {
-          if (user && currentFeedback.length > 0) {
-            await savePostTextOnly({
-              contentJp: (jpBlock.querySelector('#jp-input') as HTMLTextAreaElement).value,
-              userTranslation: finalText,
-              date: dateStr,
-              mode: currentMode,
-              plainJp: plainInput.value.trim(),
-            });
-          }
-          if (user) {
-            navigate(`/entry/${user.uid}_${dateStr}_${currentMode}`);
-          } else {
-            navigate('/');
-          }
-        } catch (err) {
-          console.error(err);
-          alert('保存に失敗しました');
-          doneBtn.disabled = false;
-          doneBtn.textContent = '完成';
+      doneBtn.disabled = true;
+      doneBtn.textContent = '保存中…';
+      try {
+        if (user && currentFeedback.length > 0) {
+          await savePostTextOnly({
+            contentJp: (jpBlock.querySelector('#jp-input') as HTMLTextAreaElement).value,
+            userTranslation: finalText,
+            date: dateStr,
+            mode: currentMode,
+            plainJp: plainInput.value.trim(),
+          });
         }
-      };
-
-      // 半強制パターン B: 完成ゲート。過去 entry の JP↔EN ペアから 3 問出題してから保存に進む。
-      // 過去ペアが 0 件 (初日 / sentencePairs 未生成のみ) なら即保存。
-      const todayDocId = user ? `${user.uid}_${dateStr}_${currentMode}` : '';
-      const pairs = await pickCompletionQuizPairs(todayDocId, 3);
-      if (pairs.length === 0) { void doSave(); return; }
-      openCompletionQuiz(pairs, () => { void doSave(); });
+        if (user) {
+          navigate(`/entry/${user.uid}_${dateStr}_${currentMode}`);
+        } else {
+          navigate('/');
+        }
+      } catch (err) {
+        console.error(err);
+        alert('保存に失敗しました');
+        doneBtn.disabled = false;
+        doneBtn.textContent = '完成';
+      }
     });
     correctionSection.appendChild(doneBtn);
 
@@ -680,34 +670,6 @@ export function renderEditor(root: HTMLElement): void {
     applyEntry(stashed);
   } else {
     loadForMode(currentMode);
-  }
-}
-
-/** 完成ゲートクイズ用に、今日の entry を除いた過去 sentencePairs から指定数をランダム抽出。
- *  古すぎる / 既知すぎるペアばかりにならないよう、まず候補を新しい順 50 件に絞ってから shuffle。
- *  pairs が 0 件なら空配列 (modal 自体スキップ)。 */
-async function pickCompletionQuizPairs(excludeEntryId: string, count: number): Promise<QuizPair[]> {
-  try {
-    const entries = await fetchEntries();
-    const pool: QuizPair[] = [];
-    for (const e of entries) {
-      if (e.id === excludeEntryId) continue;
-      if (!Array.isArray(e.sentencePairs)) continue;
-      for (const p of e.sentencePairs) {
-        if (p?.jp && p?.en) pool.push({ jp: p.jp, en: p.en, entryDate: e.date });
-      }
-    }
-    if (pool.length === 0) return [];
-    // 新しい順に上から 50 件 (entries は createdAt desc で返る前提)
-    const trimmed = pool.slice(0, 50);
-    for (let i = trimmed.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [trimmed[i], trimmed[j]] = [trimmed[j]!, trimmed[i]!];
-    }
-    return trimmed.slice(0, count);
-  } catch (e) {
-    console.warn('[completion-quiz] pair pick failed', e);
-    return [];
   }
 }
 
